@@ -70,7 +70,16 @@ except Exception:
     ok = False
     print("   FAILED")
     traceback.print_exc()
-print("5) Logos ...", end=" ")
+print("5) Index card ...", end=" ")
+try:
+    from app import indices
+    for mk in ("IN", "US"):
+        print(" | ".join(f"{i['name']} {i.get('price')} ({i.get('change_pct')}%)" if i.get("price") else f"{i['name']} ERROR {i.get('error')}" for i in indices.get(mk)["items"]))
+except Exception:
+    ok = False
+    print("FAILED")
+    traceback.print_exc()
+print("6) Logos ...", end=" ")
 try:
     from app import logos
     got = {s: logos.get(s)[1] for s in ("RELIANCE", "TCS", "US:AAPL", "US:MSFT")}

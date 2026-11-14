@@ -13,7 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import ai, calendars, config, logos, movers, scraper, service, store, technicals, universe, us
+from . import ai, calendars, config, indices, logos, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
@@ -217,6 +217,11 @@ def ai_calendar(market: str = "US", start: Optional[str] = None, days: int = 7, 
     e, c = calendars.earnings(market, s, days), calendars.economy(market, s, days)
     watch = {x.strip().upper() for x in symbols.split(",") if x.strip()}
     return _ai(ai.explain_calendar, e, c, watch)
+
+
+@app.get("/api/indices")
+def indices_get(market: str = "IN"):
+    return indices.get(market)
 
 
 @app.get("/api/logo/{symbol}")

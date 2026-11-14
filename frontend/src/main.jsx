@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 import { BottomNav, MarketToggle, SearchBox, SideNav } from './components/ui'
-import { applyTheme, getMarket, getTheme, go, isDesktop, marketCurrency, parseHash, setCurrency, setMarketLS } from './util'
+import { applyTheme, getMarket, getTheme, go, isDesktop, isUS, marketCurrency, parseHash, setCurrency, setMarketLS } from './util'
 import Home from './pages/Home'
 import Stock from './pages/Stock'
 import Rankings from './pages/Rankings'
@@ -11,6 +11,7 @@ import Compare from './pages/Compare'
 import Screener from './pages/Screener'
 import Movers from './pages/Movers'
 import Calendar from './pages/Calendar'
+import IndexStrip from './components/IndexStrip'
 import { Settings } from './pages/AI'
 
 function App() {
@@ -54,6 +55,7 @@ function App() {
         </div>
       </header>
       <main className="wrap" key={market + theme}>
+        {route.page !== 'settings' && <IndexStrip market={route.page === 'stock' ? (isUS(route.symbol) ? 'US' : 'IN') : market} />}
         {route.page === 'home' && <Home />}
         {route.page === 'stock' && <Stock key={route.symbol} symbol={route.symbol} tab={route.tab} />}
         {route.page === 'rankings' && <Rankings />}

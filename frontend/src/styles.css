@@ -306,3 +306,24 @@ html, body { transition: background-color .2s ease; }
 }
 .res-chip { cursor: pointer; color: var(--accent); border-color: var(--accent); font-weight: 600; margin-top: 4px; }
 @media (max-width: 480px) { .mv-row .rank-num { width: 14px; font-size: 11px; } .mv-row { gap: 8px; padding: 10px; } }
+
+/* ---------- index strip ---------- */
+.ix-wrap { margin: 2px 0 12px; }
+.ix-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 1px; }
+.ix-strip::-webkit-scrollbar { display: none; }
+.ix-loading { height: 72px; border-radius: 14px; background: var(--card); opacity: .6; }
+.ix { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 9px 11px; cursor: pointer; min-width: 0; }
+.ix-vix { background: linear-gradient(135deg, var(--card), var(--card2)); }
+.ix-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.ix-name { font-size: 11px; font-weight: 800; letter-spacing: .05em; color: var(--muted); white-space: nowrap; }
+.ix-mood { font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 99px; }
+.ix-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; margin-top: 2px; }
+.ix-val { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ix-chg { font-size: 11.5px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ix-spark { flex: 0 0 auto; }
+.ix-tip { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); line-height: 1.5; }
+.ix-foot { display: flex; align-items: center; gap: 6px; padding: 5px 4px 0; }
+.ix-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--neutral); display: inline-block; }
+.ix-dot.on { background: var(--good); box-shadow: 0 0 0 3px rgba(34,197,94,.2); animation: ixp 2s infinite; }
+@keyframes ixp { 50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); } }
+@media (min-width: 1100px) { .ix-strip { grid-auto-columns: 1fr; } .ix-val { font-size: 19px; } .ix { padding: 11px 14px; } }
