@@ -2,19 +2,23 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 import { BottomNav, MarketToggle, SearchBox, SideNav } from './components/ui'
-import { getMarket, go, isDesktop, marketCurrency, parseHash, setCurrency, setMarketLS } from './util'
+import { applyTheme, getMarket, getTheme, go, isDesktop, marketCurrency, parseHash, setCurrency, setMarketLS } from './util'
 import Home from './pages/Home'
 import Stock from './pages/Stock'
 import Rankings from './pages/Rankings'
 import Watch from './pages/Watch'
 import Compare from './pages/Compare'
 import Screener from './pages/Screener'
+import Movers from './pages/Movers'
 import { Settings } from './pages/AI'
 
 function App() {
   const [route, setRoute] = useState(parseHash())
   const [market, setMarket] = useState(getMarket())
   const [desk, setDesk] = useState(isDesktop())
+  const [theme, setTheme] = useState(getTheme())
+  useEffect(() => { applyTheme(theme) }, [theme])
+  const flipTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1100px)')
     const on = () => setDesk(mq.matches)
@@ -34,7 +38,7 @@ function App() {
   const navPage = route.page === 'stock' ? '' : route.page
   return (
     <div className={desk ? 'shell desk' : 'shell'}>
-      {desk && <SideNav page={navPage} market={market} onMarket={changeMarket} />}
+      {desk && <SideNav page={navPage} market={market} onMarket={changeMarket} theme={theme} onTheme={flipTheme} />}
       <div className="content">
       <header className="topbar">
         <div className="topbar-inner">
@@ -43,16 +47,18 @@ function App() {
           </div>}
           {!desk && <MarketToggle market={market} onChange={changeMarket} />}
           {route.page !== 'home' || desk ? <div className="grow"><SearchBox key={market} /></div> : <div className="grow" />}
+          {!desk && <button className="theme-btn" title="Light / dark theme" onClick={flipTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>}
           {!desk && <button className="star" title="AI settings" onClick={() => go('settings')}>⚙️</button>}
           {desk && <div className="small muted" style={{ whiteSpace: 'nowrap' }}>{market === 'US' ? '🇺🇸 US market · $' : '🇮🇳 Indian market · ₹'}</div>}
         </div>
       </header>
-      <main className="wrap" key={market}>
+      <main className="wrap" key={market + theme}>
         {route.page === 'home' && <Home />}
         {route.page === 'stock' && <Stock key={route.symbol} symbol={route.symbol} tab={route.tab} />}
         {route.page === 'rankings' && <Rankings />}
         {route.page === 'watch' && <Watch />}
         {route.page === 'screener' && <Screener />}
+        {route.page === 'movers' && <Movers />}
         {route.page === 'settings' && <Settings />}
         {route.page === 'compare' && <Compare symbols={route.symbols} />}
       </main>

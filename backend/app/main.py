@@ -13,7 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ai, config, scraper, service, store, technicals, universe, us
+from . import ai, config, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
@@ -166,6 +166,24 @@ def ai_picks(body: dict = Body(...)):
     if not picked:
         raise HTTPException(400, "No scanned stocks to explain. Run a scan first.")
     return _ai(ai.explain_picks, picked, body.get("title") or "Top Picks")
+
+
+@app.get("/api/movers")
+def movers_get(market: str = "IN", tf: str = "1D"):
+    return movers.get(market, tf)
+
+
+@app.post("/api/movers/refresh")
+def movers_refresh(market: str = "IN"):
+    return movers.refresh(market.upper())
+
+
+@app.post("/api/ai/movers")
+def ai_movers(market: str = "IN", tf: str = "1D"):
+    data = movers.get(market, tf)
+    if not data["rows"]:
+        raise HTTPException(400, "Movers are still loading. Try again in a minute.")
+    return _ai(ai.explain_movers, data)
 
 
 @app.get("/api/compare")

@@ -58,11 +58,11 @@ export function LatestQuarter({ d }) {
       <div style={{ height: 180, marginTop: 10 }}>
         <ResponsiveContainer>
           <ComposedChart data={chart} margin={{ top: 6, right: 0, left: -10, bottom: 0 }}>
-            <CartesianGrid stroke="#223040" vertical={false} />
-            <XAxis dataKey="p" stroke="#8b98a5" fontSize={10} tickLine={false} />
-            <YAxis yAxisId="l" stroke="#8b98a5" fontSize={10} tickLine={false} tickFormatter={(v) => num(v)} />
-            <YAxis yAxisId="r" orientation="right" stroke="#8b98a5" fontSize={10} tickLine={false} tickFormatter={(v) => `${v}%`} hide={!opm} />
-            <Tooltip contentStyle={{ background: '#121a23', border: '1px solid #223040', borderRadius: 10, fontSize: 12 }} />
+            <CartesianGrid stroke="var(--grid)" vertical={false} />
+            <XAxis dataKey="p" stroke="var(--muted)" fontSize={10} tickLine={false} />
+            <YAxis yAxisId="l" stroke="var(--muted)" fontSize={10} tickLine={false} tickFormatter={(v) => num(v)} />
+            <YAxis yAxisId="r" orientation="right" stroke="var(--muted)" fontSize={10} tickLine={false} tickFormatter={(v) => `${v}%`} hide={!opm} />
+            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar yAxisId="l" dataKey="Sales" fill="#38bdf8" radius={[3, 3, 0, 0]} />
             <Bar yAxisId="l" dataKey="Net profit" fill="#2dd4bf" radius={[3, 3, 0, 0]} />

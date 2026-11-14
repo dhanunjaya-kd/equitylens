@@ -3,12 +3,12 @@ import {
   CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, createChart, createSeriesMarkers,
 } from 'lightweight-charts'
 import { Badge, Loading, Tile } from '../components/ui'
-import { api, isDesktop, num, ok, pct, rs, signed } from '../util'
+import { api, cssVar, isDesktop, num, ok, pct, rs, signed } from '../util'
 import { Md } from './AI'
 
 const COL = {
   up: '#22c55e', down: '#ef4444', ema20: '#38bdf8', ema50: '#f59e0b', ema200: '#e879f9', bb: '#64748b',
-  st_up: '#22c55e', st_dn: '#ef4444', rsi: '#a78bfa', macd: '#38bdf8', sig: '#f59e0b', adx: '#e6edf3', pdi: '#22c55e', mdi: '#ef4444',
+  st_up: '#22c55e', st_dn: '#ef4444', rsi: '#a78bfa', macd: '#38bdf8', sig: '#f59e0b', adx: 'var(--text)', pdi: '#22c55e', mdi: '#ef4444',
   grid: '#1a2531', text: '#8b98a5',
 }
 const OVERLAYS = [['cone', 'Future range'], ['ema20', 'EMA 20'], ['ema50', 'EMA 50'], ['ema200', 'EMA 200'], ['bb', 'Bollinger'], ['st', 'Supertrend'], ['levels', 'Support/Resistance'], ['cross', 'Crosses']]
@@ -43,14 +43,15 @@ export default function StockChart({ symbol }) {
   useEffect(() => {
     if (!data || !box.current) return
     const d = data
+    const line = cssVar('--line'), card = cssVar('--card'), muted = cssVar('--muted'), text = cssVar('--text')
     const chart = createChart(box.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: '#121a23' }, textColor: COL.text, fontSize: 11, attributionLogo: false,
-        panes: { separatorColor: '#223040', separatorHoverColor: '#2dd4bf33' } },
-      grid: { vertLines: { color: COL.grid }, horzLines: { color: COL.grid } },
+      layout: { background: { type: ColorType.Solid, color: card }, textColor: muted, fontSize: 11, attributionLogo: false,
+        panes: { separatorColor: line, separatorHoverColor: '#2dd4bf33' } },
+      grid: { vertLines: { color: cssVar('--grid') }, horzLines: { color: cssVar('--grid') } },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#223040' },
-      timeScale: { borderColor: '#223040', rightOffset: 4 },
+      rightPriceScale: { borderColor: line },
+      timeScale: { borderColor: line, rightOffset: 4 },
     })
     const L = (pane, color, key, extra = {}) => {
       const s = chart.addSeries(LineSeries, { color, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, ...extra }, pane)
@@ -116,7 +117,7 @@ export default function StockChart({ symbol }) {
       used.push(pane++)
     }
     if (panes.adx && d.ohlc) {
-      const a = L(pane, COL.adx, 'adx', { lineWidth: 2, lastValueVisible: true })
+      const a = L(pane, text, 'adx', { lineWidth: 2, lastValueVisible: true })
       L(pane, COL.pdi, 'pdi'); L(pane, COL.mdi, 'mdi')
       a.createPriceLine({ price: 25, color: '#64748b', lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false })
       used.push(pane++)
@@ -325,7 +326,7 @@ function RangeRow({ label, lo, hi, lo68, hi68, now }) {
         <div style={{ position: 'absolute', inset: '4px 0', background: 'var(--card2)', borderRadius: 99 }} />
         <div style={{ position: 'absolute', top: 4, bottom: 4, left: p(lo), width: `calc(${p(hi)} - ${p(lo)})`, background: '#2dd4bf33', borderRadius: 99 }} />
         <div style={{ position: 'absolute', top: 2, bottom: 2, left: p(lo68), width: `calc(${p(hi68)} - ${p(lo68)})`, background: '#2dd4bf88', borderRadius: 99 }} />
-        <div style={{ position: 'absolute', top: -2, bottom: -2, left: p(now), width: 3, background: '#e6edf3', transform: 'translateX(-50%)' }} />
+        <div style={{ position: 'absolute', top: -2, bottom: -2, left: p(now), width: 3, background: 'var(--text)', transform: 'translateX(-50%)' }} />
       </div>
       <div className="row between small muted" style={{ marginTop: 2 }}><span>{signed((lo / now - 1) * 100, 0, '%')}</span><span>now {rs(now)}</span><span>{signed((hi / now - 1) * 100, 0, '%')}</span></div>
     </div>

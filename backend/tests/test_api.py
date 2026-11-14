@@ -76,6 +76,20 @@ def test_stock_report_shape():
     assert t["outlook"]["scenarios"] and len(t["t"]) == len(t["rsi"]) == len(t["ema200"])
 
 
+
+def test_movers_endpoints():
+    for mk in ("IN", "US"):
+        C.post(f"/api/movers/refresh?market={mk}")
+        for _ in range(100):
+            if not C.get(f"/api/movers?market={mk}").json()["status"]["running"]:
+                break
+            time.sleep(0.1)
+        for tf in ("1D", "1W", "1M", "3M", "1Y", "bogus"):
+            d = C.get(f"/api/movers?market={mk}&tf={tf}").json()
+            assert d["rows"] and d["mood"] and d["sectors"] and d["tf"] in ("1D", "1W", "1M", "3M", "1Y")
+        assert C.post(f"/api/ai/movers?market={mk}&tf=1W").status_code == 200
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

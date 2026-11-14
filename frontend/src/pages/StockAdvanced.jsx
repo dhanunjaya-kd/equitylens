@@ -6,9 +6,9 @@ import { Badge, Tile } from '../components/ui'
 import { cr, go, num, ok, pct, rs, signed, x } from '../util'
 import { PeerRank } from './OverviewExtra'
 
-const C = { a: '#2dd4bf', b: '#38bdf8', c: '#a78bfa', d: '#f59e0b', e: '#f472b6', good: '#22c55e', bad: '#ef4444', grid: '#223040', muted: '#8b98a5' }
+const C = { a: '#2dd4bf', b: '#38bdf8', c: '#a78bfa', d: '#f59e0b', e: '#f472b6', good: '#22c55e', bad: '#ef4444', grid: 'var(--grid)', muted: 'var(--muted)' }
 const axis = { stroke: C.muted, fontSize: 11, tickLine: false }
-const tip = { contentStyle: { background: '#121a23', border: '1px solid #223040', borderRadius: 10, fontSize: 12 }, labelStyle: { color: '#e6edf3' } }
+const tip = { contentStyle: { background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12 }, labelStyle: { color: 'var(--text)' } }
 
 // ====================================================================== FORENSICS
 export function Forensics({ d }) {
@@ -119,7 +119,7 @@ function ZoneBar({ value, min, max, zones }) {
         {zones.map(([a, b, col]) => <div key={a} style={{ width: `${((b - a) / (max - min)) * 100}%`, background: col, opacity: 0.55 }} />)}
       </div>
       <div style={{ position: 'relative', height: 18 }}>
-        <div style={{ position: 'absolute', left: pos(value), top: -15, transform: 'translateX(-50%)', width: 4, height: 18, background: '#e6edf3', borderRadius: 2 }} />
+        <div style={{ position: 'absolute', left: pos(value), top: -15, transform: 'translateX(-50%)', width: 4, height: 18, background: 'var(--text)', borderRadius: 2 }} />
       </div>
       <div className="row between small muted" style={{ marginTop: -4 }}>{zones.map(([a, , , l]) => <span key={l}>{l}</span>)}</div>
     </div>
@@ -294,7 +294,7 @@ function RangeBar({ low, mid, high, price }) {
       <div style={{ position: 'absolute', top: 22, left: 0, right: 0, height: 6, background: 'var(--card2)', borderRadius: 99 }} />
       <div style={{ position: 'absolute', top: 22, left: p(low), width: `calc(${p(high)} - ${p(low)})`, height: 6, background: 'var(--accent)', opacity: 0.5, borderRadius: 99 }} />
       <div style={{ position: 'absolute', top: 16, left: p(mid), width: 3, height: 18, background: 'var(--accent)', transform: 'translateX(-50%)' }} />
-      <div style={{ position: 'absolute', top: 12, left: p(price), width: 3, height: 26, background: '#e6edf3', transform: 'translateX(-50%)' }} />
+      <div style={{ position: 'absolute', top: 12, left: p(price), width: 3, height: 26, background: 'var(--text)', transform: 'translateX(-50%)' }} />
       <div className="small" style={{ position: 'absolute', top: -4, left: p(price), transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>Price {rs(price)}</div>
       <div className="small muted" style={{ position: 'absolute', top: 38, left: p(low), transform: 'translateX(-20%)' }}>{rs(low)}</div>
       <div className="small muted" style={{ position: 'absolute', top: 38, left: p(high), transform: 'translateX(-80%)' }}>{rs(high)}</div>

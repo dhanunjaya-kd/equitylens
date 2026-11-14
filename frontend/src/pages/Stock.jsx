@@ -14,9 +14,9 @@ const TABS = [
   ['overview', 'Overview'], ['ai', '✨ AI'], ['chart', 'Chart'], ['future', 'Future 3·5·10y'], ['valuation', 'Valuation Lab'], ['forensics', 'Forensics'],
   ['financials', 'Financials'], ['quality', 'Quality'], ['ownership', 'Ownership'], ['price', 'Price'], ['documents', 'Reports'],
 ]
-const C = { a: '#2dd4bf', b: '#38bdf8', c: '#a78bfa', d: '#f59e0b', e: '#f472b6', good: '#22c55e', bad: '#ef4444', grid: '#223040', muted: '#8b98a5' }
+const C = { a: '#2dd4bf', b: '#38bdf8', c: '#a78bfa', d: '#f59e0b', e: '#f472b6', good: '#22c55e', bad: '#ef4444', grid: 'var(--grid)', muted: 'var(--muted)' }
 const axis = { stroke: C.muted, fontSize: 11, tickLine: false }
-const tip = { contentStyle: { background: '#121a23', border: '1px solid #223040', borderRadius: 10, fontSize: 12 }, labelStyle: { color: '#e6edf3' } }
+const tip = { contentStyle: { background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12 }, labelStyle: { color: 'var(--text)' } }
 
 // ---- table helpers
 const findRow = (t, ...names) => {
@@ -227,7 +227,7 @@ function Future({ d }) {
               <YAxis {...axis} tickFormatter={(v) => num(v)} />
               <Tooltip {...tip} formatter={(v) => rs(v)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <ReferenceLine y={m.price} stroke="#e6edf3" strokeDasharray="4 4" />
+              <ReferenceLine y={m.price} stroke="var(--text)" strokeDasharray="4 4" />
               <Bar dataKey="Bear" fill={C.bad} radius={[4, 4, 0, 0]} />
               <Bar dataKey="Base" fill={C.a} radius={[4, 4, 0, 0]} />
               <Bar dataKey="Bull" fill={C.good} radius={[4, 4, 0, 0]} />

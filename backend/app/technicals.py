@@ -29,8 +29,8 @@ CHART_TTL = 6 * 3600
 
 
 # ------------------------------------------------------------------ data
-def _yahoo(sym: str) -> list[dict]:
-    r = requests.get(YAHOO.format(sym=quote(sym)), params={"range": "10y", "interval": "1d", "includePrePost": "false"},
+def _yahoo(sym: str, rng: str = "10y") -> list[dict]:
+    r = requests.get(YAHOO.format(sym=quote(sym)), params={"range": rng, "interval": "1d", "includePrePost": "false"},
                      headers=_UA, timeout=config.REQUEST_TIMEOUT)
     if r.status_code != 200:
         raise scraper.FetchError(f"Yahoo HTTP {r.status_code} for {sym}")

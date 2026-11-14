@@ -100,12 +100,13 @@ const I = {
   search: <path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm9 16-4.3-4.3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
   rank: <path d="M5 20V10m7 10V4m7 16v-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />,
   star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />,
+  fire: <path d="M12 3c1 3.5 4.5 5 4.5 9.5A4.5 4.5 0 0 1 12 17a4.5 4.5 0 0 1-4.5-4.5c0-2 1-3.2 2-4 .2 1.6 1 2.6 2 3 0-3 0-5.5.5-8.5zM6 21h12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />,
   filter: <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />,
   compare: <path d="M8 4v16M16 4v16M4 8h8M12 16h8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
 }
 
 export function BottomNav({ page }) {
-  const items = [['home', '', 'Search', I.search], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter], ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare]]
+  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Movers', I.fire], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter], ['watch', 'watch', 'Watchlist', I.star]]
   return (
     <nav className="bottomnav">
       {items.map(([k, path, label, icon]) => (
@@ -129,8 +130,8 @@ export function MarketToggle({ market, onChange }) {
   )
 }
 
-export function SideNav({ page, market, onMarket }) {
-  const items = [['home', '', 'Search', I.search], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
+export function SideNav({ page, market, onMarket, theme, onTheme }) {
+  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Market Movers', I.fire], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
     ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare]]
   return (
     <aside className="sidenav">
@@ -140,6 +141,7 @@ export function SideNav({ page, market, onMarket }) {
         <button key={k} className={`sn ${page === k ? 'on' : ''}`} onClick={() => go(path)}><svg viewBox="0 0 24 24">{icon}</svg>{label}</button>
       ))}
       <div className="grow" />
+      <button className="sn" onClick={onTheme}><span style={{ width: 22, textAlign: 'center' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
       <button className={`sn ${page === 'settings' ? 'on' : ''}`} onClick={() => go('settings')}><span style={{ width: 22, textAlign: 'center' }}>⚙️</span>AI settings</button>
       <div className="small muted" style={{ padding: '10px 12px 0', lineHeight: 1.5 }}>Research aid, not investment advice.</div>
     </aside>

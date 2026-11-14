@@ -407,6 +407,26 @@ Max 400 words."""
     return {"text": complete(system, [{"role": "user", "content": prompt}], max_tokens=1500, s=s), "model": model_label(s)}
 
 
+def explain_movers(d: dict) -> dict:
+    s = load_settings()
+    tf = d["tf"]
+    rows = d["rows"]
+    pick = lambda key, rev: sorted([r for r in rows if r["ret"].get(tf) is not None], key=lambda r: r[key][tf] if isinstance(r[key], dict) else r[key], reverse=rev)[:8]
+    slim = lambda r: {"name": r["name"], "sector": r["sector"], "ret": r["ret"].get(tf), "rvol": r["rvol"],
+                      "from_52w_high": r["from_hi"], "pressure": r["pressure"].get(tf), "fundamentals": r.get("fund")}
+    data = {"market": d["market"], "timeframe": tf, "mood": d["mood"], "sectors_best": d["sectors"][:4], "sectors_worst": d["sectors"][-4:],
+            "top_gainers": [slim(r) for r in pick("ret", True)], "top_losers": [slim(r) for r in pick("ret", False)],
+            "volume_shockers": [slim(r) for r in sorted(rows, key=lambda r: -(r["vol_change"].get(tf) or 0))[:6]]}
+    system = _rules({"market": d["market"]}) + "\nYou are summarising market movers for a retail investor.\n<data>\n" + json.dumps(data, default=str) + "\n</data>"
+    prompt = f"""Explain the {tf} market move in plain English:
+## Market mood (one paragraph using the breadth numbers)
+## Where money is flowing (sectors up vs down, with numbers)
+## Notable movers (6-8 bullets: what moved, by how much, whether volume confirmed it, and whether the fundamentals score supports it when available)
+## Watch out (2-3 bullets: moves that look like hype or panic)
+No predictions and no buy/sell calls. Max 350 words."""
+    return {"text": complete(system, [{"role": "user", "content": prompt}], max_tokens=1300, s=s), "model": model_label(s)}
+
+
 def explain_picks(rows: list[dict], title: str = "Top Picks") -> dict:
     s = load_settings()
     fields = ("symbol", "name", "sector", "market_cap", "pe", "pb", "roce", "profit_cagr_5", "sales_cagr_5", "debt_to_equity",
@@ -443,6 +463,8 @@ def _demo_answer(system: str, messages: list[dict]) -> str:
         return f"- P/E **{met.get('pe')}** needs growth to continue\n- Growth may slow from **{met.get('sales_cagr_5')}%**\n\nBest counter-argument: cash conversion is strong."
     if "ROLE: You are the neutral JUDGE" in system:
         return "The bull case is better supported by the cash-flow and return data; the bear case rests on valuation.\n\nLeaning: Bull"
+    if "top_gainers" in d:
+        return f"## Market mood\n{(d.get('mood') or {}).get('read', '')}\n\n_(demo mode)_"
     if "stocks" in d:
         return "\n".join(f"**{s['symbol']}** ranks on score {s.get('overall')} with ROCE {s.get('roce')}%." for s in d["stocks"]) + "\n\n## Patterns\nDemo answer."
     if "<document>" in q:

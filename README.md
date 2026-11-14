@@ -16,7 +16,7 @@
 ![Forensics](https://img.shields.io/badge/forensics-Piotroski·Altman·Beneish-ef4444?style=flat-square)
 ![Indicators](https://img.shields.io/badge/chart-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-36_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-47_passing-22c55e?style=flat-square)
 
 ### 🔎 Search any 🇮🇳 Indian or 🇺🇸 US stock → a complete, explained research report in seconds
 
@@ -46,6 +46,12 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 | Your own **screens on 45+ fields** incl. forensic & fair-value fields | ➖ | ✅ |
 | **🇮🇳 India + 🇺🇸 US** in one app, one tap to switch, same analysis for both | ➖ | ✅ |
 | Built for **both phone and desktop**: bottom tabs on phone, sidebar + multi-column pages on laptop | ➖ | ✅ |
+| **Market Movers** across 1D · 1W · 1M · 3M · 1Y: gainers, losers, buyers, sellers, 52W high/low, volume, most active | ✅ | ✅ |
+| Movers **joined with fundamentals**: 💎 *Quality on sale* and ⚠️ *Hype watch* (fast risers with weak business) | ➖ | ✅ |
+| **Buying / selling pressure measured from volume** (up-day vs down-day volume), not just price change | ➖ | ✅ |
+| **Market mood gauge** (fear ↔ greed) with a plain-English read + **sector heatmap** for every timeframe | ➖ | ✅ |
+| ✨ **"Explain the move" with AI**: why today's leaders and laggards moved, in plain words | ➖ | ✅ |
+| ☀️ / 🌙 **Light and dark theme**, remembers your choice | ✅ | ✅ |
 | Runs on **your** laptop, your data and keys stay with you | ➖ | ✅ |
 
 <sub>➖ = not offered, or only partly, by most free sites.</sub>
@@ -70,6 +76,10 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 <tr>
 <td align="center"><img src="docs/screenshots/desktop/ai.png" width="420"/><br/><b>✨ AI note, chat & bull-vs-bear debate</b></td>
 <td align="center"><img src="docs/screenshots/desktop/rankings.png" width="420"/><br/><b>🏆 Top Picks ranking table</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/desktop/movers.png" width="420"/><br/><b>🔥 Market Movers: mood, sector heatmap, lists</b></td>
+<td align="center"><img src="docs/screenshots/desktop/movers_light.png" width="420"/><br/><b>☀️ Light theme: Top buyers this month</b></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/desktop/home.png" width="420"/><br/><b>🔎 Home with sidebar & 🇮🇳/🇺🇸 switch</b></td>
@@ -103,7 +113,12 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 <tr>
 <td align="center"><img src="docs/screenshots/us_search.png" width="230"/><br/><b>🇮🇳 / 🇺🇸 one-tap market switch</b></td>
 <td align="center"><img src="docs/screenshots/us_stock.png" width="230"/><br/><b>🇺🇸 US stock in $ (SEC filings)</b></td>
-<td align="center"><img src="docs/screenshots/chart_outlook.png" width="230"/><br/><b>🔭 Same depth for both markets</b></td>
+<td align="center"><img src="docs/screenshots/us_movers.png" width="230"/><br/><b>🇺🇸 US movers: 52-week highs</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/movers.png" width="230"/><br/><b>🔥 Top gainers this week</b></td>
+<td align="center"><img src="docs/screenshots/movers_filters.png" width="230"/><br/><b>🟢 Top buyers + filters</b></td>
+<td align="center"><img src="docs/screenshots/light_overview.png" width="230"/><br/><b>☀️ Light theme</b></td>
 </tr>
 </table>
 
@@ -148,6 +163,26 @@ Tap **🇮🇳 IND** or **🇺🇸 US** at the top. Search, Top Picks and Screen
 | 👥 | **Ownership** | Promoter / FII / DII / public trend, quarter by quarter |
 | 💹 | **Price** | 10-year price with 200-day average, price CAGR |
 | 📄 | **Reports** | Annual reports, concall transcripts & PPTs, announcements, credit ratings |
+
+### 🔥 Market Movers (🇮🇳 NIFTY 500 · 🇺🇸 S&P 500)
+
+Pick a timeframe, **1D · 1W · 1M · 3M · 1Y**, and every list re-ranks for it.
+
+| List | What it shows |
+|---|---|
+| 🚀 **Top gainers** / 📉 **Top losers** | Biggest price rise / fall over the timeframe |
+| 🟢 **Top buyers** / 🔴 **Top sellers** | Strongest buying / selling **pressure**: share of volume traded on up-days vs down-days (1D: where it closed in the day's range). Tags *only buyers / only sellers* when it closed at the high / low |
+| 🏔️ **52W high** / 🕳️ **52W low** | New or near 52-week highs / lows; ✅ marks **volume-confirmed breakouts** |
+| 🔊 **Volume shockers** | Volume far above its normal (relative volume) |
+| 💰 **Most active** | Highest traded value (₹ Cr / $ M per day) |
+| 💎 **Quality on sale** | Business score ≥ 70 but 15%+ below its 52-week high |
+| ⚠️ **Hype watch** | Top-20% risers with a weak business score or red flags |
+
+- 🌡️ **Market mood gauge** (Extreme fear → Extreme greed) built from advances/declines, % above 50 & 200-day average, 52W highs vs lows and the median move, with a one-paragraph read
+- 🗺️ **Sector heatmap**: average move of each sector, tap a sector to filter every list
+- ⚙️ **Filters**: price range, minimum traded value, market cap, EquityLens score, sector, only above 200-day average, only my watchlist
+- ✨ **Explain the move**: the AI agent reads the leaders and laggards and writes why they moved and what to check
+- Daily prices from Yahoo's public chart feed, refreshed every few hours in the background. *Buyers/sellers are measured from daily volume, not live order flow.*
 
 ### 🏆 Top Picks · 🧮 Screener · ⭐ Watchlist · ⚖️ Compare
 
@@ -220,6 +255,8 @@ python run.py
 | 🇺🇸 | Add `EQL_SEC_USER_AGENT` to `backend/.env` | Needed once for US stocks (SEC rule) |
 | 4️⃣ | Top Picks → **Quick scan (30)** | See the ranking work in ~3 min (in whichever market is selected) |
 | 5️⃣ | Top Picks → **Scan NIFTY 500 / S&P 500** | Full ranking in ~30–60 min. Re-run weekly or after results season |
+| 🔥 | Open **Movers** | First load downloads daily prices for the index (~3–5 min), then refreshes in the background every few hours. Run the Top Picks scan too so *Quality on sale* / *Hype watch* and the score filter have fundamentals to use |
+| ☀️ | Tap ☀️ / 🌙 (top bar on phone, sidebar on laptop) | Switch light / dark theme; your choice is remembered |
 
 ### 🖥️ Use it on your laptop
 
@@ -326,6 +363,7 @@ python run_tests.py
 | `test_api.py` | Every endpoint, including error paths: bad symbols, missing keys, blocked document links |
 | `test_ai.py` | Exact request format for Claude, OpenAI, Gemini and Ollama; friendly errors; masked keys; every AI feature end to end |
 | `test_us.py` | SEC filings read correctly: revenue tag changes merged, 6/9-month YTD figures ignored, Q4 derived, TTM, ratios, $ throughout |
+| `test_movers.py` | Returns per timeframe, buying/selling pressure, turnover in ₹ Cr / $ M, relative volume, 52W breakouts, mood score, sector heatmap, both markets |
 
 ---
 
@@ -345,10 +383,11 @@ equitylens/
 │   │   ├── valuation.py      DCF · Graham · P/E bands · EV · fair value
 │   │   ├── technicals.py     OHLC + indicators + chart outlook (range, analogs, levels)
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents
+│   │   ├── movers.py         market movers, pressure, mood gauge, sector heatmap
 │   │   ├── service.py        fetch → cache → analyse, NIFTY 500 scan
 │   │   └── main.py           API + serves the web app
 │   ├── static/               prebuilt app (no npm needed to run)
-│   ├── tests/                36 offline tests + sample Indian & US company data
+│   ├── tests/                47 offline tests + sample Indian & US company data
 │   └── run.py · scan.py · selftest.py · run_tests.py
 ├── ⚛️ frontend/              React source (npm install && npm run build)
 └── 🖼️ docs/                  banner + screenshots

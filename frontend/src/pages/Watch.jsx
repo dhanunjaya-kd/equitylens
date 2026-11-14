@@ -8,7 +8,7 @@ export default function Watch() {
   useEffect(() => {
     api('/api/rankings').then((d) => setRows(Object.fromEntries((d.rows || []).map((r) => [r.symbol, r])))).catch(() => {})
   }, [])
-  if (!list.length) return <div className="card empty">Your watchlist is empty.<br />Tap ☆ on any stock page to add it.</div>
+  if (!list.length) return <><div className="card empty">Your watchlist is empty.<br />Tap ☆ on any stock page to add it.</div><button className="btn" onClick={() => go('compare')}>⚖️ Compare stocks</button></>
   return (
     <>
       <div className="card" style={{ padding: 0 }}>
@@ -26,7 +26,7 @@ export default function Watch() {
           )
         })}
       </div>
-      {list.length >= 2 && <button className="btn" onClick={() => go(`compare?s=${list.slice(0, 4).map((w) => w.symbol).join(',')}`)}>Compare watchlist (first 4)</button>}
+      <button className="btn" onClick={() => go(list.length >= 2 ? `compare?s=${list.slice(0, 4).map((w) => w.symbol).join(',')}` : 'compare')}>⚖️ {list.length >= 2 ? 'Compare watchlist (first 4)' : 'Compare stocks'}</button>
     </>
   )
 }
