@@ -16,7 +16,7 @@
 ![Forensics](https://img.shields.io/badge/forensics-Piotroski·Altman·Beneish-ef4444?style=flat-square)
 ![Indicators](https://img.shields.io/badge/chart-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-70_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-69_passing-22c55e?style=flat-square)
 
 ### 🔎 Search any 🇮🇳 Indian or 🇺🇸 US stock → a complete, explained research report in seconds
 
@@ -463,7 +463,7 @@ equitylens/
 │   │   ├── service.py        fetch → cache → analyse, NIFTY 500 scan
 │   │   └── main.py           API + serves the web app
 │   ├── static/               prebuilt app (no npm needed to run)
-│   ├── tests/                70 offline tests + sample Indian & US company data
+│   ├── tests/                69 offline tests + sample Indian & US company data
 │   └── run.py · scan.py · selftest.py · run_tests.py
 ├── ⚛️ frontend/              React source (npm install && npm run build)
 └── 🖼️ docs/                  banner + screenshots
