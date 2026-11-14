@@ -7,7 +7,7 @@ import { Badge, DataTable, Loading, ScoreBar, ScoreRing, Tile } from '../compone
 import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import StockChart from './StockChart'
 import { StockAI } from './AI'
-import { KeyPoints, KeyRatios, LatestQuarter } from './OverviewExtra'
+import { KeyPoints, KeyRatios, LatestQuarter, StoryTimeline } from './OverviewExtra'
 import { ago, api, cr, go, num, ok, pct, recent, rs, scoreColor, signed, watchlist, x } from '../util'
 
 const TABS = [
@@ -291,6 +291,7 @@ function Financials({ d }) {
   const q = series(t.quarters, [['Sales', 'Sales', 'Revenue'], ['Net Profit', 'Net Profit']], false)
   return (
     <>
+      <StoryTimeline d={d} />
       <div className="card">
         <h3>Sales & net profit (₹ Cr, yearly)</h3>
         <div style={{ height: 230 }}>

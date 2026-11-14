@@ -38,6 +38,7 @@ export function StockAI({ d }) {
       <ModelBar settings={settings} />
       <Note sym={sym} />
       <Chat sym={sym} name={d.company.name} />
+      <Guidance sym={sym} />
       <Debate sym={sym} />
       <DocReader d={d} />
       <p className="disclaimer">AI answers are generated from EquityLens's data for this stock and can still be wrong. Check important numbers in the Financials tab and the company's reports.</p>
@@ -91,6 +92,21 @@ function Chat({ sym, name }) {
         <input className="grow" value={q} placeholder="Ask anything about this stock…" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ask()} />
         <button className="btn primary" disabled={busy || !q.trim()} onClick={() => ask()}>Ask</button>
       </div>
+    </div>
+  )
+}
+
+function Guidance({ sym }) {
+  const [r, setR] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
+  const run = async (refresh) => { setBusy(true); setErr(null); try { setR(await post(`/api/ai/guidance/${sym}${refresh ? '?refresh=1' : ''}`)) } catch (e) { setErr(e.message) } finally { setBusy(false) } }
+  return (
+    <div className="card">
+      <div className="row between"><h3 style={{ margin: 0 }}>🎯 Management guidance check</h3>
+        {r ? <button className="btn small" disabled={busy} onClick={() => run(true)}>↻ Re-check</button> : <button className="btn small primary" disabled={busy} onClick={() => run(false)}>Check</button>}</div>
+      {!r && !busy && <p className="small muted" style={{ marginBottom: 0 }}>Takes every target management has set (growth, margins, capacity, capex) and checks it against the company's own track record: achievable, stretch or unlikely.</p>}
+      {busy && <Busy text="Comparing targets with the numbers…" />}
+      <Err e={err} />
+      {r && <><Md text={r.text} /><div className="small muted">{r.model} · {ago(r.created)}</div></>}
     </div>
   )
 }

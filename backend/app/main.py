@@ -113,6 +113,12 @@ def ai_chat(symbol: str, body: dict = Body(...)):
     return _ai(ai.chat, rep, tech, body.get("messages") or [])
 
 
+@app.post("/api/ai/guidance/{symbol}")
+def ai_guidance(symbol: str, refresh: bool = False):
+    rep, _ = _report_and_tech(symbol)
+    return _ai(ai.guidance_check, rep, refresh)
+
+
 @app.post("/api/ai/debate/{symbol}")
 def ai_debate(symbol: str, refresh: bool = False):
     rep, tech = _report_and_tech(symbol)
@@ -125,6 +131,10 @@ def ai_doc(symbol: str, body: dict = Body(...)):
     if not url.startswith("http"):
         raise HTTPException(400, "Missing document link.")
     rep, _ = _report_and_tech(symbol)
+    allowed = {it.get("url") for g in rep["company"].get("documents", []) for it in g["items"]} | {
+        l["url"] for g in rep["company"].get("documents", []) for it in g["items"] for l in it.get("links", [])}
+    if url not in allowed:
+        raise HTTPException(400, "Only this stock's own report links can be read.")
     try:
         return _ai(ai.read_document, rep, url, body.get("title", ""))
     except requests.RequestException as e:

@@ -9,18 +9,43 @@
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-build-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 
-![No API keys](https://img.shields.io/badge/API_keys-none_needed-22c55e?style=flat-square)
+![Data](https://img.shields.io/badge/data-no_API_keys_needed-22c55e?style=flat-square)
 ![Phone first](https://img.shields.io/badge/📱_phone-first-2dd4bf?style=flat-square)
 ![NIFTY 500](https://img.shields.io/badge/scan-NIFTY_500-f59e0b?style=flat-square)
-![Indicators](https://img.shields.io/badge/indicators-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
+![Forensics](https://img.shields.io/badge/forensics-Piotroski·Altman·Beneish-ef4444?style=flat-square)
+![Indicators](https://img.shields.io/badge/chart-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-20_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-29_passing-22c55e?style=flat-square)
 
-### 🔎 Search any Indian stock → get a complete research report in seconds
+### 🔎 Search any Indian stock → a complete, explained research report in seconds
 
-**10+ years of financials · 6 scores · red flags · forensic checks · fair value · 3/5/10-year outlook · technical chart · AI agents**
+**Not just numbers: a verdict, the reasons, the risks, what the chart says next, and what has to go right for 3, 5 and 10 years.**
 
 </div>
+
+---
+
+## 🆚 What makes EquityLens different
+
+Most stock sites show you the numbers. EquityLens **reads them for you**, explains them in plain English and tells you what to check next.
+
+| | Typical stock sites | **EquityLens** |
+|---|:-:|:-:|
+| 10+ years of P&L, balance sheet, cash flow, quarters, shareholding | ✅ | ✅ |
+| One clear **verdict** with the reasons and 6 scores (0–100) | ➖ | ✅ |
+| **Red flags** written out (debt, cash conversion, promoter selling, pledging, dilution…) | ➖ | ✅ |
+| **Forensic checks**: Piotroski F, Altman Z, Beneish M, DuPont | ➖ | ✅ |
+| **3 / 5 / 10-year bear-base-bull** price & return, with every assumption visible | ➖ | ✅ |
+| **Reverse DCF**: "what growth does today's price already expect?" | ➖ | ✅ |
+| **Interactive DCF** with sliders + sensitivity grid + fair-value range from 5 methods | ➖ | ✅ |
+| **Chart outlook**: if/then levels, likely price range, *what happened after the same setup before* | ➖ | ✅ |
+| **10-year story** timeline (big jumps, margin shifts, debt, dilution called out) | ➖ | ✅ |
+| **Peer ranking** bars (where it stands on ROCE, P/E, growth…) | ➖ | ✅ |
+| **AI analyst**: research note, chat, bull-vs-bear debate, guidance check, report reader | ➖ | ✅ |
+| Your own **screens on 45+ fields** incl. forensic & fair-value fields | ➖ | ✅ |
+| Runs on **your** laptop, your data and keys stay with you | ➖ | ✅ |
+
+<sub>➖ = not offered, or only partly, by most free sites.</sub>
 
 ---
 
@@ -28,19 +53,24 @@
 
 <table>
 <tr>
-<td align="center"><img src="docs/screenshots/overview.png" width="240"/><br/><b>🟢 Overview & verdict</b></td>
-<td align="center"><img src="docs/screenshots/quarter.png" width="240"/><br/><b>📋 Key ratios & latest quarter</b></td>
-<td align="center"><img src="docs/screenshots/ai.png" width="240"/><br/><b>✨ AI research note & chat</b></td>
+<td align="center"><img src="docs/screenshots/overview.png" width="230"/><br/><b>🟢 Verdict & scores</b></td>
+<td align="center"><img src="docs/screenshots/quarter.png" width="230"/><br/><b>📋 Key ratios & latest quarter</b></td>
+<td align="center"><img src="docs/screenshots/timeline.png" width="230"/><br/><b>📖 The 10-year story</b></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/chart.png" width="240"/><br/><b>📈 Chart + future range</b></td>
-<td align="center"><img src="docs/screenshots/chart_outlook.png" width="240"/><br/><b>🔭 What the chart says next</b></td>
-<td align="center"><img src="docs/screenshots/future.png" width="240"/><br/><b>🔮 3 · 5 · 10-year outlook</b></td>
+<td align="center"><img src="docs/screenshots/chart.png" width="230"/><br/><b>📈 Chart + future range</b></td>
+<td align="center"><img src="docs/screenshots/chart_outlook.png" width="230"/><br/><b>🔭 What the chart says next</b></td>
+<td align="center"><img src="docs/screenshots/future.png" width="230"/><br/><b>🔮 3 · 5 · 10-year outlook</b></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/valuation.png" width="240"/><br/><b>💰 Valuation Lab (live DCF)</b></td>
-<td align="center"><img src="docs/screenshots/forensics.png" width="240"/><br/><b>🕵️ Forensics</b></td>
-<td align="center"><img src="docs/screenshots/screener.png" width="240"/><br/><b>🧮 Screener</b></td>
+<td align="center"><img src="docs/screenshots/valuation.png" width="230"/><br/><b>💰 Valuation Lab (live DCF)</b></td>
+<td align="center"><img src="docs/screenshots/peers.png" width="230"/><br/><b>🏁 Peer ranking</b></td>
+<td align="center"><img src="docs/screenshots/forensics.png" width="230"/><br/><b>🕵️ Forensics</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/ai.png" width="230"/><br/><b>✨ AI note, chat & debate</b></td>
+<td align="center"><img src="docs/screenshots/guidance.png" width="230"/><br/><b>🎯 Guidance check</b></td>
+<td align="center"><img src="docs/screenshots/screener.png" width="230"/><br/><b>🧮 Screener</b></td>
 </tr>
 </table>
 
@@ -48,50 +78,63 @@
 
 ---
 
-## ✨ What you get
+## ✨ Everything on a stock page
 
 | | Tab | What's inside |
 |:-:|---|---|
-| 🟢 | **Overview** | Verdict, score ring, key ratios, latest quarter (YoY / QoQ), 3/5/10-year stance, scorecard, strengths ✅ & red flags 🚩, quick checks, company key points |
-| ✨ | **AI** | Research note · ask-anything chat · 🐂 bull vs 🐻 bear debate with a ⚖️ judge · annual report & concall reader |
-| 📈 | **Chart** | Candles (daily/weekly, 3M–10Y) · EMA 20/50/200 · Bollinger · Supertrend · golden/death crosses · support/resistance · Volume · RSI · MACD · ADX · signal checklist |
+| 🟢 | **Overview** | Verdict & score ring · key ratios · latest quarter (YoY / QoQ + 8-quarter chart) · 3/5/10-year stance · scorecard · strengths ✅ & red flags 🚩 · fair value & forensic quick checks · company key points |
+| ✨ | **AI** | 🧠 Research note · 💬 ask-anything chat · 🎯 management guidance check · ⚔️ bull vs bear debate with a ⚖️ judge · 📄 annual report & concall reader |
+| 📈 | **Chart** | Candles (daily/weekly, 3M–10Y) · EMA 20/50/200 · Bollinger · Supertrend · golden/death crosses · support/resistance · volume · RSI · MACD · ADX · signal checklist |
 | 🔭 | **Chart outlook** | Plain-English chart story · 🎯 if/then levels · 📐 likely price range (drawn on the chart) · 📜 what happened after the same setup before · ✨ AI chart explainer |
-| 🔮 | **Future 3·5·10y** | Bear / base / bull price and yearly return · reverse DCF ("what growth does today's price need?") · every assumption visible |
-| 💰 | **Valuation Lab** | Fair-value range from 5 methods · **DCF with sliders** · sensitivity grid · P/E bands · Graham number · EV/EBITDA · peers |
-| 🕵️ | **Forensics** | **Piotroski F** (9 health tests) · **Altman Z** (bankruptcy risk) · **Beneish M** (earnings manipulation) · **DuPont** ROE breakdown · accounting checks |
-| 📊 | **Financials** | 10–12 years of P&L, balance sheet, cash flow, ratios, quarterly results, with charts |
-| 🏭 | **Quality** | ROCE trend, profit vs operating cash, free cash, working-capital days |
+| 🔮 | **Future 3·5·10y** | Bear / base / bull price and yearly return · reverse DCF · every assumption visible |
+| 💰 | **Valuation Lab** | Fair-value range (DCF, Graham, own median P/E, peer P/E, justified P/B) · **DCF sliders** · sensitivity grid · P/E bands · EV/EBITDA · 🏁 peer ranking · peers table |
+| 🕵️ | **Forensics** | Piotroski F (9 tests, lender-adapted for banks) · Altman Z · Beneish M · DuPont ROE breakdown · accounting checks |
+| 📊 | **Financials** | 📖 10-year story timeline · 10–12 years of P&L, balance sheet, cash flow, ratios, quarters, with charts |
+| 🏭 | **Quality** | ROCE trend · profit vs operating cash · free cash · working-capital days |
 | 👥 | **Ownership** | Promoter / FII / DII / public trend, quarter by quarter |
+| 💹 | **Price** | 10-year price with 200-day average, price CAGR |
 | 📄 | **Reports** | Annual reports, concall transcripts & PPTs, announcements, credit ratings |
 
-### 🏆 Top Picks &nbsp;·&nbsp; 🧮 Screener &nbsp;·&nbsp; ⭐ Watchlist &nbsp;·&nbsp; ⚖️ Compare
+### 🏆 Top Picks · 🧮 Screener · ⭐ Watchlist · ⚖️ Compare
 
-- 🏆 **Top Picks:** scans the whole **NIFTY 500** and ranks every company by the same rules
-- 🧮 **Screener:** 9 ready-made screens plus your own rules on **45+ fields**, saved on your phone
+- 🏆 **Top Picks:** scans the whole **NIFTY 500** and ranks every company by the same rules, plus ✨ "explain this list with AI"
+- 🧮 **Screener:** 9 ready-made screens and your own rules on **45+ fields**, saved on your phone
   > 💎 Quality compounders · 🏷️ Value with quality · 📉 Below fair value · 🏦 Holding-company discount · 🧱 Debt-free growers · 🚀 Piotroski 8+ · 🤝 Promoters buying · ⏳ Cheap vs own history · 🌳 10-year compounders
 - ⭐ **Watchlist** and ⚖️ **Compare up to 4 stocks** side by side
 
 ---
 
-## ✨ AI agents (Claude · ChatGPT · Gemini · Ollama)
+## 🤖 AI agents (Claude · ChatGPT · Gemini · Ollama)
 
-| | Feature | What it does |
+| | Agent | What it does |
 |:-:|---|---|
 | 🧠 | **Research note** | Full write-up: quality, growth, balance sheet, forensics, valuation, 3/5/10-year view, risks, what to watch |
-| 💬 | **Ask about this stock** | Chat grounded in that stock's own data: "Is the debt a worry?", "Why did margins fall?" |
+| 💬 | **Ask about this stock** | Chat grounded in that stock's own data: *"Is the debt a worry?"*, *"Why did margins fall?"* |
+| 🎯 | **Guidance check** | Takes every target management has set and grades it against the track record: ✅ achievable · ⚠️ stretch · ❌ unlikely |
 | ⚔️ | **Bull vs Bear debate** | Two agents argue for and against, a judge checks both against the data |
-| 📄 | **Document reader** | Reads annual reports and concall transcripts: guidance, capex, risks, tone |
+| 📄 | **Report reader** | Reads annual reports and concall transcripts: guidance, capex, risks, tone |
 | 📈 | **Chart explainer** | Explains the chart, the levels that matter and what history says |
 | 🏆 | **Explain my list** | Why each Top Pick / Screener result ranks, and what they have in common |
 
-Pick the provider in **⚙️ Settings** (top-right): **Claude**, **ChatGPT** or **Gemini** with your own API key (Gemini has a free tier; tap *Load my models* to pick one), **Ollama** (free, runs on your laptop) or **Demo** (offline). Keys stay on your laptop in `backend/data/ai_settings.json` (git-ignored) or `backend/.env` (see `.env.example`).
+Choose the provider in **⚙️ Settings** (top-right):
+
+| Provider | Cost | Notes |
+|---|---|---|
+| **Claude** | Pay per use | Best for long reports. Sonnet / Opus / Haiku selectable |
+| **ChatGPT** | Pay per use | Any chat model name from your OpenAI account |
+| **Gemini** | Free tier + paid | Tap *Load my models* to pick from the models your key can use |
+| **Ollama** | Free | Runs on your laptop; slower, less sharp |
+| **Demo** | Free | Offline sample answers to try the screens |
+
+> [!IMPORTANT]
+> The AI only sees EquityLens's data for that stock and is told never to invent numbers. Keys stay on your laptop (`backend/data/ai_settings.json` or `backend/.env`, both git-ignored).
 
 ---
 
 ## 🚀 Quick start (Windows)
 
 > [!TIP]
-> **One click:** double-click **`start.bat`**. The first run creates `backend/venv`, installs 5 small packages and opens **http://localhost:8600** in your browser.
+> **One click:** double-click **`start.bat`**. The first run creates `backend/venv`, installs 6 small packages and opens **http://localhost:8600**.
 
 ```bat
 git clone https://github.com/dhanunjaya-kd/equitylens
@@ -119,8 +162,9 @@ python run.py
 |:-:|---|---|
 | 1️⃣ | `python selftest.py` in `backend/` | Fetches RELIANCE, HDFCBANK, ITC live and prints what was read |
 | 2️⃣ | Search any stock in the app | Full report in ~5 s, cached for 24 h (↻ Refresh fetches new data) |
-| 3️⃣ | Top Picks → **Quick scan (30)** | See the ranking work in ~3 min |
-| 4️⃣ | Top Picks → **Scan NIFTY 500** (or `python scan.py`) | Full ranking in ~40–60 min. Re-run weekly or after results season |
+| 3️⃣ | ⚙️ Settings → pick an AI provider | Claude / ChatGPT / Gemini key, or Ollama for free |
+| 4️⃣ | Top Picks → **Quick scan (30)** | See the ranking work in ~3 min |
+| 5️⃣ | Top Picks → **Scan NIFTY 500** (or `python scan.py`) | Full ranking in ~40–60 min. Re-run weekly or after results season |
 
 ### 📱 Use it on your phone
 
@@ -137,17 +181,21 @@ flowchart LR
     A[🔎 Search stock]:::blue --> B[🌐 Public pages<br/>screener.in]:::teal
     A --> C[📈 Daily prices<br/>Yahoo Finance]:::teal
     B --> D[🧩 Parser<br/>10-12y tables]:::purple
-    C --> E[📐 Indicators<br/>EMA RSI MACD ADX]:::purple
-    D --> F[🧠 Research engine<br/>scores · flags · forensics<br/>valuation · scenarios]:::amber
-    E --> G[📊 Technical summary]:::amber
+    C --> E[📐 Indicators<br/>+ chart outlook]:::purple
+    D --> F[🧠 Research engine<br/>scores · flags · forensics<br/>valuation · scenarios · story]:::amber
+    E --> G[🔭 Technical summary]:::amber
     F --> H[📱 Report on your phone]:::green
     G --> H
+    F --> J[🤖 AI agents<br/>Claude · GPT · Gemini · Ollama]:::pink
+    G --> J
+    J --> H
     F --> I[(💾 SQLite cache<br/>+ rankings)]:::grey
     classDef blue fill:#38bdf8,stroke:#0369a1,color:#0b1016
     classDef teal fill:#2dd4bf,stroke:#0f766e,color:#0b1016
     classDef purple fill:#a78bfa,stroke:#6d28d9,color:#0b1016
     classDef amber fill:#f59e0b,stroke:#b45309,color:#0b1016
     classDef green fill:#22c55e,stroke:#15803d,color:#0b1016
+    classDef pink fill:#f472b6,stroke:#be185d,color:#0b1016
     classDef grey fill:#334155,stroke:#64748b,color:#e6edf3
 ```
 
@@ -157,10 +205,12 @@ flowchart LR
 |:-:|---|---|
 | 🟢 | **High quality, fairly priced** | Strong business, price still leaves room for returns |
 | 🔵 | **High quality, but expensive** | Great business, price already expects a lot |
+| 🔵 | **High quality, price data missing** | Strong business; valuation couldn't be checked |
 | 🟡 | **Average — keep on watch** | Mixed picture, track it |
 | 🟠 | **Good numbers, serious red flags** | Check the flags before trusting the scores |
 | 🔴 | **Weak — avoid for now** | Fundamentals or red flags argue against holding |
 | ⚫ | **Loss-making — speculative** | No current earnings, a turnaround bet |
+| ⚪ | **Not enough data** | Under 3 years of usable numbers: not rated, not ranked |
 
 <details>
 <summary>📐 <b>Scoring rules (all visible in the app)</b></summary>
@@ -179,6 +229,8 @@ flowchart LR
 **Business** = first five · **Overall** = 80% business + 20% valuation
 
 **Future scenarios:** start from last-12-month EPS → grow at a blend of 3/5/10-yr profit growth (capped at sales growth + 5 and at 25%) → growth fades to 4 / 8 / 11% by year 10 (bear / base / bull) → P/E starts at the 10-yr median and drifts toward 12–25. Returns include the dividend yield.
+
+**Chart outlook:** the likely range uses the stock's own last-year volatility with no direction assumed. "Same setup before" finds every past day with the same trend & momentum state (price vs 200 EMA, 50 vs 200 EMA, RSI zone, MACD vs signal) and measures where the price was 1, 3 and 6 months later, compared with an average day.
 </details>
 
 <details>
@@ -191,8 +243,27 @@ flowchart LR
 | `EQL_CACHE_TTL_HOURS` | `24` | How long a fetched stock is reused |
 | `EQL_SCAN_DELAY` | `3` | Seconds between companies in a scan (keep it polite) |
 | `EQL_PORT` | `8600` | Web port |
+| `EQL_AI_PROVIDER` | `claude` | `claude` · `openai` · `gemini` · `ollama` · `demo` |
 | `EQL_DEMO` | `0` | `1` = offline demo with sample companies **TESTCO** and **TESTBANK** |
+
+AI keys and models: see `backend/.env.example`, or just use ⚙️ Settings.
 </details>
+
+---
+
+## 🧪 Quality checks
+
+```bat
+cd backend
+python run_tests.py
+```
+
+| Suite | What it proves |
+|---|---|
+| `test_engine.py` | Parser reads the source's table layout; scores, flags, forensics, valuation and indicator maths (EMA, RSI, MACD, ADX checked against reference formulas) |
+| `test_stress.py` | 12 broken / partial-data cases (no cash flow, 2 years only, negative equity, all losses, no price…) never crash and are never over-rated |
+| `test_api.py` | Every endpoint, including error paths: bad symbols, missing keys, blocked document links |
+| `test_ai.py` | Exact request format for Claude, OpenAI, Gemini and Ollama; friendly errors; masked keys; every AI feature end to end |
 
 ---
 
@@ -204,8 +275,8 @@ equitylens/
 ├── 🐍 backend/
 │   ├── app/
 │   │   ├── scraper.py        public-page fetcher (paced, retries, cached)
-│   │   ├── parser.py         HTML → clean tables, peers, documents
-│   │   ├── analysis.py       metrics, scores, flags, scenarios, verdict
+│   │   ├── parser.py         HTML → clean tables, key points, peers, documents
+│   │   ├── analysis.py       metrics, scores, flags, scenarios, verdict, 10-year story
 │   │   ├── forensics.py      Piotroski · Altman · Beneish · DuPont
 │   │   ├── valuation.py      DCF · Graham · P/E bands · EV · fair value
 │   │   ├── technicals.py     OHLC + indicators + chart outlook (range, analogs, levels)
@@ -213,16 +284,25 @@ equitylens/
 │   │   ├── service.py        fetch → cache → analyse, NIFTY 500 scan
 │   │   └── main.py           API + serves the web app
 │   ├── static/               prebuilt app (no npm needed to run)
-│   ├── tests/                offline tests + sample company pages
-│   └── run.py · scan.py · selftest.py
+│   ├── tests/                29 offline tests + sample company pages
+│   └── run.py · scan.py · selftest.py · run_tests.py
 ├── ⚛️ frontend/              React source (npm install && npm run build)
 └── 🖼️ docs/                  banner + screenshots
 ```
 
 ---
 
+## 🛣️ Roadmap
+
+- [ ] ☁️ Cloud version (Vercel + free database + weekly GitHub Actions scan) so it works with the laptop off
+- [ ] 🔔 Alerts when a watchlist stock crosses a level or its verdict changes
+- [ ] 💼 Portfolio X-ray: your holdings scored together
+- [ ] 🗂️ Score history: how a company's scores changed quarter by quarter
+
+---
+
 > [!NOTE]
-> Fundamentals come from the same public company pages you'd open in a browser (screener.in), and chart prices from Yahoo Finance's public chart feed. No logins or paid data. If a site changes its layout, `selftest.py` shows exactly which section broke.
+> Fundamentals come from the same public company pages you'd open in a browser (screener.in), and chart prices from Yahoo Finance's public chart feed. No logins or paid data. If a site changes its layout, `selftest.py` shows exactly which section broke. Keep the app on your own network (Tailscale) rather than exposing port 8600 to the internet, since Settings can change AI keys.
 
 > [!WARNING]
 > Everything is built from **past numbers and stated assumptions**. EquityLens is a research aid, **not investment advice**. Read the red flags and the company's own annual report before investing.

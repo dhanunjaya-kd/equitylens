@@ -8,7 +8,7 @@ const SORTS = [
   ['base_3y', 'Base return 3y'], ['base_5y', 'Base return 5y'], ['base_10y', 'Base return 10y'],
   ['profit_cagr_5', 'Profit growth 5y'], ['roce', 'ROCE / ROE'], ['market_cap', 'Market cap'],
 ]
-const VERDICTS = ['High quality, fairly priced', 'High quality, but expensive', 'Average — keep on watch', 'Good numbers, serious red flags', 'Weak — avoid for now', 'Loss-making — speculative']
+const VERDICTS = ['High quality, fairly priced', 'High quality, but expensive', 'High quality, price data missing', 'Average — keep on watch', 'Good numbers, serious red flags', 'Weak — avoid for now', 'Loss-making — speculative', 'Not enough data']
 
 export default function Rankings() {
   const [sort, setSort] = useState('overall')

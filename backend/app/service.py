@@ -116,14 +116,14 @@ def ranking_row(payload: dict, a: dict) -> dict:
     fx, val = a.get("forensics", {}), a.get("valuation", {})
     fv = val.get("fair_value") or {}
     sector_path = c.get("sector_path") or []
-    text = (" ".join(sector_path) + " " + (c.get("about") or "")[:300]).lower()
+    text = (" ".join(sector_path) + " " + (c.get("name") or "")).lower()
     fin = m.get("is_financial")
     return {
         "symbol": payload["symbol"], "name": c.get("name"),
         "sector": sector_path[-1] if sector_path else "",
         "broad_sector": sector_path[0] if sector_path else "",
         "is_financial": fin,
-        "is_holdco": ("investment" in text or "holding" in text),
+        "is_holdco": any(w in text for w in ("investment compan", "holding compan", "investments", "holdings", "finance - investment")),
         # size & price
         "market_cap": m.get("market_cap"), "price": m.get("price"), "off_high_pct": m.get("off_high_pct"),
         # valuation

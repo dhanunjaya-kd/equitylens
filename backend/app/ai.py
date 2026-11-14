@@ -209,6 +209,7 @@ def build_context(report: dict, tech: Optional[dict] = None) -> str:
         "valuation": {"fair_value": val.get("fair_value"), "methods": val.get("methods"),
                       "pe_bands": (val.get("pe_bands") or {}).get("bands"), "ev": val.get("ev"),
                       "median_pe_10y": a.get("median_pe")},
+        "ten_year_story": [{"year": t["year"], "events": [e["text"] for e in t["events"]]} for t in a.get("timeline", []) if t["events"]],
         "scenarios": {"assumptions": proj.get("assumptions"), "horizons": proj.get("horizons"),
                       "reverse_dcf": proj.get("reverse_dcf"), "views": a.get("horizons")},
         "tables_rs_crore": {
@@ -359,6 +360,24 @@ def fetch_document_text(url: str) -> tuple[str, int]:
     return BeautifulSoup(r.text, "lxml").get_text(" ", strip=True), 1
 
 
+def guidance_check(report: dict, refresh: bool = False) -> dict:
+    s = load_settings()
+    key = f"AI::GUIDE::{report['symbol']}::{model_label(s)}"
+    if not refresh and (hit := _cache_get(key, 24 * 3600)):
+        return hit
+    prompt = """Check management's targets against reality.
+1. From key_points (and anything else in <data>), list every forward-looking target or guidance item: growth targets, margin/ROCE targets, capacity, capex, debt, new businesses, timelines.
+2. Make a markdown table with columns: Target | What the track record shows (quote the actual numbers from the tables/metrics) | What the base-case scenario assumes | Verdict
+   Verdict is one of: ✅ Achievable (track record already supports it), ⚠️ Stretch (needs clear improvement), ❌ Unlikely (contradicts the numbers), ❓ Can't check (data not available).
+3. Then ## Overall: is management's ambition supported by its own history? 3-4 sentences.
+4. Then ## What to verify next quarter: 3 bullet points with specific numbers to look for.
+If no targets are in the data, say so plainly and stop."""
+    out = {"text": complete(_system(report, None), [{"role": "user", "content": prompt}], s=s),
+           "model": model_label(s), "created": time.time()}
+    store.put_company(key, out)
+    return out
+
+
 def explain_chart(report: dict, tech: dict) -> dict:
     s = load_settings()
     o = tech.get("outlook") or {}
@@ -418,6 +437,8 @@ def _demo_answer(system: str, messages: list[dict]) -> str:
         return "\n".join(f"**{s['symbol']}** ranks on score {s.get('overall')} with ROCE {s.get('roce')}%." for s in d["stocks"]) + "\n\n## Patterns\nDemo answer."
     if "<document>" in q:
         return "## Key numbers mentioned\n- Revenue **₹36,000 crore**, +12%\n## Management guidance\n- 12–14% volume growth, capex **₹1,200 crore**\n_(demo answer)_"
+    if "management's targets" in q:
+        return "| Target | Track record | Base case | Verdict |\n|---|---|---|---|\n| 12-14% volume growth | Sales grew **12%**/yr over 5 years | 13% | ✅ Achievable |\n\n## Overall\nDemo answer.\n\n_(demo mode)_"
     if "research note" in q.lower():
         return (f"## In one paragraph\n{name} has grown profit **{met.get('profit_cagr_5')}%** a year over 5 years with ROCE around "
                 f"**{met.get('roce_avg_5')}%** and almost no debt.\n\n## Key risks\n- Valuation (P/E **{met.get('pe')}**)\n\n_(Demo mode — add an API key in ⚙️ Settings for real AI answers.)_")

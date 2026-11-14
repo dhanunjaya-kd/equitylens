@@ -356,6 +356,8 @@ def compute_flags(m: dict, c: dict) -> tuple[list[dict], list[str]]:
 
     if _valid(m.get("eps_ttm")) and m["eps_ttm"] <= 0:
         add("high", "Loss-making on the latest 12 months — earnings-based valuation doesn't apply.")
+    if _valid(m.get("net_worth")) and m["net_worth"] <= 0:
+        add("high", f"Negative net worth (₹{m['net_worth']:,.0f} Cr): past losses have wiped out shareholders' equity.")
     if not fin:
         de = m["debt_to_equity"]
         if _valid(de) and de > 1:
@@ -526,9 +528,25 @@ def horizon_views(proj: dict, scores: dict) -> dict:
     return views
 
 
-def verdict(scores: dict, flags: list[dict], m: dict) -> dict:
+def data_quality(m: dict, scores: dict) -> dict:
+    years = len(m.get("years") or [])
+    have = {k: _valid(m.get(k)) for k in ("sales_cagr_5", "profit_cagr_5", "sales_cagr_3", "profit_cagr_3",
+                                            "roce_avg_5", "roe_avg_5", "pe", "price", "debt_to_equity", "cfo_to_pat_5")}
+    core = sum(1 for k in ("growth", "quality", "strength") if _valid(scores.get(k)))
+    enough = years >= 3 and core >= 2
+    missing = [n for n, ok_ in (("growth history", have["sales_cagr_3"] or have["sales_cagr_5"]),
+                                ("returns on capital", have["roce_avg_5"] or have["roe_avg_5"]),
+                                ("valuation", have["pe"]), ("price", have["price"])) if not ok_]
+    return {"years": years, "enough": enough, "missing": missing,
+            "level": "good" if years >= 7 and not missing else "partial" if enough else "poor"}
+
+
+def verdict(scores: dict, flags: list[dict], m: dict, dq: Optional[dict] = None) -> dict:
     biz, val = scores.get("business"), scores.get("valuation")
     high = sum(1 for f in flags if f["severity"] == "high")
+    if dq and not dq["enough"]:
+        return {"label": "Not enough data", "tone": "neutral",
+                "summary": f"Only {dq['years']} year(s) of usable numbers — too little to judge. Missing: {', '.join(dq['missing']) or 'core history'}."}
     if _valid(m.get("eps_ttm")) and m["eps_ttm"] <= 0:
         label, tone = "Loss-making — speculative", "bad"
         line = "No current earnings. Any investment is a bet on a turnaround."
@@ -537,6 +555,9 @@ def verdict(scores: dict, flags: list[dict], m: dict) -> dict:
     elif biz >= 70 and (val or 0) >= 50 and high == 0:
         label, tone = "High quality, fairly priced", "good"
         line = "Strong business at a price that still leaves room for returns — a long-term candidate for deeper research."
+    elif biz >= 70 and high == 0 and val is None:
+        label, tone = "High quality, price data missing", "ok"
+        line = "Strong business, but valuation couldn't be checked — refresh or check the price manually."
     elif biz >= 70 and high == 0:
         label, tone = "High quality, but expensive", "ok"
         line = "Great business; the current price already expects a lot. Better entry points may come."
@@ -583,6 +604,69 @@ def narrative(c: dict, m: dict, scores: dict, proj: dict, median_pe: Num) -> lis
     return out
 
 
+# ----------------------------------------------------------------- 10-year story
+def story_timeline(c: dict) -> list[dict]:
+    """Rule-based 'what happened each year' from the annual numbers."""
+    pl, bs, cf = Table(c["tables"].get("profit_loss")), Table(c["tables"].get("balance_sheet")), Table(c["tables"].get("cash_flow"))
+    years = pl.annual_columns
+    sales, np_, opm = pl.annual_map("Sales", "Revenue"), pl.annual_map("Net Profit"), pl.annual_map("OPM", "Financing Margin")
+    eps = pl.annual_map("EPS in Rs", "EPS")
+    borrow, cfo = bs.annual_map("Borrowings", "Borrowing"), cf.annual_map("Cash from Operating Activity", "Cash from Operating")
+    eqc, res = bs.annual_map("Equity Capital", "Share Capital"), bs.annual_map("Reserves")
+    out = []
+    best_s = best_p = None
+    for i, y in enumerate(years):
+        ev = []
+        s1, p1 = sales.get(y), np_.get(y)
+        if i > 0:
+            y0 = years[i - 1]
+            s0, p0 = sales.get(y0), np_.get(y0)
+            if _valid(s0) and _valid(s1) and s0 > 0:
+                g = (s1 / s0 - 1) * 100
+                if g >= 35:
+                    ev.append(("up", f"Sales jumped {g:.0f}%"))
+                elif g <= -10:
+                    ev.append(("down", f"Sales fell {abs(g):.0f}%"))
+            if _valid(p0) and _valid(p1):
+                if p0 <= 0 < p1:
+                    ev.append(("up", "Back to profit"))
+                elif p1 <= 0 < p0:
+                    ev.append(("down", "Turned loss-making"))
+                elif p0 > 0 and p1 > 0:
+                    g = (p1 / p0 - 1) * 100
+                    if g >= 80:
+                        ev.append(("up", f"Profit {'more than doubled' if g >= 100 else f'up {g:.0f}%'}"))
+                    elif g <= -30:
+                        ev.append(("down", f"Profit fell {abs(g):.0f}%"))
+            o0, o1 = opm.get(y0), opm.get(y)
+            if _valid(o0) and _valid(o1) and abs(o1 - o0) >= 4:
+                ev.append(("up" if o1 > o0 else "down", f"Margin {'expanded' if o1 > o0 else 'shrank'} {abs(o1 - o0):.0f} pts to {o1:.0f}%"))
+            b0, b1 = borrow.get(y0), borrow.get(y)
+            eq1 = (eqc.get(y) or 0) + (res.get(y) or 0)
+            if _valid(b0) and _valid(b1) and b0 > 0:
+                g = (b1 / b0 - 1) * 100
+                if g >= 50 and eq1 > 0 and b1 > 0.1 * eq1:
+                    ev.append(("warn", f"Debt up {g:.0f}% to ₹{b1:,.0f} Cr"))
+                elif g <= -40 and b0 > 0.05 * max(eq1, 1):
+                    ev.append(("up", f"Debt cut {abs(g):.0f}%"))
+            e0, e1 = eps.get(y0), eps.get(y)
+            if all(_valid(v) and v > 0 for v in (e0, e1, p0, p1)):
+                sh = (p1 / e1) / (p0 / e0) - 1
+                if sh >= 0.08:
+                    ev.append(("warn", f"Share count up {sh*100:.0f}% (new shares, bonus or split — check)"))
+        if _valid(cfo.get(y)) and cfo[y] < 0:
+            ev.append(("warn", "Operating cash flow negative"))
+        if _valid(s1) and _valid(p1) and best_s is not None and s1 > best_s and p1 > (best_p or 0) and i == len(years) - 1:
+            ev.append(("up", "Record sales and profit"))
+        if _valid(s1):
+            best_s = max(best_s or s1, s1)
+        if _valid(p1):
+            best_p = max(best_p or p1, p1)
+        out.append({"year": y, "sales": s1, "profit": p1, "opm": opm.get(y),
+                    "events": [{"kind": k, "text": t} for k, t in ev]})
+    return out
+
+
 # ----------------------------------------------------------------- entry
 def analyse(c: dict, median_pe: Num = None, peers: dict | None = None, pe_chart: dict | None = None) -> dict:
     from . import forensics, valuation  # local import: both modules reuse helpers from here
@@ -604,6 +688,9 @@ def analyse(c: dict, median_pe: Num = None, peers: dict | None = None, pe_chart:
             flags.append({"severity": "medium", "text": f"Piotroski F-score only {pio['score_9']}/9 — fundamentals weakening."})
     order = {"high": 0, "medium": 1, "info": 2}
     flags.sort(key=lambda f: order.get(f["severity"], 3))
+    dq = data_quality(m, scores)
+    if not dq["enough"]:
+        scores["overall"] = None  # don't rank a company we can't judge
     proj = project(m, median_pe)
     val = valuation.compute(c, m, pe_chart, peers, median_pe)
     return {
@@ -616,6 +703,8 @@ def analyse(c: dict, median_pe: Num = None, peers: dict | None = None, pe_chart:
         "valuation": val,
         "projection": proj,
         "horizons": horizon_views(proj, scores),
-        "verdict": verdict(scores, flags, m),
+        "verdict": verdict(scores, flags, m, dq),
+        "data_quality": dq,
         "narrative": narrative(c, m, scores, proj, median_pe),
+        "timeline": story_timeline(c),
     }

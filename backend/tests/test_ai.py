@@ -121,7 +121,8 @@ def test_demo_features_end_to_end():
     d = ai.debate(rep, None, refresh=True)
     assert d["bull"] and d["bear"] and d["leaning"] == "Bull"
     assert ai.chat(rep, None, [{"role": "user", "content": "Is debt a worry?"}])["text"]
-    assert "guidance" in ai.read_document(rep, "https://example.com/x.pdf", "Concall")["text"].lower()
+    assert "Achievable" in ai.guidance_check(rep, refresh=True)["text"]
+    assert "guidance" in ai.read_document(rep, "https://example.com/t.pdf", "Concall")["text"].lower()
 
 
 def test_chart_outlook():

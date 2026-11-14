@@ -159,3 +159,12 @@ html, body { overflow-x: hidden; }
 .ratio-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; }
 .ratio-grid > div { background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 9px; min-width: 0; }
 .ratio-grid .rv { font-weight: 700; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
+
+.timeline { margin: 6px 0 8px; }
+.tl-row { display: grid; grid-template-columns: 48px 14px 1fr; gap: 8px; padding: 6px 0; position: relative; }
+.tl-row:not(:last-child)::after { content: ''; position: absolute; left: 61px; top: 22px; bottom: -8px; width: 2px; background: var(--line); }
+.tl-year { font-size: 12px; font-weight: 700; color: var(--muted); padding-top: 2px; }
+.tl-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); margin-top: 5px; z-index: 1; }
+.tl-bars { display: flex; flex-direction: column; gap: 3px; margin: 2px 0 4px; }
+.tl-bars .bar { height: 6px; border-radius: 99px; }
+.tl-bars .bar.s { background: #38bdf8; } .tl-bars .bar.p { background: #2dd4bf; } .tl-bars .bar.p.neg { background: var(--bad); }

@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import { Badge, Tile } from '../components/ui'
 import { cr, go, num, ok, pct, rs, signed, x } from '../util'
+import { PeerRank } from './OverviewExtra'
 
 const C = { a: '#2dd4bf', b: '#38bdf8', c: '#a78bfa', d: '#f59e0b', e: '#f472b6', good: '#22c55e', bad: '#ef4444', grid: '#223040', muted: '#8b98a5' }
 const axis = { stroke: C.muted, fontSize: 11, tickLine: false }
@@ -259,6 +260,7 @@ export function ValuationLab({ d }) {
         </div>
       )}
 
+      <PeerRank d={d} />
       {peers?.rows?.length > 0 && (
         <div className="card">
           <h3>Peers</h3>
