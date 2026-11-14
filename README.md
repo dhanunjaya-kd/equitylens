@@ -11,7 +11,7 @@
 
 ![Markets](https://img.shields.io/badge/markets-🇮🇳_India_·_🇺🇸_US-ff9933?style=flat-square)
 ![Data](https://img.shields.io/badge/data-no_API_keys_needed-22c55e?style=flat-square)
-![Phone first](https://img.shields.io/badge/📱_phone-first-2dd4bf?style=flat-square)
+![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![Scans](https://img.shields.io/badge/scan-NIFTY_500_·_S%26P_500-f59e0b?style=flat-square)
 ![Forensics](https://img.shields.io/badge/forensics-Piotroski·Altman·Beneish-ef4444?style=flat-square)
 ![Indicators](https://img.shields.io/badge/chart-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
@@ -45,6 +45,7 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 | **AI analyst**: research note, chat, bull-vs-bear debate, guidance check, report reader | ➖ | ✅ |
 | Your own **screens on 45+ fields** incl. forensic & fair-value fields | ➖ | ✅ |
 | **🇮🇳 India + 🇺🇸 US** in one app, one tap to switch, same analysis for both | ➖ | ✅ |
+| Built for **both phone and desktop**: bottom tabs on phone, sidebar + multi-column pages on laptop | ➖ | ✅ |
 | Runs on **your** laptop, your data and keys stay with you | ➖ | ✅ |
 
 <sub>➖ = not offered, or only partly, by most free sites.</sub>
@@ -52,6 +53,31 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 ---
 
 ## 📸 Screenshots
+
+### 🖥️ Web (laptop / desktop)
+
+<img src="docs/screenshots/desktop/overview.png" alt="EquityLens desktop overview" width="100%"/>
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/desktop/chart.png" width="420"/><br/><b>📈 Chart with future range</b></td>
+<td align="center"><img src="docs/screenshots/desktop/chart_outlook.png" width="420"/><br/><b>🔭 Chart outlook & signal checklist</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/desktop/valuation.png" width="420"/><br/><b>💰 Valuation Lab & peer ranking</b></td>
+<td align="center"><img src="docs/screenshots/desktop/forensics.png" width="420"/><br/><b>🕵️ Forensics</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/desktop/ai.png" width="420"/><br/><b>✨ AI note, chat & bull-vs-bear debate</b></td>
+<td align="center"><img src="docs/screenshots/desktop/rankings.png" width="420"/><br/><b>🏆 Top Picks ranking table</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/desktop/home.png" width="420"/><br/><b>🔎 Home with sidebar & 🇮🇳/🇺🇸 switch</b></td>
+<td align="center"><img src="docs/screenshots/desktop/us_stock.png" width="420"/><br/><b>🇺🇸 US stock in $ (SEC filings)</b></td>
+</tr>
+</table>
+
+### 📱 Phone
 
 <table>
 <tr>
@@ -194,6 +220,11 @@ python run.py
 | 🇺🇸 | Add `EQL_SEC_USER_AGENT` to `backend/.env` | Needed once for US stocks (SEC rule) |
 | 4️⃣ | Top Picks → **Quick scan (30)** | See the ranking work in ~3 min (in whichever market is selected) |
 | 5️⃣ | Top Picks → **Scan NIFTY 500 / S&P 500** | Full ranking in ~30–60 min. Re-run weekly or after results season |
+
+### 🖥️ Use it on your laptop
+
+Open **http://localhost:8600** in Chrome or Edge. On screens wider than ~1100 px EquityLens switches to the **web layout**:
+a left sidebar (with the 🇮🇳/🇺🇸 switch), a wide search bar, two-column stock pages, a taller chart and a full ranking table.
 
 ### 📱 Use it on your phone
 

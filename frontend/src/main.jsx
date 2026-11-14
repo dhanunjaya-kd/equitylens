@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
-import { BottomNav, MarketToggle, SearchBox } from './components/ui'
-import { getMarket, go, marketCurrency, parseHash, setCurrency, setMarketLS } from './util'
+import { BottomNav, MarketToggle, SearchBox, SideNav } from './components/ui'
+import { getMarket, go, isDesktop, marketCurrency, parseHash, setCurrency, setMarketLS } from './util'
 import Home from './pages/Home'
 import Stock from './pages/Stock'
 import Rankings from './pages/Rankings'
@@ -14,6 +14,13 @@ import { Settings } from './pages/AI'
 function App() {
   const [route, setRoute] = useState(parseHash())
   const [market, setMarket] = useState(getMarket())
+  const [desk, setDesk] = useState(isDesktop())
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1100px)')
+    const on = () => setDesk(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   const changeMarket = (m) => {
     setMarketLS(m); setMarket(m); setCurrency(marketCurrency(m))
     if (route.page === 'stock' || route.page === 'compare') go('')
@@ -24,16 +31,20 @@ function App() {
     window.addEventListener('hashchange', on)
     return () => window.removeEventListener('hashchange', on)
   }, [])
+  const navPage = route.page === 'stock' ? '' : route.page
   return (
-    <>
+    <div className={desk ? 'shell desk' : 'shell'}>
+      {desk && <SideNav page={navPage} market={market} onMarket={changeMarket} />}
+      <div className="content">
       <header className="topbar">
         <div className="topbar-inner">
-          <div className="brand" onClick={() => go('')} style={{ cursor: 'pointer' }}>
+          {!desk && <div className="brand" onClick={() => go('')} style={{ cursor: 'pointer' }}>
             <img src="/icon.svg" alt="" /><span className="bw">Equity<span>Lens</span></span>
-          </div>
-          <MarketToggle market={market} onChange={changeMarket} />
-          {route.page !== 'home' ? <div className="grow"><SearchBox key={market} /></div> : <div className="grow" />}
-          <button className="star" title="AI settings" onClick={() => go('settings')}>⚙️</button>
+          </div>}
+          {!desk && <MarketToggle market={market} onChange={changeMarket} />}
+          {route.page !== 'home' || desk ? <div className="grow"><SearchBox key={market} /></div> : <div className="grow" />}
+          {!desk && <button className="star" title="AI settings" onClick={() => go('settings')}>⚙️</button>}
+          {desk && <div className="small muted" style={{ whiteSpace: 'nowrap' }}>{market === 'US' ? '🇺🇸 US market · $' : '🇮🇳 Indian market · ₹'}</div>}
         </div>
       </header>
       <main className="wrap" key={market}>
@@ -45,8 +56,9 @@ function App() {
         {route.page === 'settings' && <Settings />}
         {route.page === 'compare' && <Compare symbols={route.symbols} />}
       </main>
-      <BottomNav page={route.page === 'stock' ? '' : route.page} />
-    </>
+      </div>
+      {!desk && <BottomNav page={navPage} />}
+    </div>
   )
 }
 

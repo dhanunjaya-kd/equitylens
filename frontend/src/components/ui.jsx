@@ -128,3 +128,20 @@ export function MarketToggle({ market, onChange }) {
     </div>
   )
 }
+
+export function SideNav({ page, market, onMarket }) {
+  const items = [['home', '', 'Search', I.search], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
+    ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare]]
+  return (
+    <aside className="sidenav">
+      <div className="brand side" onClick={() => go('')}><img src="/icon.svg" alt="" />Equity<span>Lens</span></div>
+      <div style={{ margin: '4px 6px 18px' }}><MarketToggle market={market} onChange={onMarket} /></div>
+      {items.map(([k, path, label, icon]) => (
+        <button key={k} className={`sn ${page === k ? 'on' : ''}`} onClick={() => go(path)}><svg viewBox="0 0 24 24">{icon}</svg>{label}</button>
+      ))}
+      <div className="grow" />
+      <button className={`sn ${page === 'settings' ? 'on' : ''}`} onClick={() => go('settings')}><span style={{ width: 22, textAlign: 'center' }}>⚙️</span>AI settings</button>
+      <div className="small muted" style={{ padding: '10px 12px 0', lineHeight: 1.5 }}>Research aid, not investment advice.</div>
+    </aside>
+  )
+}

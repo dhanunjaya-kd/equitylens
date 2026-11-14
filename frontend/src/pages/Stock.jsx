@@ -87,6 +87,7 @@ export default function Stock({ symbol, tab }) {
         {TABS.map(([k, label]) => <button key={k} className={`tab ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{label}</button>)}
       </div>
 
+      <div className={`tab-body tab-${tab}`}>
       {tab === 'overview' && <Overview d={d} />}
       {tab === 'ai' && <StockAI d={d} />}
       {tab === 'chart' && <StockChart symbol={d.symbol} />}
@@ -98,6 +99,7 @@ export default function Stock({ symbol, tab }) {
       {tab === 'forensics' && <Forensics d={d} />}
       {tab === 'documents' && <Documents d={d} />}
       {tab === 'price' && <Price d={d} />}
+      </div>
       {d.extras_errors?.length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Some optional parts couldn't load: {d.extras_errors.join('; ')}</div>}
     </>
   )
@@ -123,6 +125,7 @@ function Overview({ d }) {
         </div>
       </div>
 
+      <div className="flow">
       <KeyRatios d={d} />
       <LatestQuarter d={d} />
 
@@ -143,7 +146,7 @@ function Overview({ d }) {
         <button className="btn small" style={{ marginTop: 8 }} onClick={() => go(`stock/${d.symbol}/future`)}>See 3/5/10-year scenarios →</button>
       </div>
 
-      <div className="grid-auto">
+      <div className="grid-auto in-flow">
         <div className="card">
           <h3>Scorecard</h3>
           <ScoreBar label="Growth" value={s.growth} hint={`Sales ${pct(m.sales_cagr_5)} · Profit ${pct(m.profit_cagr_5)} /yr (5y)`} />
@@ -179,6 +182,7 @@ function Overview({ d }) {
             {c.cons.map((t, i) => <li key={'c' + i}><span className="ic t-bad">−</span>{t}</li>)}
           </ul>
         </>}
+      </div>
       </div>
       <p className="disclaimer">Scores and outlook are rule-based on past numbers. They're a starting point for research, not investment advice.</p>
     </>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ScoreRing } from '../components/ui'
 import { ExplainList } from './AI'
-import { ago, api, cr, getMarket, go, num, pct, ticker } from '../util'
+import { ago, api, cr, getMarket, go, isDesktop, num, pct, scoreColor, signed, ticker } from '../util'
 
 const SORTS = [
   ['overall', 'Overall score'], ['business', 'Business quality'], ['valuation', 'Cheapest (valuation)'],
@@ -80,6 +80,27 @@ export default function Rankings() {
         </div>
       </div>
 
+      {isDesktop() && rows.length > 0 ? (
+        <div className="card" style={{ padding: 0 }}>
+          <div className="tbl-wrap" style={{ border: 0 }}>
+            <table className="tbl rank-tbl">
+              <thead><tr><th>#</th><th>Company</th><th>Score</th><th>Verdict</th><th>Mkt cap</th><th>P/E</th><th>ROCE</th><th>Profit 5y</th><th>Sales 5y</th><th>D/E</th><th>Base 3y</th><th>Base 5y</th><th>Base 10y</th><th>🚩</th></tr></thead>
+              <tbody>{rows.map((r, i) => (
+                <tr key={r.symbol} className="click" onClick={() => go(`stock/${r.symbol}`)}>
+                  <td className="muted">{i + 1}</td>
+                  <td style={{ minWidth: 220 }}><b>{r.name}</b><div className="small muted">{ticker(r.symbol)} · {r.sector || '—'}</div></td>
+                  <td><b style={{ color: scoreColor(r.overall) }}>{r.overall ?? '—'}</b></td>
+                  <td><span className={`badge sm t-${r.tone} bg-${r.tone}`}>{r.verdict}</span></td>
+                  <td>{cr(r.market_cap)}</td><td>{num(r.pe, 1)}</td><td>{pct(r.roce)}</td>
+                  <td>{pct(r.profit_cagr_5)}</td><td>{pct(r.sales_cagr_5)}</td><td>{num(r.debt_to_equity, 2)}</td>
+                  <td>{signed(r.base_3y, 1, '%')}</td><td><b>{signed(r.base_5y, 1, '%')}</b></td><td>{signed(r.base_10y, 1, '%')}</td>
+                  <td className={r.high_flags ? 't-bad' : 'muted'}>{r.high_flags || '–'}</td>
+                </tr>))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
       <div className="card" style={{ padding: 0 }}>
         {rows.length === 0 ? (
           <div className="empty">{d ? 'No companies yet. Run a scan above, or open any stock — every stock you research is added here too.' : 'Loading…'}</div>
@@ -101,6 +122,7 @@ export default function Rankings() {
           </div>
         ))}
       </div>
+      )}
       {rows.length > 0 && <div className="small muted" style={{ marginBottom: 12 }}>{rows.length} companies</div>}
       {rows.length > 0 && <ExplainList symbols={rows.map((r) => r.symbol)} title={`Top Picks sorted by ${sort}`} />}
       <p className="disclaimer">Rankings come from past numbers and stated assumptions. Treat the top of the list as a research shortlist, not a buy list.</p>

@@ -8,7 +8,8 @@ export default function Home() {
   useEffect(() => { api(`/api/rankings?sort=overall&market=${mk}`).then((d) => setTop((d.rows || []).slice(0, 5))).catch(() => {}) }, [mk])
   const rec = recent.all(), watch = watchlist.all()
   return (
-    <>
+    <div className="home-grid">
+      <div>
       <div style={{ padding: '18px 2px 6px' }}>
         <h1 style={{ margin: '0 0 6px', fontSize: 24 }}>{mk === 'US' ? '🇺🇸 Research any US stock' : '🇮🇳 Research any Indian stock'}</h1>
         <div className="muted" style={{ marginBottom: 14 }}>
@@ -32,6 +33,8 @@ export default function Home() {
         </div>
       )}
 
+      </div>
+      <div className="home-right">
       <div className="card" style={{ marginTop: rec.length ? 0 : 14, padding: 0 }}>
         <div className="row between" style={{ padding: '14px 14px 4px' }}>
           <h3 style={{ margin: 0 }}>Top picks by score</h3>
@@ -63,6 +66,7 @@ export default function Home() {
         </ul>
         <p className="disclaimer">Model output from past numbers. It's a research aid, not investment advice — read the red flags and the company's own reports before investing.</p>
       </div>
-    </>
+      </div>
+    </div>
   )
 }

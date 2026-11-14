@@ -3,7 +3,7 @@ import {
   CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, createChart, createSeriesMarkers,
 } from 'lightweight-charts'
 import { Badge, Loading, Tile } from '../components/ui'
-import { api, num, ok, pct, rs, signed } from '../util'
+import { api, isDesktop, num, ok, pct, rs, signed } from '../util'
 import { Md } from './AI'
 
 const COL = {
@@ -148,7 +148,7 @@ export default function StockChart({ symbol }) {
   const s = data.summary, st = data.stats
   const i = legend?.i ?? data.t.length - 1
   const extra = 3.2 + ['rsi', 'macd', 'adx'].filter((k) => panes[k] && (k !== 'adx' || data.ohlc)).length
-  const height = Math.round((330 / 3.2) * extra)
+  const height = Math.round(((isDesktop() ? 520 : 330) / 3.2) * extra)
 
   return (
     <>
@@ -189,9 +189,10 @@ export default function StockChart({ symbol }) {
         <div className="small muted">Source: {data.source}{!data.ohlc && ' — closes only, so candles, Supertrend and ADX are off'}. Tap a chip to show/hide.</div>
       </div>
 
+      <div className="flow">
       {data.outlook && <ChartOutlook o={data.outlook} symbol={symbol} interval={interval} last={st.last} />}
 
-      <div className="grid-auto">
+      <div className="grid-auto in-flow">
         <div className="card">
           <h3>Signal checklist</h3>
           <ul className="list">
@@ -219,6 +220,7 @@ export default function StockChart({ symbol }) {
             <li><span className="ic" style={{ color: COL.bb }}>■</span><b>Bollinger:</b> 2 standard deviations around the 20-day average; squeezes often come before big moves.</li>
           </ul>
         </div>
+      </div>
       </div>
       <p className="disclaimer">Technical signals describe price behaviour, not business value. For long-term investing, use them for timing entries, alongside the fundamentals.</p>
     </>

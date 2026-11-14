@@ -89,3 +89,5 @@ export function parseHash() {
   return { page: 'home' }
 }
 export const go = (path) => { window.location.hash = '#/' + path }
+
+export const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1100px)').matches
