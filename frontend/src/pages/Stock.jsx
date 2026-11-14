@@ -7,12 +7,13 @@ import { Badge, DataTable, Loading, Logo, ScoreBar, ScoreRing, Tile } from '../c
 import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import StockChart from './StockChart'
 import { StockAI } from './AI'
+import { StockMoney, SurveillanceBanner } from './SmartMoney'
 import { KeyPoints, KeyRatios, LatestQuarter, StoryTimeline } from './OverviewExtra'
 import { ago, api, cr, cur, flag, go, isUS, num, ok, pct, recent, rs, scoreColor, setCurrency, signed, ticker, unitLabel, unitWords, watchlist, x } from '../util'
 
 const TABS = [
   ['overview', 'Overview'], ['ai', '✨ AI'], ['chart', 'Chart'], ['future', 'Future 3·5·10y'], ['valuation', 'Valuation Lab'], ['forensics', 'Forensics'],
-  ['financials', 'Financials'], ['quality', 'Quality'], ['ownership', 'Ownership'], ['price', 'Price'], ['documents', 'Reports'],
+  ['financials', 'Financials'], ['quality', 'Quality'], ['ownership', 'Ownership'], ['money', '🧭 Smart money'], ['price', 'Price'], ['documents', 'Reports'],
 ]
 const C = { a: '#2dd4bf', b: '#38bdf8', c: '#a78bfa', d: '#f59e0b', e: '#f472b6', good: '#22c55e', bad: '#ef4444', grid: 'var(--grid)', muted: 'var(--muted)' }
 const axis = { stroke: C.muted, fontSize: 11, tickLine: false }
@@ -41,6 +42,8 @@ export default function Stock({ symbol, tab }) {
   const [busy, setBusy] = useState(false)
   const [star, setStar] = useState(watchlist.has(symbol))
   const [nextRes, setNextRes] = useState(null)
+  const [money, setMoney] = useState(null)
+  useEffect(() => { setMoney(null); api(`/api/flows/stock/${encodeURIComponent(symbol)}`).then(setMoney).catch(() => setMoney({ symbol, errors: { all: 'not available' } })) }, [symbol])
   useEffect(() => { api(`/api/calendar/next/${encodeURIComponent(symbol)}`).then((x) => setNextRes(x.next)).catch(() => {}) }, [symbol])
 
   const load = async (refresh = false) => {
@@ -92,6 +95,8 @@ export default function Stock({ symbol, tab }) {
         </div>
       </div>
 
+      {money?.surveillance?.length > 0 && <SurveillanceBanner flags={money.surveillance} />}
+      {money?.insiders?.summary?.cluster && tab !== 'money' && <div className="card small t-good" style={{ cursor: 'pointer' }} onClick={() => setTab('money')}>✅ Cluster insider buying: 2+ insiders bought shares on the open market in the last 30 days → Smart money</div>}
       <div className="tabs">
         {TABS.map(([k, label]) => <button key={k} className={`tab ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{label}</button>)}
       </div>
@@ -108,6 +113,7 @@ export default function Stock({ symbol, tab }) {
       {tab === 'forensics' && <Forensics d={d} />}
       {tab === 'documents' && <Documents d={d} />}
       {tab === 'price' && <Price d={d} />}
+      {tab === 'money' && <StockMoney data={money} />}
       </div>
       {d.extras_errors?.length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Some optional parts couldn't load: {d.extras_errors.join('; ')}</div>}
     </>

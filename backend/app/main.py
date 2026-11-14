@@ -13,7 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import ai, calendars, config, indices, logos, movers, scraper, service, store, technicals, universe, us
+from . import ai, calendars, config, flows, indices, logos, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
@@ -217,6 +217,53 @@ def ai_calendar(market: str = "US", start: Optional[str] = None, days: int = 7, 
     e, c = calendars.earnings(market, s, days), calendars.economy(market, s, days)
     watch = {x.strip().upper() for x in symbols.split(",") if x.strip()}
     return _ai(ai.explain_calendar, e, c, watch)
+
+
+def _flow(fn, *a):
+    try:
+        return fn(*a)
+    except flows.FlowError as e:
+        raise HTTPException(503, str(e))
+
+
+@app.get("/api/flows/stock/{symbol}")
+def flows_stock(symbol: str):
+    return flows.for_stock(scraper.clean_symbol(symbol))
+
+
+@app.get("/api/flows/delivery")
+def flows_delivery(only_index: bool = True, min_turnover: float = 5.0):
+    d = _flow(flows.delivery)
+    names = {u["symbol"]: u.get("name") for u in movers._universe("IN")}
+    lists = flows.delivery_lists(d, only_index, min_turnover)
+    for rows in lists.values():
+        for r in rows:
+            r["name"] = names.get(r["symbol"]) or r["symbol"]
+    return {"date": d["date"], "days": d["days"], "lists": {k: v[:80] for k, v in lists.items()}, "source": d["source"]}
+
+
+@app.get("/api/flows/deals")
+def flows_deals():
+    return _flow(flows.deals)
+
+
+@app.get("/api/flows/insiders")
+def flows_insiders(market: str = "IN", days: int = 30, symbols: str = ""):
+    if market.upper() == "US":
+        syms = [scraper.clean_symbol(s) for s in symbols.split(",") if s.strip()]
+        top = [r["symbol"] for r in sorted((r for r in store.all_rankings() if r.get("market") == "US"), key=lambda r: -(r.get("overall") or 0))[:15]]
+        syms = list(dict.fromkeys([s for s in syms if s.startswith("US:")] + top))
+        return flows.insiders_us_many(syms)
+    return _flow(flows.insiders_in, max(7, min(days, 90)))
+
+
+@app.get("/api/flows/surveillance")
+def flows_surveillance():
+    d = _flow(flows.surveillance)
+    names = {u["symbol"]: u.get("name") for u in movers._universe("IN")}
+    rows = [{"symbol": s, "name": names.get(s) or s, "in_index": s in names, "flags": f} for s, f in d["flags"].items()]
+    rows.sort(key=lambda r: (not r["in_index"], -sum(x["severity"] == "high" for x in r["flags"])))
+    return {"date": d["date"], "rows": rows, "source": d["source"]}
 
 
 @app.get("/api/indices")

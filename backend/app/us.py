@@ -66,6 +66,31 @@ def _get_json(url: str) -> dict:
     raise USFetchError("SEC: gave up after retries")
 
 
+def get_text(url: str) -> str:
+    """Raw text from sec.gov with the same pacing and User-Agent rules (Form 4 XML, filing indexes, feeds)."""
+    global _last
+    with _lock:
+        wait = 0.15 - (time.time() - _last)
+        if wait > 0:
+            time.sleep(wait)
+        _last = time.time()
+    for attempt in range(3):
+        try:
+            r = requests.get(url, headers={"User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate"}, timeout=config.REQUEST_TIMEOUT)
+        except requests.RequestException as e:
+            if attempt == 2:
+                raise USFetchError(f"SEC network error: {e}") from e
+            time.sleep(2)
+            continue
+        if r.status_code in (403, 429):
+            time.sleep(3 * (attempt + 1))
+            continue
+        if r.status_code != 200:
+            raise USFetchError(f"SEC HTTP {r.status_code}")
+        return r.text
+    raise USFetchError("SEC refused the request. Set EQL_SEC_USER_AGENT to 'YourName your@email.com' in backend/.env.")
+
+
 def _demo(name: str) -> dict:
     path = config.FIXTURE_DIR / name
     if not path.exists():

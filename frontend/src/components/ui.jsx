@@ -104,6 +104,7 @@ const I = {
   fire: <path d="M12 3c1 3.5 4.5 5 4.5 9.5A4.5 4.5 0 0 1 12 17a4.5 4.5 0 0 1-4.5-4.5c0-2 1-3.2 2-4 .2 1.6 1 2.6 2 3 0-3 0-5.5.5-8.5zM6 21h12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />,
   filter: <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />,
   compare: <path d="M8 4v16M16 4v16M4 8h8M12 16h8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
+  money: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8.5" /><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8z" /></g>,
   cal: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /><circle cx="8.5" cy="14.5" r=".6" fill="currentColor" /><circle cx="12" cy="14.5" r=".6" fill="currentColor" /></g>,
 }
 
@@ -116,7 +117,8 @@ export function Logo({ sym, name = '', size = 28 }) {
 }
 
 export function BottomNav({ page }) {
-  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter], ['watch', 'watch', 'Watchlist', I.star]]
+  // Search lives in the top bar (logo = home), so the bar keeps 6 tabs
+  const items = [['movers', 'movers', 'Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Money', I.money], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter], ['watch', 'watch', 'Watchlist', I.star]]
   return (
     <nav className="bottomnav">
       {items.map(([k, path, label, icon]) => (
@@ -141,7 +143,7 @@ export function MarketToggle({ market, onChange }) {
 }
 
 export function SideNav({ page, market, onMarket, theme, onTheme }) {
-  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Market Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
+  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Market Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
     ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare]]
   return (
     <aside className="sidenav">

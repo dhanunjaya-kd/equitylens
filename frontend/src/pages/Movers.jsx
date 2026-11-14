@@ -216,7 +216,7 @@ export default function Movers() {
                     <div className="rank-num">{i + 1}</div>
                     <Logo sym={x.symbol} name={x.name} size={32} />
                     <div className="grow" style={{ minWidth: 0 }}>
-                      <div className="ellip"><b>{x.name}</b> <span className="small muted">{ticker(x.symbol)}</span>{x.closed_high && tf === '1D' && <span className="tagc good">only buyers</span>}{x.closed_low && tf === '1D' && <span className="tagc bad">only sellers</span>}</div>
+                      <div className="ellip"><b>{x.name}</b> <span className="small muted">{ticker(x.symbol)}</span>{x.closed_high && tf === '1D' && <span className="tagc good">only buyers</span>}{x.closed_low && tf === '1D' && <span className="tagc bad">only sellers</span>}{x.deliv && x.deliv.dq_x >= 1.5 && x.deliv.dp >= 50 && tf === '1D' && <span className="tagc good" title="Delivery % and delivery quantity well above normal">📦 {Math.round(x.deliv.dp)}% delivery</span>}{x.surv && <span className="tagc bad" title={x.surv.join(', ')}>🚨 surveillance</span>}</div>
                       <div className="small muted ellip">{x.sector} · {metric(x)}</div>
                       {x.fund && <span className={`badge sm t-${x.fund.tone} bg-${x.fund.tone}`} style={{ marginTop: 3 }}>{x.fund.overall ?? '—'} · {x.fund.verdict}</span>}
                     </div>

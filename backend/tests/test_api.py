@@ -103,6 +103,15 @@ def test_calendar_and_logo_endpoints():
     assert r.status_code == 200 and r.headers["content-type"].startswith("image/")
 
 
+
+def test_flows_endpoints():
+    for path in ("/api/flows/delivery", "/api/flows/deals", "/api/flows/insiders?market=IN", "/api/flows/surveillance",
+                 "/api/flows/insiders?market=US&symbols=US:TSTUS", "/api/flows/stock/TESTCO", "/api/flows/stock/US:TSTUS"):
+        r = C.get(path)
+        assert r.status_code == 200, path
+    assert C.get("/api/flows/delivery").json()["lists"]["highest"]
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

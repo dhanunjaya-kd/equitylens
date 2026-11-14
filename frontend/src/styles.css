@@ -327,3 +327,18 @@ html, body { transition: background-color .2s ease; }
 .ix-dot.on { background: var(--good); box-shadow: 0 0 0 3px rgba(34,197,94,.2); animation: ixp 2s infinite; }
 @keyframes ixp { 50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); } }
 @media (min-width: 1100px) { .ix-strip { grid-auto-columns: 1fr; } .ix-val { font-size: 19px; } .ix { padding: 11px 14px; } }
+
+/* ---------- smart money ---------- */
+.surv { border-color: rgba(245,158,11,.5); background: linear-gradient(135deg, rgba(245,158,11,.08), var(--card)); }
+.surv.surv-high { border-color: rgba(239,68,68,.55); background: linear-gradient(135deg, rgba(239,68,68,.09), var(--card)); }
+.surv-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; } .surv-tags .tagc { margin-left: 0; }
+.dbars { display: flex; align-items: flex-end; gap: 5px; height: 92px; margin: 12px 0 6px; }
+.dbar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; }
+.dbar .dfill { width: 100%; border-radius: 5px 5px 2px 2px; min-height: 3px; }
+.dbar span { font-size: 10px; color: var(--muted); }
+.ins-list { margin: 0 -2px; }
+.ins-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.ins-row:last-child { border-bottom: 0; } .ins-row:hover { background: var(--card2); } .ins-row.dim { opacity: .55; }
+.ins-val { font-weight: 800; white-space: nowrap; font-size: 14px; text-align: right; }
+.flow-cols { display: grid; gap: 0; }
+@media (min-width: 1100px) { .flow-cols { grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; } .flow-cols > .card { margin-bottom: 0; } .flow-main { max-width: 1000px; } }

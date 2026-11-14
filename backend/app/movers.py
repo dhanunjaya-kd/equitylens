@@ -239,7 +239,14 @@ def get(market: str, tf: str = "1D") -> dict:
         refresh(market)
     rows = data["rows"] if data else []
     ranks = {r["symbol"]: r for r in store.all_rankings() if r.get("market", "IN") == market}
+    dl = store.get_company("DELIVERY::IN") if market == "IN" else None
+    dmap = {x["symbol"]: x for x in (dl[1]["rows"] if dl else [])}
+    sv = store.get_company("SURV::IN") if market == "IN" else None
+    smap = sv[1]["flags"] if sv else {}
     for r in rows:
+        dx = dmap.get(r["symbol"])
+        r["deliv"] = {"dp": dx["dp"], "dq_x": dx["dq_x"], "avg_dp": dx["avg_dp"]} if dx else None
+        r["surv"] = [f["label"] for f in smap.get(r["symbol"], [])] or None
         k = ranks.get(r["symbol"])
         r["fund"] = ({"overall": k.get("overall"), "business": k.get("business"), "verdict": k.get("verdict"),
                       "tone": k.get("tone"), "market_cap": k.get("market_cap"), "high_flags": k.get("high_flags"),

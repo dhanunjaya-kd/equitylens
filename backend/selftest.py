@@ -79,7 +79,23 @@ except Exception:
     ok = False
     print("FAILED")
     traceback.print_exc()
-print("6) Logos ...", end=" ")
+print("6) Smart money (NSE delivery, deals, insider, surveillance · SEC Form 4) ...")
+try:
+    from app import flows
+    for label, fn in (("delivery", lambda: (lambda d: f"{d['date']} rows={len(d['rows'])}")(flows.delivery())),
+                      ("bulk/block deals", lambda: (lambda d: f"{d['date']} deals={len(d['rows'])}")(flows.deals())),
+                      ("insider trades (30d)", lambda: (lambda d: f"rows={len(d['rows'])} e.g. {d['rows'][:1]}")(flows.insiders_in(30))),
+                      ("surveillance", lambda: (lambda d: f"{d['date']} flagged={len(d['flags'])}")(flows.surveillance())),
+                      ("SEC Form 4 AAPL", lambda: (lambda d: f"rows={len(d['rows'])} summary={d['summary']}")(flows.insiders_us("US:AAPL")))):
+        try:
+            print(f"   {label}: {fn()}")
+        except Exception as e:  # noqa: BLE001
+            ok = False
+            print(f"   {label}: FAILED {e}")
+except Exception:
+    ok = False
+    traceback.print_exc()
+print("7) Logos ...", end=" ")
 try:
     from app import logos
     got = {s: logos.get(s)[1] for s in ("RELIANCE", "TCS", "US:AAPL", "US:MSFT")}

@@ -12,6 +12,7 @@ import Screener from './pages/Screener'
 import Movers from './pages/Movers'
 import Calendar from './pages/Calendar'
 import IndexStrip from './components/IndexStrip'
+import SmartMoney from './pages/SmartMoney'
 import { Settings } from './pages/AI'
 
 function App() {
@@ -63,6 +64,7 @@ function App() {
         {route.page === 'screener' && <Screener />}
         {route.page === 'movers' && <Movers />}
         {route.page === 'calendar' && <Calendar tab={route.tab} />}
+        {route.page === 'money' && <SmartMoney tab={route.tab} />}
         {route.page === 'settings' && <Settings />}
         {route.page === 'compare' && <Compare symbols={route.symbols} />}
       </main>

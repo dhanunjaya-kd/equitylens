@@ -16,7 +16,7 @@
 ![Forensics](https://img.shields.io/badge/forensics-Piotroski·Altman·Beneish-ef4444?style=flat-square)
 ![Indicators](https://img.shields.io/badge/chart-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-57_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-70_passing-22c55e?style=flat-square)
 
 ### 🔎 Search any 🇮🇳 Indian or 🇺🇸 US stock → a complete, explained research report in seconds
 
@@ -56,6 +56,11 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 | 🌐 **Economic calendar** (actual · forecast · previous) **+ official dates** from RBI, MoSPI, DPIIT and the Fed, with a countdown | ➖ | ✅ |
 | Every economic event explained: **what it is and why markets care**, times shown in **your** time zone | ➖ | ✅ |
 | ＋📅 **Add any result or event to your phone / Google / Outlook calendar** (with a 30-min reminder) | ➖ | ✅ |
+| 📊 **Index card** on every page: NIFTY 50 · BANK NIFTY · SENSEX · INDIA VIX / S&P 500 · NASDAQ · DOW · RUSSELL 2000 · VIX, with a plain-English VIX fear band | ✅ | ✅ |
+| 📦 **Delivery % buying / selling**: price move confirmed by shares actually taken into demat (NSE bhavcopy) | ➖ | ✅ |
+| 👔 **Insider & promoter trades** (NSE PIT disclosures, SEC Form 4) with **cluster-buying** alerts and pledges | ➖ | ✅ |
+| 🤝 **Bulk & block deals** per stock with a growing history | ✅ | ✅ |
+| 🚨 **Exchange surveillance red flags** (GSM / ASM / ESM, insolvency, default, high pledge, loss-making) right on the stock page | ➖ | ✅ |
 | 🖼️ **Company logos** for Indian and US stocks (saved once on your laptop, initials badge if none) | ✅ | ✅ |
 | ☀️ / 🌙 **Light and dark theme**, remembers your choice | ✅ | ✅ |
 | Runs on **your** laptop, your data and keys stay with you | ➖ | ✅ |
@@ -82,6 +87,10 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 <tr>
 <td align="center"><img src="docs/screenshots/desktop/ai.png" width="420"/><br/><b>✨ AI note, chat & bull-vs-bear debate</b></td>
 <td align="center"><img src="docs/screenshots/desktop/rankings.png" width="420"/><br/><b>🏆 Top Picks ranking table</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/desktop/money_stock.png" width="420"/><br/><b>🧭 Smart money: delivery, insider trades, deals + index card</b></td>
+<td align="center"><img src="docs/screenshots/desktop/home.png" width="420"/><br/><b>📊 NIFTY · BANK NIFTY · SENSEX · INDIA VIX on top</b></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/desktop/calendar.png" width="420"/><br/><b>📅 US earnings calendar with countdown to the Fed</b></td>
@@ -124,6 +133,11 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 <td align="center"><img src="docs/screenshots/us_search.png" width="230"/><br/><b>🇮🇳 / 🇺🇸 one-tap market switch</b></td>
 <td align="center"><img src="docs/screenshots/us_stock.png" width="230"/><br/><b>🇺🇸 US stock in $ (SEC filings)</b></td>
 <td align="center"><img src="docs/screenshots/us_movers.png" width="230"/><br/><b>🇺🇸 US movers: 52-week highs</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/money_delivery.png" width="230"/><br/><b>📦 Delivery buying (NSE)</b></td>
+<td align="center"><img src="docs/screenshots/money_insiders.png" width="230"/><br/><b>👔 Promoter & insider trades</b></td>
+<td align="center"><img src="docs/screenshots/money_stock.png" width="230"/><br/><b>🧭 Smart money on a stock</b></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/calendar_us.png" width="230"/><br/><b>📅 Earnings: EPS estimate, timing, logos</b></td>
@@ -198,6 +212,27 @@ Pick a timeframe, **1D · 1W · 1M · 3M · 1Y**, and every list re-ranks for it
 - ⚙️ **Filters**: price range, minimum traded value, market cap, EquityLens score, sector, only above 200-day average, only my watchlist
 - ✨ **Explain the move**: the AI agent reads the leaders and laggards and writes why they moved and what to check
 - Daily prices from Yahoo's public chart feed, refreshed every few hours in the background. *Buyers/sellers are measured from daily volume, not live order flow.*
+
+### 📊 Index card (top of every page)
+
+| 🇮🇳 India | 🇺🇸 US |
+|---|---|
+| NIFTY 50 · BANK NIFTY · SENSEX · INDIA VIX | S&P 500 · NASDAQ · DOW JONES · RUSSELL 2000 · VIX |
+
+Value, change, intraday sparkline, day and 52-week range (tap a card), a **VIX fear band** (Calm · Normal · Nervous · Fear) and a live / closed dot. Refreshes every minute. On a stock page it follows that stock's market.
+
+### 🧭 Smart Money: who is really buying
+
+| | What | Source |
+|---|---|---|
+| 📦 | **Delivery buying / selling**: price up (or down) with delivery ≥ 50% and delivery quantity ≥ 1.5× its 10-day average; highest delivery %; most money delivered | NSE daily bhavcopy with deliverable quantity |
+| 🤝 | **Bulk & block deals**: who bought or sold how much, at what price; kept day by day for each stock | NSE bulk / block deal files |
+| 👔 | **Insider trades 🇮🇳**: promoters, directors, KMP — buys, sells, **pledges**, holding % after; promoters-only and open-market-only filters | NSE insider-trading (SEBI PIT) disclosures |
+| 👔 | **Insider trades 🇺🇸**: CEO / CFO / director open-market buys & sells, awards and option exercises shown faded | SEC EDGAR Form 4 |
+| ✅ | **Cluster buying**: 2+ insiders buying in 30 days, flagged on the list and on the stock page | both |
+| 🚨 | **Surveillance red flags**: GSM / ASM / ESM stages, insolvency (IBC), loan default, high pledge, loss-making 8+ quarters, BZ series, exiting F&O | NSE surveillance indicator file (REG_IND) |
+
+Every stock page has a **🧭 Smart money** tab (10-day delivery bars, insider summary, deals), a **🚨 surveillance banner** when the exchange is watching the stock, and Market Movers rows get **📦 delivery** and **🚨** tags.
 
 ### 📅 Calendar: results + economy (🇮🇳 and 🇺🇸)
 
@@ -283,7 +318,7 @@ python run.py
 
 | # | Do this | Why |
 |:-:|---|---|
-| 1️⃣ | `python selftest.py` in `backend/` | Fetches RELIANCE, HDFCBANK, ITC and Apple (US) live, checks the calendars and logos, and prints what was read |
+| 1️⃣ | `python selftest.py` in `backend/` | Fetches RELIANCE, HDFCBANK, ITC and Apple (US) live, checks the calendars, index card, smart-money sources and logos, and prints what was read |
 | 2️⃣ | Search any stock in the app | Full report in ~5 s, cached for 24 h (↻ Refresh fetches new data) |
 | 3️⃣ | ⚙️ Settings → pick an AI provider | Claude / ChatGPT / Gemini key, or Ollama for free |
 | 🇺🇸 | Add `EQL_SEC_USER_AGENT` to `backend/.env` | Needed once for US stocks (SEC rule) |
@@ -397,6 +432,8 @@ python run_tests.py
 | `test_api.py` | Every endpoint, including error paths: bad symbols, missing keys, blocked document links |
 | `test_ai.py` | Exact request format for Claude, OpenAI, Gemini and Ollama; friendly errors; masked keys; every AI feature end to end |
 | `test_us.py` | SEC filings read correctly: revenue tag changes merged, 6/9-month YTD figures ignored, Q4 derived, TTM, ratios, $ throughout |
+| `test_flows.py` | NSE bhavcopy delivery, bulk/block deal and insider (PIT) formats, surveillance file per NSE's published layout, SEC Form 4 XML, cluster & net-buying maths |
+| `test_indices.py` | Yahoo index format, change maths, market open/closed, VIX bands, both index lists |
 | `test_calendar.py` | Nasdaq earnings / economy and NSE event formats parsed exactly (negative EPS, N/A, &nbsp;, BRK.B), official RBI / MoSPI / WPI / FOMC dates and IST / ET times, de-duplication, logos |
 | `test_movers.py` | Returns per timeframe, buying/selling pressure, turnover in ₹ Cr / $ M, relative volume, 52W breakouts, mood score, sector heatmap, both markets |
 
@@ -419,12 +456,14 @@ equitylens/
 │   │   ├── technicals.py     OHLC + indicators + chart outlook (range, analogs, levels)
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents
 │   │   ├── movers.py         market movers, pressure, mood gauge, sector heatmap
+│   │   ├── flows.py          delivery %, bulk/block deals, insider trades, surveillance, SEC Form 4
+│   │   ├── indices.py        NIFTY / BANK NIFTY / SENSEX / VIX · S&P / NASDAQ / DOW / RUSSELL / VIX
 │   │   ├── calendars.py      results + economic calendars, official schedules, event guide
 │   │   ├── logos.py          company logos (downloaded once, initials fallback)
 │   │   ├── service.py        fetch → cache → analyse, NIFTY 500 scan
 │   │   └── main.py           API + serves the web app
 │   ├── static/               prebuilt app (no npm needed to run)
-│   ├── tests/                57 offline tests + sample Indian & US company data
+│   ├── tests/                70 offline tests + sample Indian & US company data
 │   └── run.py · scan.py · selftest.py · run_tests.py
 ├── ⚛️ frontend/              React source (npm install && npm run build)
 └── 🖼️ docs/                  banner + screenshots
@@ -442,7 +481,7 @@ equitylens/
 ---
 
 > [!NOTE]
-> Indian fundamentals come from the same public company pages you'd open in a browser (screener.in), US fundamentals from the SEC's official EDGAR filings, chart prices from Yahoo Finance's public chart feed, results and economic calendars from Nasdaq's and NSE's public calendars plus the official RBI, MoSPI, DPIIT and Federal Reserve schedules, and logos from Financial Modeling Prep's public logo images or the company's own website icon. No logins or paid data. If a site changes its layout, `selftest.py` shows exactly which section broke. Keep the app on your own network (Tailscale) rather than exposing port 8600 to the internet, since Settings can change AI keys.
+> Indian fundamentals come from the same public company pages you'd open in a browser (screener.in), US fundamentals from the SEC's official EDGAR filings, chart prices from Yahoo Finance's public chart feed, delivery, deals, insider and surveillance data from NSE's official daily files and disclosures, US insider trades from SEC Form 4, results and economic calendars from Nasdaq's and NSE's public calendars plus the official RBI, MoSPI, DPIIT and Federal Reserve schedules, and logos from Financial Modeling Prep's public logo images or the company's own website icon. No logins or paid data. If a site changes its layout, `selftest.py` shows exactly which section broke. Keep the app on your own network (Tailscale) rather than exposing port 8600 to the internet, since Settings can change AI keys.
 
 > [!WARNING]
 > Everything is built from **past numbers and stated assumptions**. EquityLens is a research aid, **not investment advice**. Read the red flags and the company's own annual report before investing.
