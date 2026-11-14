@@ -9,6 +9,7 @@ import Rankings from './pages/Rankings'
 import Watch from './pages/Watch'
 import Compare from './pages/Compare'
 import Screener from './pages/Screener'
+import { Settings } from './pages/AI'
 
 function App() {
   const [route, setRoute] = useState(parseHash())
@@ -24,7 +25,8 @@ function App() {
           <div className="brand" onClick={() => go('')} style={{ cursor: 'pointer' }}>
             <img src="/icon.svg" alt="" />Equity<span>Lens</span>
           </div>
-          {route.page !== 'home' && <div className="grow"><SearchBox /></div>}
+          {route.page !== 'home' ? <div className="grow"><SearchBox /></div> : <div className="grow" />}
+          <button className="star" title="AI settings" onClick={() => go('settings')}>⚙️</button>
         </div>
       </header>
       <main className="wrap">
@@ -33,6 +35,7 @@ function App() {
         {route.page === 'rankings' && <Rankings />}
         {route.page === 'watch' && <Watch />}
         {route.page === 'screener' && <Screener />}
+        {route.page === 'settings' && <Settings />}
         {route.page === 'compare' && <Compare symbols={route.symbols} />}
       </main>
       <BottomNav page={route.page === 'stock' ? '' : route.page} />

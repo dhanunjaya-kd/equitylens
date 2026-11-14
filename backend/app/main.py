@@ -2,15 +2,18 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+import requests
+
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, scraper, service, store, technicals, universe
+from . import ai, config, scraper, service, store, technicals, universe
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
@@ -54,6 +57,83 @@ def chart(symbol: str, interval: str = "1d", refresh: bool = False):
         return technicals.build(symbol, interval, refresh)
     except scraper.FetchError as e:
         raise HTTPException(502, str(e))
+
+
+# ------------------------------------------------------------ AI
+def _report_and_tech(symbol: str):
+    try:
+        rep = service.build_report(symbol)
+    except scraper.FetchError as e:
+        raise HTTPException(502, str(e))
+    try:
+        tech = technicals.build(rep["symbol"])
+    except Exception:  # noqa: BLE001 - technicals are optional context
+        tech = None
+    return rep, tech
+
+
+def _ai(fn, *args, **kw):
+    try:
+        return fn(*args, **kw)
+    except ai.AIError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/ai/settings")
+def ai_settings():
+    return ai.public_settings()
+
+
+@app.post("/api/ai/settings")
+def ai_settings_save(body: dict = Body(...)):
+    return ai.save_settings(body)
+
+
+@app.post("/api/ai/test")
+def ai_test():
+    t = time.time()
+    txt = _ai(ai.complete, "You are a connection test.", [{"role": "user", "content": "Reply with just: OK"}], 20)
+    return {"ok": True, "reply": txt[:60], "model": ai.model_label(), "seconds": round(time.time() - t, 1)}
+
+
+@app.post("/api/ai/note/{symbol}")
+def ai_note(symbol: str, refresh: bool = False):
+    rep, tech = _report_and_tech(symbol)
+    return _ai(ai.research_note, rep, tech, refresh)
+
+
+@app.post("/api/ai/chat/{symbol}")
+def ai_chat(symbol: str, body: dict = Body(...)):
+    rep, tech = _report_and_tech(symbol)
+    return _ai(ai.chat, rep, tech, body.get("messages") or [])
+
+
+@app.post("/api/ai/debate/{symbol}")
+def ai_debate(symbol: str, refresh: bool = False):
+    rep, tech = _report_and_tech(symbol)
+    return _ai(ai.debate, rep, tech, refresh)
+
+
+@app.post("/api/ai/doc/{symbol}")
+def ai_doc(symbol: str, body: dict = Body(...)):
+    url = body.get("url") or ""
+    if not url.startswith("http"):
+        raise HTTPException(400, "Missing document link.")
+    rep, _ = _report_and_tech(symbol)
+    try:
+        return _ai(ai.read_document, rep, url, body.get("title", ""))
+    except requests.RequestException as e:
+        raise HTTPException(502, f"Couldn't download the document: {e.__class__.__name__}")
+
+
+@app.post("/api/ai/picks")
+def ai_picks(body: dict = Body(...)):
+    syms = [s.upper() for s in body.get("symbols") or []][:15]
+    rows = {r["symbol"]: r for r in store.all_rankings()}
+    picked = [rows[s] for s in syms if s in rows]
+    if not picked:
+        raise HTTPException(400, "No scanned stocks to explain. Run a scan first.")
+    return _ai(ai.explain_picks, picked, body.get("title") or "Top Picks")
 
 
 @app.get("/api/compare")

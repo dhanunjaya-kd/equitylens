@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ScoreRing } from '../components/ui'
+import { ExplainList } from './AI'
 import { ago, api, cr, go, num, pct } from '../util'
 
 const SORTS = [
@@ -97,7 +98,8 @@ export default function Rankings() {
           </div>
         ))}
       </div>
-      {rows.length > 0 && <div className="small muted">{rows.length} companies</div>}
+      {rows.length > 0 && <div className="small muted" style={{ marginBottom: 12 }}>{rows.length} companies</div>}
+      {rows.length > 0 && <ExplainList symbols={rows.map((r) => r.symbol)} title={`Top Picks sorted by ${sort}`} />}
       <p className="disclaimer">Rankings come from past numbers and stated assumptions. Treat the top of the list as a research shortlist, not a buy list.</p>
     </>
   )

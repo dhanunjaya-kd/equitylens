@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ScoreRing } from '../components/ui'
+import { ExplainList } from './AI'
 import { api, cr, go, num, ok } from '../util'
 
 // key, label, group, unit
@@ -150,6 +151,7 @@ export default function Screener() {
           </div>
         ))}
       </div>
+      {res.length > 0 && <ExplainList symbols={res.map((r) => r.symbol)} title={`Screen: ${active}`} />}
       <p className="disclaimer">Screens filter scanned stocks only. A match is a starting point for research, not a recommendation.</p>
     </>
   )

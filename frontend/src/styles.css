@@ -126,3 +126,24 @@ table.tbl { border-collapse: collapse; width: 100%; font-size: 12.5px; }
 .scen .small { font-size: 11px; }
 .badge.sm { font-size: 11px; padding: 2px 8px; }
 html, body { overflow-x: hidden; }
+
+/* ---- AI ---- */
+.md { line-height: 1.55; font-size: 14.5px; margin-top: 8px; overflow-wrap: anywhere; }
+.md h1, .md h2, .md h3 { font-size: 15px; margin: 14px 0 6px; color: var(--accent); }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 20px; }
+.md li { margin: 3px 0; }
+.md strong { color: #fff; }
+.md code { background: var(--card2); padding: 1px 5px; border-radius: 5px; font-size: 13px; }
+.md table { border-collapse: collapse; font-size: 12.5px; display: block; overflow-x: auto; margin: 8px 0; }
+.md th, .md td { border: 1px solid var(--line); padding: 5px 8px; }
+.md th { background: var(--card2); }
+.bubble { padding: 9px 12px; border-radius: 14px; margin: 8px 0; max-width: 92%; }
+.bubble.user { background: var(--accent); color: #04211d; margin-left: auto; font-weight: 600; width: fit-content; }
+.bubble.assistant { background: var(--card2); border: 1px solid var(--line); }
+.bubble.assistant .md { margin-top: 0; }
+.debate { border-radius: 12px; padding: 10px 12px; margin-top: 10px; border: 1px solid var(--line); background: var(--card2); }
+.debate.bull { border-left: 4px solid var(--good); }
+.debate.bear { border-left: 4px solid var(--bad); }
+.debate.judge { border-left: 4px solid var(--warn); }
+.debate .dh { font-weight: 800; }
