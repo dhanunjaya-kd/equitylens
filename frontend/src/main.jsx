@@ -8,6 +8,7 @@ import Stock from './pages/Stock'
 import Rankings from './pages/Rankings'
 import Watch from './pages/Watch'
 import Compare from './pages/Compare'
+import Screener from './pages/Screener'
 
 function App() {
   const [route, setRoute] = useState(parseHash())
@@ -31,6 +32,7 @@ function App() {
         {route.page === 'stock' && <Stock key={route.symbol} symbol={route.symbol} tab={route.tab} />}
         {route.page === 'rankings' && <Rankings />}
         {route.page === 'watch' && <Watch />}
+        {route.page === 'screener' && <Screener />}
         {route.page === 'compare' && <Compare symbols={route.symbols} />}
       </main>
       <BottomNav page={route.page === 'stock' ? '' : route.page} />

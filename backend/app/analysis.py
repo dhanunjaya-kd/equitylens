@@ -583,17 +583,36 @@ def narrative(c: dict, m: dict, scores: dict, proj: dict, median_pe: Num) -> lis
 
 
 # ----------------------------------------------------------------- entry
-def analyse(c: dict, median_pe: Num = None, peers: dict | None = None) -> dict:
+def analyse(c: dict, median_pe: Num = None, peers: dict | None = None, pe_chart: dict | None = None) -> dict:
+    from . import forensics, valuation  # local import: both modules reuse helpers from here
+
     m = compute_metrics(c)
     scores = compute_scores(m, median_pe)
     flags, strengths = compute_flags(m, c)
+    fx = forensics.compute(c, m)
+    flags += fx["flags"]
+    alt, ben, pio = fx["altman"], fx["beneish"], fx["piotroski"]
+    if alt.get("available") and alt["zone"] == "Distress":
+        flags.append({"severity": "high", "text": f"Altman Z-score {alt['z']} is in the distress zone (bankruptcy-risk model)."})
+    if ben.get("available") and ben["zone"] == "Possible manipulation":
+        flags.append({"severity": "medium", "text": f"Beneish M-score {ben['m']} is above -1.78 — numbers look aggressive; read the annual report."})
+    if pio.get("available") and pio.get("score_9") is not None:
+        if pio["score_9"] >= 8:
+            strengths.append(f"Piotroski F-score {pio['score_9']}/9 — fundamentals improving across the board.")
+        elif pio["score_9"] <= 2:
+            flags.append({"severity": "medium", "text": f"Piotroski F-score only {pio['score_9']}/9 — fundamentals weakening."})
+    order = {"high": 0, "medium": 1, "info": 2}
+    flags.sort(key=lambda f: order.get(f["severity"], 3))
     proj = project(m, median_pe)
+    val = valuation.compute(c, m, pe_chart, peers, median_pe)
     return {
         "metrics": m,
         "median_pe": r1(median_pe),
         "scores": scores,
         "flags": flags,
         "strengths": strengths,
+        "forensics": fx,
+        "valuation": val,
         "projection": proj,
         "horizons": horizon_views(proj, scores),
         "verdict": verdict(scores, flags, m),

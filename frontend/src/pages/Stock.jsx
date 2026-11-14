@@ -4,11 +4,12 @@ import {
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { Badge, DataTable, Loading, ScoreBar, ScoreRing, Tile } from '../components/ui'
+import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import { ago, api, cr, go, num, ok, pct, recent, rs, scoreColor, signed, watchlist, x } from '../util'
 
 const TABS = [
-  ['overview', 'Overview'], ['future', 'Future 3·5·10y'], ['financials', 'Financials'], ['quality', 'Quality'],
-  ['ownership', 'Ownership'], ['valuation', 'Valuation'], ['price', 'Price'],
+  ['overview', 'Overview'], ['future', 'Future 3·5·10y'], ['valuation', 'Valuation Lab'], ['forensics', 'Forensics'],
+  ['financials', 'Financials'], ['quality', 'Quality'], ['ownership', 'Ownership'], ['price', 'Price'], ['documents', 'Reports'],
 ]
 const C = { a: '#2dd4bf', b: '#38bdf8', c: '#a78bfa', d: '#f59e0b', e: '#f472b6', good: '#22c55e', bad: '#ef4444', grid: '#223040', muted: '#8b98a5' }
 const axis = { stroke: C.muted, fontSize: 11, tickLine: false }
@@ -88,7 +89,9 @@ export default function Stock({ symbol, tab }) {
       {tab === 'financials' && <Financials d={d} />}
       {tab === 'quality' && <Quality d={d} />}
       {tab === 'ownership' && <Ownership d={d} />}
-      {tab === 'valuation' && <Valuation d={d} />}
+      {tab === 'valuation' && <ValuationLab d={d} />}
+      {tab === 'forensics' && <Forensics d={d} />}
+      {tab === 'documents' && <Documents d={d} />}
       {tab === 'price' && <Price d={d} />}
       {d.extras_errors?.length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Some optional parts couldn't load: {d.extras_errors.join('; ')}</div>}
     </>
@@ -154,6 +157,8 @@ function Overview({ d }) {
         </div>
       </div>
 
+      <QuickChecks d={d} />
+
       <div className="card" style={{ marginTop: 12 }}>
         <h3>About the company</h3>
         <p style={{ margin: 0, lineHeight: 1.5 }}>{c.about || <span className="muted">No description available.</span>}</p>
@@ -168,6 +173,24 @@ function Overview({ d }) {
       </div>
       <p className="disclaimer">Scores and outlook are rule-based on past numbers. They're a starting point for research, not investment advice.</p>
     </>
+  )
+}
+
+function QuickChecks({ d }) {
+  const fx = d.analysis.forensics, v = d.analysis.valuation
+  if (!fx && !v) return null
+  const p = fx?.piotroski, al = fx?.altman, b = fx?.beneish, fv = v?.fair_value
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="row between"><h3 style={{ margin: 0 }}>Quick checks</h3>
+        <button className="btn small" onClick={() => go(`stock/${d.symbol}/forensics`)}>Details →</button></div>
+      <div className="grid2" style={{ marginTop: 10 }}>
+        <Tile k="Fair value (middle)" v={fv ? rs(fv.mid) : '—'} s={fv ? `${signed(fv.upside, 0, '%')} vs price` : ''} color={fv ? (fv.upside >= 15 ? 'var(--good)' : fv.upside < -10 ? 'var(--bad)' : 'var(--warn)') : null} />
+        <Tile k="Piotroski F" v={p?.available ? `${p.score_9}/9` : 'n/a'} s={p?.zone} color={p?.available ? `var(--${p.tone})` : null} />
+        <Tile k="Altman Z" v={al?.available ? num(al.z, 1) : 'n/a'} s={al?.available ? al.zone : 'not for lenders'} color={al?.available ? `var(--${al.tone})` : null} />
+        <Tile k="Beneish M" v={b?.available ? num(b.m, 2) : 'n/a'} s={b?.available ? b.zone : 'not for lenders'} color={b?.available ? `var(--${b.tone})` : null} />
+      </div>
+    </div>
   )
 }
 
@@ -441,63 +464,6 @@ function Ownership({ d }) {
         </ul>
       </div>
       <div className="card"><h3>Quarterly table</h3><DataTable table={t.shareholding_quarterly} pctRows={false} /></div>
-    </>
-  )
-}
-
-// ================================================================ VALUATION
-function Valuation({ d }) {
-  const a = d.analysis, m = a.metrics, peers = d.peers
-  const pe = d.pe_chart || {}
-  const peSeries = (pe['Price to Earning'] || pe.PE || []).map(([dt, v]) => ({ d: dt.slice(0, 7), PE: v }))
-  const peerMedianPE = peers?.median?.['P/E']
-  return (
-    <>
-      <div className="grid3" style={{ marginBottom: 12 }}>
-        <Tile k="P/E now" v={num(m.pe, 1)} />
-        <Tile k="Median P/E (10y)" v={num(a.median_pe, 1)} s={ok(a.median_pe) && ok(m.pe) ? (m.pe < a.median_pe ? 'below history' : 'above history') : ''} />
-        <Tile k="Peer median P/E" v={num(peerMedianPE, 1)} />
-        <Tile k="Price / Book" v={x(m.pb)} s={`book ${rs(m.book_value)}`} />
-        <Tile k="PEG" v={num(m.peg, 2)} s="P/E ÷ 5y profit growth" />
-        <Tile k="Earnings yield" v={pct(m.earnings_yield, 2)} s={`div yield ${pct(m.dividend_yield, 2)}`} />
-      </div>
-      {peSeries.length > 0 && (
-        <div className="card">
-          <h3>P/E over 10 years</h3>
-          <div style={{ height: 210 }}>
-            <ResponsiveContainer>
-              <AreaChart data={peSeries} margin={{ top: 6, right: 6, left: -14, bottom: 0 }}>
-                <CartesianGrid stroke={C.grid} vertical={false} />
-                <XAxis dataKey="d" {...axis} minTickGap={40} /><YAxis {...axis} />
-                <Tooltip {...tip} />
-                {ok(a.median_pe) && <ReferenceLine y={a.median_pe} stroke={C.d} strokeDasharray="4 4" label={{ value: `median ${a.median_pe}`, fill: C.d, fontSize: 11, position: 'insideTopRight' }} />}
-                <Area dataKey="PE" stroke={C.a} fill={C.a} fillOpacity={0.15} dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-      {peers?.rows?.length > 0 && (
-        <div className="card">
-          <h3>Peers</h3>
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead><tr>{peers.columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
-              <tbody>
-                {peers.rows.map((r) => (
-                  <tr key={r.name} className="click" onClick={() => r.symbol && go(`stock/${r.symbol}`)}>
-                    {peers.columns.map((c) => <td key={c}>{c.toLowerCase() === 'name' ? <b style={{ color: r.symbol === d.symbol ? 'var(--accent)' : null }}>{r.name}</b> : num(r[c], 1)}</td>)}
-                  </tr>
-                ))}
-                {peers.median && Object.keys(peers.median).length > 0 && (
-                  <tr>{peers.columns.map((c) => <td key={c} className="muted">{c.toLowerCase() === 'name' ? 'Median' : num(peers.median[c], 1)}</td>)}</tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="small muted" style={{ marginTop: 6 }}>Tap a peer to research it.</div>
-        </div>
-      )}
     </>
   )
 }

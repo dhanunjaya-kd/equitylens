@@ -206,11 +206,51 @@ def parse_company(html: str, symbol: str = "") -> dict:
         "tables": tables,
         "growth": _parse_growth_tables(soup),
         "pros": _parse_list(soup, ".pros li"),
+        "documents": _parse_documents(soup),
         "cons": _parse_list(soup, ".cons li"),
         "company_id": company_id,
         "warehouse_id": warehouse_id,
         "is_financial": bool(is_financial),
     }
+
+
+def _abs(url: str) -> str:
+    return "https://www.screener.in" + url if url and url.startswith("/") else url
+
+
+def _parse_documents(soup: BeautifulSoup) -> list[dict]:
+    """Annual reports, concalls, announcements, credit ratings -> [{category, items:[...]}]."""
+    sec = soup.find(id="documents")
+    if not sec:
+        return []
+    out = []
+    blocks = sec.select(".documents") or [h.parent for h in sec.find_all("h3")]
+    for blk in blocks:
+        h = blk.find(["h3", "h2"])
+        cat = clean_label(_text(h))
+        if not cat:
+            continue
+        items = []
+        for li in blk.select("li"):
+            links = [a for a in li.find_all("a") if a.get("href")]
+            if not links:
+                continue
+            if len(links) == 1 and "concall-link" not in (links[0].get("class") or []):
+                a = links[0]
+                sub_el = a.find("div")
+                sub = _text(sub_el)
+                if sub_el:
+                    sub_el.extract()
+                items.append({"title": _text(a), "sub": sub, "url": _abs(a["href"]), "links": []})
+            else:
+                date_el = li.find("div", recursive=False)
+                items.append({"title": _text(date_el) or cat, "sub": "", "url": None,
+                              "links": [{"label": _text(a) or "Link", "url": _abs(a["href"])} for a in links]})
+            if len(items) >= 15:
+                break
+        if items:
+            out.append({"category": cat, "items": items})
+    return out
 
 
 def parse_peers(html: str) -> dict:

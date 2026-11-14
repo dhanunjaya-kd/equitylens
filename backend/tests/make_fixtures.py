@@ -130,6 +130,15 @@ def manufacturer():
 <section id="balance-sheet">{table(bs_cols, bs)}</section>
 <section id="cash-flow">{table(years, cf)}</section>
 <section id="ratios">{table(years, ratios)}</section>
+<section id="documents"><div class="documents"><h3>Announcements</h3><ul class="list-links">
+<li><a href="https://www.bseindia.com/a1" target="_blank">Board Meeting Outcome for Q2 results<div class="ink-600 smaller">12 Nov - Results approved</div></a></li>
+<li><a href="https://www.bseindia.com/a2" target="_blank">Investor presentation<div class="ink-600 smaller">13 Nov</div></a></li></ul></div>
+<div class="documents annual-reports"><h3>Annual reports</h3><ul class="list-links">
+<li><a href="https://www.bseindia.com/ar25.pdf" target="_blank">Financial Year 2025<div class="ink-600 smaller">from bse</div></a></li>
+<li><a href="https://www.bseindia.com/ar24.pdf" target="_blank">Financial Year 2024<div class="ink-600 smaller">from bse</div></a></li></ul></div>
+<div class="documents concalls"><h3>Concalls</h3><ul class="list-links">
+<li class="flex"><div class="ink-600">Nov 2025</div><a class="concall-link" href="https://example.com/t.pdf">Transcript</a><a class="concall-link" href="https://example.com/p.pdf">PPT</a></li>
+<li class="flex"><div class="ink-600">Aug 2025</div><a class="concall-link" href="https://example.com/t2.pdf">Transcript</a></li></ul></div></section>
 <section id="shareholding"><div id="quarterly-shp">{table(qcols, shp)}</div>
 <div id="yearly-shp">{table(["Mar 2023","Mar 2024","Mar 2025"], [(r[0], r[1][-3:]) for r in shp])}</div></section>
 </body></html>"""

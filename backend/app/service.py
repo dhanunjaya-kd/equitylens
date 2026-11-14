@@ -92,7 +92,7 @@ def median_pe_from(extras: dict) -> Optional[float]:
 def build_report(symbol: str, refresh: bool = False) -> dict:
     payload, ts = get_payload(symbol, refresh=refresh, full=True)
     company, extras = payload["company"], payload["extras"]
-    a = analysis.analyse(company, median_pe_from(extras), extras.get("peers"))
+    a = analysis.analyse(company, median_pe_from(extras), extras.get("peers"), extras.get("pe_chart"))
     store.put_ranking(payload["symbol"], ranking_row(payload, a))
     return {
         "symbol": payload["symbol"],
@@ -109,18 +109,50 @@ def build_report(symbol: str, refresh: bool = False) -> dict:
 
 
 def ranking_row(payload: dict, a: dict) -> dict:
+    """Flat row per company: everything the Top Picks list and the Screener filter on."""
     c, m, s = payload["company"], a["metrics"], a["scores"]
     proj = a["projection"]
     h = proj.get("horizons", {}) if proj.get("available") else {}
+    fx, val = a.get("forensics", {}), a.get("valuation", {})
+    fv = val.get("fair_value") or {}
+    sector_path = c.get("sector_path") or []
+    text = (" ".join(sector_path) + " " + (c.get("about") or "")[:300]).lower()
+    fin = m.get("is_financial")
     return {
         "symbol": payload["symbol"], "name": c.get("name"),
-        "sector": (c.get("sector_path") or [""])[-1] if c.get("sector_path") else "",
-        "market_cap": m.get("market_cap"), "price": m.get("price"), "pe": m.get("pe"),
-        "roce": m.get("roe_avg_5") if m.get("is_financial") else m.get("roce_avg_5"),
-        "profit_cagr_5": m.get("profit_cagr_5"), "sales_cagr_5": m.get("sales_cagr_5"),
-        "debt_to_equity": m.get("debt_to_equity"),
+        "sector": sector_path[-1] if sector_path else "",
+        "broad_sector": sector_path[0] if sector_path else "",
+        "is_financial": fin,
+        "is_holdco": ("investment" in text or "holding" in text),
+        # size & price
+        "market_cap": m.get("market_cap"), "price": m.get("price"), "off_high_pct": m.get("off_high_pct"),
+        # valuation
+        "pe": m.get("pe"), "pb": m.get("pb"), "peg": m.get("peg"), "earnings_yield": m.get("earnings_yield"),
+        "dividend_yield": m.get("dividend_yield"), "median_pe": a.get("median_pe"),
+        "pe_vs_median": round(m["pe"] / a["median_pe"], 2) if m.get("pe") and a.get("median_pe") else None,
+        "ev_ebitda": (val.get("ev") or {}).get("ev_ebitda"),
+        "graham_upside": round((val["graham_number"] / m["price"] - 1) * 100, 1) if val.get("graham_number") and m.get("price") else None,
+        "fair_value_upside": fv.get("upside"), "margin_of_safety": fv.get("margin_of_safety"),
+        # growth
+        "sales_cagr_3": m.get("sales_cagr_3"), "sales_cagr_5": m.get("sales_cagr_5"), "sales_cagr_10": m.get("sales_cagr_10"),
+        "profit_cagr_3": m.get("profit_cagr_3"), "profit_cagr_5": m.get("profit_cagr_5"), "profit_cagr_10": m.get("profit_cagr_10"),
+        "eps_cagr_5": m.get("eps_cagr_5"),
+        # quality & safety
+        "roce": m.get("roe_avg_5") if fin else m.get("roce_avg_5"),
+        "roe": m.get("roe_avg_5"), "opm": m.get("opm_latest"),
+        "debt_to_equity": None if fin else m.get("debt_to_equity"),
+        "interest_coverage": m.get("interest_coverage"), "cfo_to_pat": m.get("cfo_to_pat_5"),
+        # ownership
+        "promoter": m.get("promoter_latest"), "promoter_change": m.get("promoter_change_8q"),
+        "inst_change": m.get("institutional_change_8q"), "pledged": m.get("pledged"),
+        # forensics
+        "piotroski": (fx.get("piotroski") or {}).get("score_9"),
+        "altman_z": (fx.get("altman") or {}).get("z"),
+        "beneish_m": (fx.get("beneish") or {}).get("m"),
+        # scores & outlook
         "overall": s.get("overall"), "business": s.get("business"), "valuation": s.get("valuation"),
-        "growth": s.get("growth"), "quality": s.get("quality"),
+        "growth": s.get("growth"), "quality": s.get("quality"), "strength": s.get("strength"),
+        "cash": s.get("cash"), "ownership": s.get("ownership"),
         "verdict": a["verdict"]["label"], "tone": a["verdict"]["tone"],
         "base_3y": h.get("3", {}).get("base", {}).get("cagr"),
         "base_5y": h.get("5", {}).get("base", {}).get("cagr"),
@@ -149,7 +181,7 @@ def _scan_worker(limit: Optional[int]) -> None:
             cached = store.get_company(scraper.clean_symbol(sym))
             fresh = cached and time.time() - cached[0] < config.SCAN_REUSE_HOURS * 3600
             payload, _ = get_payload(sym, full=False, max_age_h=config.SCAN_REUSE_HOURS)
-            a = analysis.analyse(payload["company"], median_pe_from(payload["extras"]))
+            a = analysis.analyse(payload["company"], median_pe_from(payload["extras"]), None, payload["extras"].get("pe_chart"))
             row = ranking_row(payload, a)
             if not row["sector"] and r.get("industry"):
                 row["sector"] = r["industry"]

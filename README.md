@@ -7,6 +7,20 @@ bear / base / bull scenarios. A **Top Picks** page ranks the whole NIFTY 500 by 
 No API keys, no logins, no paid data. It reads the same public company pages you'd open in a browser
 (screener.in), paced and cached.
 
+## What's in a stock report
+| Tab | What you see |
+|---|---|
+| Overview | Verdict, overall score, 3/5/10-year stance, scorecard, strengths & red flags, quick checks |
+| Future 3·5·10y | Bear / base / bull price and yearly return, reverse DCF, every assumption shown |
+| Valuation Lab | Fair-value range from several methods, **interactive DCF with sliders**, sensitivity table, P/E bands, Graham number, EV/EBITDA, peers |
+| Forensics | **Piotroski F-score** (9 tests), **Altman Z** (bankruptcy risk), **Beneish M** (earnings manipulation), **DuPont** ROE breakdown, accounting checks |
+| Financials · Quality · Ownership · Price | 10–12 years of P&L / balance sheet / cash flow / ratios / quarters, ROCE, cash conversion, shareholding trend, 10-yr price |
+| Reports | Annual reports, concall transcripts & presentations, announcements, credit ratings (links) |
+
+**Screener:** 9 ready-made screens (quality compounders, value with quality, below fair value,
+holding-company discount, debt-free growers, Piotroski 8+, promoters buying, cheap vs own history,
+10-year compounders) plus your own rules on 45+ fields. Save screens on your phone.
+
 ## Run it (Windows)
 1. Double-click `start.bat` (first run creates `backend/venv` and installs 5 small packages).
 2. Your browser opens **http://localhost:8600**.

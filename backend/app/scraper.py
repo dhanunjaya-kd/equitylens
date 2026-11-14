@@ -88,8 +88,10 @@ def _demo_chart(query: str, days: int) -> dict:
     pts = [(start + dt.timedelta(days=i)) for i in range(0, days, 3)]
     if query.startswith("Price to Earning"):
         pe = [[d.isoformat(), round(28 + 6 * math.sin(i / 60), 1)] for i, d in enumerate(pts)]
+        eps = [[d.isoformat(), round(30 * 1.13 ** (i * 3 / 365), 2)] for i, d in enumerate(pts)]
         return {"datasets": [{"metric": "Price to Earning", "values": pe},
-                             {"metric": "Median PE", "values": [[d.isoformat(), 31.5] for d in pts]}]}
+                             {"metric": "Median PE", "values": [[d.isoformat(), 31.5] for d in pts]},
+                             {"metric": "EPS", "values": eps}]}
     px = [[d.isoformat(), round(300 * 1.17 ** (i * 3 / 365) * (1 + 0.08 * math.sin(i / 25)), 1)] for i, d in enumerate(pts)]
     dma = [[p[0], round(p[1] * 0.97, 1)] for p in px]
     return {"datasets": [{"metric": "Price", "values": px}, {"metric": "DMA200", "values": dma}]}

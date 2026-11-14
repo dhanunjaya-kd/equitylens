@@ -54,6 +54,29 @@ def test_loss_maker():
     assert a["verdict"]["tone"] == "bad"
 
 
+def test_forensics_and_valuation():
+    a = analysis.analyse(_load("testco.html"), 31.5)
+    fx, v = a["forensics"], a["valuation"]
+    assert fx["piotroski"]["available"] and 0 <= fx["piotroski"]["score_9"] <= 9
+    assert fx["altman"]["zone"] in ("Safe", "Grey zone", "Distress")
+    assert fx["beneish"]["available"] and isinstance(fx["beneish"]["m"], float)
+    assert len(fx["dupont"]) >= 5
+    assert v["graham_number"] > 0 and v["dcf"]["default_value"] > 0
+    assert v["fair_value"]["low"] <= v["fair_value"]["mid"] <= v["fair_value"]["high"]
+
+
+def test_bank_forensics_skip():
+    a = analysis.analyse(_load("testbank.html"), None)
+    assert not a["forensics"]["altman"]["available"] and not a["forensics"]["beneish"]["available"]
+    assert a["forensics"]["piotroski"]["available"]
+
+
+def test_documents():
+    c = _load("testco.html")
+    cats = [d["category"] for d in c["documents"]]
+    assert "Annual reports" in cats and "Concalls" in cats
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):
