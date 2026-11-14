@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Badge } from '../components/ui'
+import { Badge, Logo } from '../components/ui'
 import { ago, api, cr, getMarket, go, isDesktop, num, ok, pct, rs, signed, ticker, watchlist } from '../util'
 import { Md } from './AI'
 
@@ -214,6 +214,7 @@ export default function Movers() {
                 return (
                   <div key={x.symbol} className="mv-row" onClick={() => go(`stock/${x.symbol}/chart`)}>
                     <div className="rank-num">{i + 1}</div>
+                    <Logo sym={x.symbol} name={x.name} size={32} />
                     <div className="grow" style={{ minWidth: 0 }}>
                       <div className="ellip"><b>{x.name}</b> <span className="small muted">{ticker(x.symbol)}</span>{x.closed_high && tf === '1D' && <span className="tagc good">only buyers</span>}{x.closed_low && tf === '1D' && <span className="tagc bad">only sellers</span>}</div>
                       <div className="small muted ellip">{x.sector} · {metric(x)}</div>

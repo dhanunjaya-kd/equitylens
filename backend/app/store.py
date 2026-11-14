@@ -58,3 +58,8 @@ def all_rankings() -> list[dict]:
 def count_companies() -> int:
     with _conn() as c:
         return c.execute("SELECT COUNT(*) FROM company").fetchone()[0]
+
+
+def keys_like(pattern: str) -> list[str]:
+    with _conn() as c:
+        return [r["symbol"] for r in c.execute("SELECT symbol FROM company WHERE symbol LIKE ?", (pattern,)).fetchall()]

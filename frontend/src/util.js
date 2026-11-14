@@ -85,6 +85,7 @@ export function parseHash() {
   if (parts[0] === 'watch') return { page: 'watch' }
   if (parts[0] === 'screener') return { page: 'screener' }
   if (parts[0] === 'movers') return { page: 'movers' }
+  if (parts[0] === 'calendar') return { page: 'calendar', tab: parts[1] || 'results' }
   if (parts[0] === 'settings') return { page: 'settings' }
   if (parts[0] === 'compare') return { page: 'compare', symbols: (params.get('s') || '').split(',').filter(Boolean) }
   return { page: 'home' }
@@ -102,3 +103,4 @@ export const applyTheme = (t) => {
   const m = document.querySelector('meta[name="theme-color"]')
   if (m) m.setAttribute('content', t === 'light' ? '#f4f6f9' : '#0b1016')
 }
+export const logoUrl = (sym, name = '') => `/api/logo/${encodeURIComponent(sym)}${name ? `?name=${encodeURIComponent(name)}` : ''}`

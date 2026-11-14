@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { SearchBox, ScoreRing } from '../components/ui'
+import { Logo, SearchBox, ScoreRing } from '../components/ui'
 import { api, flag, getMarket, go, pct, recent, ticker, watchlist } from '../util'
 
 export default function Home() {
@@ -23,13 +23,13 @@ export default function Home() {
       {rec.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <h3>Recent</h3>
-          {rec.map((r) => <span key={r.symbol} className="chip" style={{ cursor: 'pointer' }} onClick={() => go(`stock/${r.symbol}`)}>{flag(r.symbol)} {ticker(r.symbol)}</span>)}
+          {rec.map((r) => <span key={r.symbol} className="chip chip-logo" style={{ cursor: 'pointer' }} onClick={() => go(`stock/${r.symbol}`)}><Logo sym={r.symbol} name={r.name} size={18} />{flag(r.symbol)} {ticker(r.symbol)}</span>)}
         </div>
       )}
       {watch.length > 0 && (
         <div className="card">
           <h3>Watchlist</h3>
-          {watch.map((r) => <span key={r.symbol} className="chip" style={{ cursor: 'pointer', color: '#fbbf24' }} onClick={() => go(`stock/${r.symbol}`)}>★ {flag(r.symbol)} {ticker(r.symbol)}</span>)}
+          {watch.map((r) => <span key={r.symbol} className="chip chip-logo" style={{ cursor: 'pointer' }} onClick={() => go(`stock/${r.symbol}`)}><Logo sym={r.symbol} name={r.name} size={18} /><span style={{ color: '#f59e0b' }}>★</span> {flag(r.symbol)} {ticker(r.symbol)}</span>)}
         </div>
       )}
 
@@ -49,7 +49,7 @@ export default function Home() {
             <div className="rank-num">{i + 1}</div>
             <div className="ring-sm"><ScoreRing value={r.overall} size={44} /></div>
             <div className="grow">
-              <div className="ellip"><b>{r.name}</b></div>
+              <div className="ellip"><Logo sym={r.symbol} name={r.name} size={20} /><b>{r.name}</b></div>
               <div className="small muted ellip">{r.sector} · base 5y {pct(r.base_5y)}/yr</div>
               <span className={`badge sm t-${r.tone} bg-${r.tone}`} style={{ marginTop: 4 }}>{r.verdict}</span>
             </div>

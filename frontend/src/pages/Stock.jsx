@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { Badge, DataTable, Loading, ScoreBar, ScoreRing, Tile } from '../components/ui'
+import { Badge, DataTable, Loading, Logo, ScoreBar, ScoreRing, Tile } from '../components/ui'
 import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import StockChart from './StockChart'
 import { StockAI } from './AI'
@@ -40,6 +40,8 @@ export default function Stock({ symbol, tab }) {
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const [star, setStar] = useState(watchlist.has(symbol))
+  const [nextRes, setNextRes] = useState(null)
+  useEffect(() => { api(`/api/calendar/next/${encodeURIComponent(symbol)}`).then((x) => setNextRes(x.next)).catch(() => {}) }, [symbol])
 
   const load = async (refresh = false) => {
     setBusy(true); setErr(null)
@@ -61,13 +63,20 @@ export default function Stock({ symbol, tab }) {
     <>
       <div className="card">
         <div className="row between" style={{ alignItems: 'flex-start' }}>
-          <div className="grow">
+          <Logo sym={d.symbol} name={c.name} size={46} />
+          <div className="grow" style={{ marginLeft: 12 }}>
             <h2 className="h-name">{c.name}</h2>
             <div className="small muted" style={{ margin: '4px 0 8px' }}>
               {flag(d.symbol)} {isUS(d.symbol) ? `US: ${ticker(d.symbol)} · SEC filings` : [c.nse_symbol && `NSE: ${c.nse_symbol}`, c.bse_code && `BSE: ${c.bse_code}`].filter(Boolean).join(' · ')}
               {d.view === 'standalone' && ' · standalone numbers'}
             </div>
             <div>{(c.sector_path || []).map((s) => <span key={s} className="chip">{s}</span>)}</div>
+            {nextRes && (() => {
+              const n = Math.round((new Date(nextRes.date + 'T12:00:00') - new Date(new Date().toDateString() + ' 12:00')) / 86400000)
+              const when = n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`
+              const t = { BMO: ' · before open', AMC: ' · after close' }[nextRes.timing] || ''
+              return <span className="chip res-chip" onClick={() => go('calendar/results')}>📅 Results {new Date(nextRes.date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}{t} · {when}{ok(nextRes.eps_estimate) ? ` · EPS est. $${nextRes.eps_estimate}` : ''}</span>
+            })()}
           </div>
           <button className={`star ${star ? 'on' : ''}`} onClick={() => { watchlist.toggle(d.symbol, c.name); setStar(!star) }}>{star ? '★' : '☆'}</button>
         </div>

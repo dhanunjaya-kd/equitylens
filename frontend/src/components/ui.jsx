@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, cur, getMarket, go, ok, scoreColor } from '../util'
+import { api, cur, getMarket, go, logoUrl, ok, scoreColor } from '../util'
 
 export function ScoreRing({ value, size = 84, label }) {
   const r = 34, c = 2 * Math.PI * r
@@ -62,7 +62,8 @@ export function SearchBox({ autoFocus }) {
         <div className="suggest">
           {busy && !res.length && <div className="muted">Searching…</div>}
           {res.map((r) => (
-            <div key={r.symbol + r.name} onMouseDown={() => pick(r.symbol)}>
+            <div key={r.symbol + r.name} onMouseDown={() => pick(r.symbol)} className="sg-row">
+              <Logo sym={r.symbol} name={r.name} size={24} />
               <b>{r.name}</b> <span className="muted small">{r.symbol.replace(/^US:/, '')}</span>
             </div>
           ))}
@@ -103,10 +104,19 @@ const I = {
   fire: <path d="M12 3c1 3.5 4.5 5 4.5 9.5A4.5 4.5 0 0 1 12 17a4.5 4.5 0 0 1-4.5-4.5c0-2 1-3.2 2-4 .2 1.6 1 2.6 2 3 0-3 0-5.5.5-8.5zM6 21h12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />,
   filter: <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />,
   compare: <path d="M8 4v16M16 4v16M4 8h8M12 16h8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
+  cal: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /><circle cx="8.5" cy="14.5" r=".6" fill="currentColor" /><circle cx="12" cy="14.5" r=".6" fill="currentColor" /></g>,
+}
+
+// Company logo (real logo when found, coloured initials otherwise; downloaded once by the backend)
+export function Logo({ sym, name = '', size = 28 }) {
+  const [bad, setBad] = useState(false)
+  const ini = (String(name || sym).replace(/^US:/, '').match(/[A-Za-z0-9]+/g) || ['?']).filter((w) => !/^(ltd|limited|inc|corp|co|the|plc)$/i.test(w))
+  if (bad) return <span className="logo logo-ini" style={{ width: size, height: size, fontSize: size * 0.38 }}>{((ini[0] || '?')[0] + (ini[1] ? ini[1][0] : (ini[0] || '').slice(1, 2))).toUpperCase()}</span>
+  return <img className="logo" src={logoUrl(sym, name)} width={size} height={size} loading="lazy" alt="" onError={() => setBad(true)} style={{ width: size, height: size }} />
 }
 
 export function BottomNav({ page }) {
-  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Movers', I.fire], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter], ['watch', 'watch', 'Watchlist', I.star]]
+  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter], ['watch', 'watch', 'Watchlist', I.star]]
   return (
     <nav className="bottomnav">
       {items.map(([k, path, label, icon]) => (
@@ -131,7 +141,7 @@ export function MarketToggle({ market, onChange }) {
 }
 
 export function SideNav({ page, market, onMarket, theme, onTheme }) {
-  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Market Movers', I.fire], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
+  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Market Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
     ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare]]
   return (
     <aside className="sidenav">

@@ -427,6 +427,27 @@ No predictions and no buy/sell calls. Max 350 words."""
     return {"text": complete(system, [{"role": "user", "content": prompt}], max_tokens=1300, s=s), "model": model_label(s)}
 
 
+def explain_calendar(earn: dict, econ: dict, watch: set) -> dict:
+    s = load_settings()
+    slim_e = lambda r: {k: r.get(k) for k in ("name", "symbol", "date", "timing", "type", "eps_estimate", "eps_last_year", "eps_actual",
+                                                "surprise_pct", "reaction", "market_cap")} | {"fundamentals": r.get("fund"), "in_watchlist": r["symbol"] in watch}
+    rows = [r for r in earn["rows"] if r.get("type") in ("Earnings", "Results")]
+    key = [r for r in rows if r["symbol"] in watch or r.get("fund") or r.get("in_index")]
+    key.sort(key=lambda r: (r["symbol"] not in watch, -(r.get("market_cap") or 0)))
+    ev = [{k: e.get(k) for k in ("date", "at", "event", "actual", "forecast", "previous", "importance", "vs_forecast", "why")}
+          for e in econ["events"] if e["importance"] >= 2]
+    data = {"market": earn["market"], "window": f"{earn['start']} to {earn['end']}", "economic_events": ev[:25],
+            "results": [slim_e(r) for r in key[:25]], "results_count": len(rows), "next_big_events": econ.get("next_big")}
+    system = _rules({"market": earn["market"]}) + "\nYou are briefing a retail investor on the week's calendar.\n<data>\n" + json.dumps(data, default=str) + "\n</data>"
+    prompt = """Brief me on this calendar in plain English:
+## The week in one paragraph
+## Economic events that matter (bullets: date, what it is, forecast vs previous, and what a surprise above/below forecast would usually mean)
+## Results to watch (bullets: the watchlist ones first, then the biggest/most interesting; for reported ones mention the EPS surprise and the price reaction)
+## How to prepare (3 short, practical bullets — no buy/sell calls, no predictions)
+Max 380 words."""
+    return {"text": complete(system, [{"role": "user", "content": prompt}], max_tokens=1400, s=s), "model": model_label(s)}
+
+
 def explain_picks(rows: list[dict], title: str = "Top Picks") -> dict:
     s = load_settings()
     fields = ("symbol", "name", "sector", "market_cap", "pe", "pb", "roce", "profit_cagr_5", "sales_cagr_5", "debt_to_equity",
@@ -463,6 +484,10 @@ def _demo_answer(system: str, messages: list[dict]) -> str:
         return f"- P/E **{met.get('pe')}** needs growth to continue\n- Growth may slow from **{met.get('sales_cagr_5')}%**\n\nBest counter-argument: cash conversion is strong."
     if "ROLE: You are the neutral JUDGE" in system:
         return "The bull case is better supported by the cash-flow and return data; the bear case rests on valuation.\n\nLeaning: Bull"
+    if "economic_events" in d:
+        ev = "\n".join(f"- **{e['event']}** ({e['date']}): forecast {e.get('forecast') or '—'}, previous {e.get('previous') or '—'}" for e in d["economic_events"][:5])
+        rs = "\n".join(f"- **{r['name']}** on {r['date']}" + (" ⭐ watchlist" if r.get("in_watchlist") else "") for r in d["results"][:6])
+        return f"## The week in one paragraph\n{d['results_count']} companies report results between {d['window']}.\n\n## Economic events that matter\n{ev or '- none'}\n\n## Results to watch\n{rs or '- none'}\n\n_(demo mode)_"
     if "top_gainers" in d:
         return f"## Market mood\n{(d.get('mood') or {}).get('read', '')}\n\n_(demo mode)_"
     if "stocks" in d:

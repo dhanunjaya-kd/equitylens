@@ -16,7 +16,7 @@
 ![Forensics](https://img.shields.io/badge/forensics-Piotroski·Altman·Beneish-ef4444?style=flat-square)
 ![Indicators](https://img.shields.io/badge/chart-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-47_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-57_passing-22c55e?style=flat-square)
 
 ### 🔎 Search any 🇮🇳 Indian or 🇺🇸 US stock → a complete, explained research report in seconds
 
@@ -51,6 +51,12 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 | **Buying / selling pressure measured from volume** (up-day vs down-day volume), not just price change | ➖ | ✅ |
 | **Market mood gauge** (fear ↔ greed) with a plain-English read + **sector heatmap** for every timeframe | ➖ | ✅ |
 | ✨ **"Explain the move" with AI**: why today's leaders and laggards moved, in plain words | ➖ | ✅ |
+| 📅 **Earnings / results calendar** for 🇮🇳 and 🇺🇸 with EPS estimates, before-open / after-close timing | ✅ | ✅ |
+| Results calendar **joined with your watchlist and EquityLens scores**, plus **beat rate and price reaction** of what already reported | ➖ | ✅ |
+| 🌐 **Economic calendar** (actual · forecast · previous) **+ official dates** from RBI, MoSPI, DPIIT and the Fed, with a countdown | ➖ | ✅ |
+| Every economic event explained: **what it is and why markets care**, times shown in **your** time zone | ➖ | ✅ |
+| ＋📅 **Add any result or event to your phone / Google / Outlook calendar** (with a 30-min reminder) | ➖ | ✅ |
+| 🖼️ **Company logos** for Indian and US stocks (saved once on your laptop, initials badge if none) | ✅ | ✅ |
 | ☀️ / 🌙 **Light and dark theme**, remembers your choice | ✅ | ✅ |
 | Runs on **your** laptop, your data and keys stay with you | ➖ | ✅ |
 
@@ -76,6 +82,10 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 <tr>
 <td align="center"><img src="docs/screenshots/desktop/ai.png" width="420"/><br/><b>✨ AI note, chat & bull-vs-bear debate</b></td>
 <td align="center"><img src="docs/screenshots/desktop/rankings.png" width="420"/><br/><b>🏆 Top Picks ranking table</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/desktop/calendar.png" width="420"/><br/><b>📅 US earnings calendar with countdown to the Fed</b></td>
+<td align="center"><img src="docs/screenshots/desktop/calendar_economy.png" width="420"/><br/><b>🌐 India economic calendar: official dates + meaning</b></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/desktop/movers.png" width="420"/><br/><b>🔥 Market Movers: mood, sector heatmap, lists</b></td>
@@ -116,7 +126,12 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 <td align="center"><img src="docs/screenshots/us_movers.png" width="230"/><br/><b>🇺🇸 US movers: 52-week highs</b></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/movers.png" width="230"/><br/><b>🔥 Top gainers this week</b></td>
+<td align="center"><img src="docs/screenshots/calendar_us.png" width="230"/><br/><b>📅 Earnings: EPS estimate, timing, logos</b></td>
+<td align="center"><img src="docs/screenshots/calendar_economy_us.png" width="230"/><br/><b>⏳ Fed countdown in your time zone</b></td>
+<td align="center"><img src="docs/screenshots/calendar_economy_in.png" width="230"/><br/><b>🇮🇳 WPI / CPI / RBI with official dates</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/movers.png" width="230"/><br/><b>🔥 Top gainers with logos</b></td>
 <td align="center"><img src="docs/screenshots/movers_filters.png" width="230"/><br/><b>🟢 Top buyers + filters</b></td>
 <td align="center"><img src="docs/screenshots/light_overview.png" width="230"/><br/><b>☀️ Light theme</b></td>
 </tr>
@@ -184,6 +199,25 @@ Pick a timeframe, **1D · 1W · 1M · 3M · 1Y**, and every list re-ranks for it
 - ✨ **Explain the move**: the AI agent reads the leaders and laggards and writes why they moved and what to check
 - Daily prices from Yahoo's public chart feed, refreshed every few hours in the background. *Buyers/sellers are measured from daily volume, not live order flow.*
 
+### 📅 Calendar: results + economy (🇮🇳 and 🇺🇸)
+
+Week view with a day strip (tap a day to filter), ‹ › to move between weeks. On weekends it opens the coming week.
+
+| | 🇺🇸 US | 🇮🇳 India |
+|---|---|---|
+| 💼 **Results** | Every company reporting (Nasdaq calendar): ☀️ before open / 🌙 after close, consensus **EPS estimate** vs last year, and after it reports: actual EPS, **Beat / Miss %** | Every board meeting announced on NSE: 📊 results, 💸 dividend, 🎁 bonus, ✂️ split, 🔁 buyback, 🏦 fund raising, 🤝 mergers |
+| 🧾 **Scorecard** | Reported so far, % that **beat estimates**, average **price reaction** | Reported so far, how many **rose after results**, average reaction |
+| 🌐 **Economy** | CPI, jobs, GDP, retail sales, ISM, claims… with **actual · forecast · previous** and ▲/▼ vs forecast | RBI policy, CPI, WPI, IIP, GDP, PMIs… |
+| 📌 **Official dates** | Fed FOMC decisions (2:00 PM ET) | RBI MPC (10:00 AM), MoSPI CPI / IIP / GDP (4:00 PM), DPIIT WPI (12:00 noon) |
+
+- ⏳ **Next big events** with a live countdown (Fed / RBI decision, next CPI, next GDP…)
+- 💡 Tap any economic event: **what it is**, **why markets care**, the release time and a link to the official schedule
+- ⭐ Your **watchlist** companies are pinned at the top, scanned stocks show their **EquityLens score** right in the calendar
+- 🕓 Times are converted to **your time zone** (US events also show ET; a Fed decision at 2 PM ET is marked *next day* in India)
+- ＋📅 **Add to my calendar**: downloads an .ics file that opens in your phone, Google or Outlook calendar, with a reminder
+- ✨ **Brief me on this week**: AI reads the calendar and tells you which numbers and results matter, your watchlist first
+- On every stock page: a **📅 Results on … · in N days** badge when the date is known
+
 ### 🏆 Top Picks · 🧮 Screener · ⭐ Watchlist · ⚖️ Compare
 
 - 🏆 **Top Picks:** scans the whole **NIFTY 500** 🇮🇳 or **S&P 500** 🇺🇸 and ranks every company by the same rules, plus ✨ "explain this list with AI"
@@ -249,7 +283,7 @@ python run.py
 
 | # | Do this | Why |
 |:-:|---|---|
-| 1️⃣ | `python selftest.py` in `backend/` | Fetches RELIANCE, HDFCBANK, ITC and Apple (US) live and prints what was read |
+| 1️⃣ | `python selftest.py` in `backend/` | Fetches RELIANCE, HDFCBANK, ITC and Apple (US) live, checks the calendars and logos, and prints what was read |
 | 2️⃣ | Search any stock in the app | Full report in ~5 s, cached for 24 h (↻ Refresh fetches new data) |
 | 3️⃣ | ⚙️ Settings → pick an AI provider | Claude / ChatGPT / Gemini key, or Ollama for free |
 | 🇺🇸 | Add `EQL_SEC_USER_AGENT` to `backend/.env` | Needed once for US stocks (SEC rule) |
@@ -363,6 +397,7 @@ python run_tests.py
 | `test_api.py` | Every endpoint, including error paths: bad symbols, missing keys, blocked document links |
 | `test_ai.py` | Exact request format for Claude, OpenAI, Gemini and Ollama; friendly errors; masked keys; every AI feature end to end |
 | `test_us.py` | SEC filings read correctly: revenue tag changes merged, 6/9-month YTD figures ignored, Q4 derived, TTM, ratios, $ throughout |
+| `test_calendar.py` | Nasdaq earnings / economy and NSE event formats parsed exactly (negative EPS, N/A, &nbsp;, BRK.B), official RBI / MoSPI / WPI / FOMC dates and IST / ET times, de-duplication, logos |
 | `test_movers.py` | Returns per timeframe, buying/selling pressure, turnover in ₹ Cr / $ M, relative volume, 52W breakouts, mood score, sector heatmap, both markets |
 
 ---
@@ -384,10 +419,12 @@ equitylens/
 │   │   ├── technicals.py     OHLC + indicators + chart outlook (range, analogs, levels)
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents
 │   │   ├── movers.py         market movers, pressure, mood gauge, sector heatmap
+│   │   ├── calendars.py      results + economic calendars, official schedules, event guide
+│   │   ├── logos.py          company logos (downloaded once, initials fallback)
 │   │   ├── service.py        fetch → cache → analyse, NIFTY 500 scan
 │   │   └── main.py           API + serves the web app
 │   ├── static/               prebuilt app (no npm needed to run)
-│   ├── tests/                47 offline tests + sample Indian & US company data
+│   ├── tests/                57 offline tests + sample Indian & US company data
 │   └── run.py · scan.py · selftest.py · run_tests.py
 ├── ⚛️ frontend/              React source (npm install && npm run build)
 └── 🖼️ docs/                  banner + screenshots
@@ -405,7 +442,7 @@ equitylens/
 ---
 
 > [!NOTE]
-> Indian fundamentals come from the same public company pages you'd open in a browser (screener.in), US fundamentals from the SEC's official EDGAR filings, and chart prices from Yahoo Finance's public chart feed. No logins or paid data. If a site changes its layout, `selftest.py` shows exactly which section broke. Keep the app on your own network (Tailscale) rather than exposing port 8600 to the internet, since Settings can change AI keys.
+> Indian fundamentals come from the same public company pages you'd open in a browser (screener.in), US fundamentals from the SEC's official EDGAR filings, chart prices from Yahoo Finance's public chart feed, results and economic calendars from Nasdaq's and NSE's public calendars plus the official RBI, MoSPI, DPIIT and Federal Reserve schedules, and logos from Financial Modeling Prep's public logo images or the company's own website icon. No logins or paid data. If a site changes its layout, `selftest.py` shows exactly which section broke. Keep the app on your own network (Tailscale) rather than exposing port 8600 to the internet, since Settings can change AI keys.
 
 > [!WARNING]
 > Everything is built from **past numbers and stated assumptions**. EquityLens is a research aid, **not investment advice**. Read the red flags and the company's own annual report before investing.

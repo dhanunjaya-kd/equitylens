@@ -10,10 +10,10 @@ import requests
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import ai, config, movers, scraper, service, store, technicals, universe, us
+from . import ai, calendars, config, logos, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
@@ -184,6 +184,45 @@ def ai_movers(market: str = "IN", tf: str = "1D"):
     if not data["rows"]:
         raise HTTPException(400, "Movers are still loading. Try again in a minute.")
     return _ai(ai.explain_movers, data)
+
+
+def _start(start: Optional[str]):
+    from datetime import date, datetime
+    if not start:
+        return datetime.now(calendars.IST).date()
+    try:
+        return date.fromisoformat(start)
+    except ValueError:
+        raise HTTPException(400, "start must be YYYY-MM-DD")
+
+
+@app.get("/api/calendar/earnings")
+def cal_earnings(market: str = "US", start: Optional[str] = None, days: int = 7):
+    return calendars.earnings(market, _start(start), days)
+
+
+@app.get("/api/calendar/economy")
+def cal_economy(market: str = "US", start: Optional[str] = None, days: int = 7):
+    return calendars.economy(market, _start(start), days)
+
+
+@app.get("/api/calendar/next/{symbol}")
+def cal_next(symbol: str):
+    return {"next": calendars.next_results(scraper.clean_symbol(symbol))}
+
+
+@app.post("/api/ai/calendar")
+def ai_calendar(market: str = "US", start: Optional[str] = None, days: int = 7, symbols: str = ""):
+    s = _start(start)
+    e, c = calendars.earnings(market, s, days), calendars.economy(market, s, days)
+    watch = {x.strip().upper() for x in symbols.split(",") if x.strip()}
+    return _ai(ai.explain_calendar, e, c, watch)
+
+
+@app.get("/api/logo/{symbol}")
+def logo(symbol: str, name: str = ""):
+    data, media = logos.get(scraper.clean_symbol(symbol), name)
+    return Response(content=data, media_type=media, headers={"Cache-Control": "public, max-age=604800"})
 
 
 @app.get("/api/compare")

@@ -260,3 +260,49 @@ html, body { overflow-x: clip; }
 
 .theme-btn { background: var(--card2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); padding: 7px 10px; font-size: 15px; }
 html, body { transition: background-color .2s ease; }
+
+/* ---------- logos ---------- */
+.logo { border-radius: 9px; object-fit: contain; background: #fff; flex: 0 0 auto; box-shadow: 0 0 0 1px var(--line); }
+.logo-ini { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; background: var(--accent); border-radius: 9px; flex: 0 0 auto; }
+.ellip .logo, .ellip .logo-ini { vertical-align: -5px; margin-right: 7px; border-radius: 6px; }
+.chip-logo { display: inline-flex; align-items: center; gap: 6px; }
+.chip-logo .logo { border-radius: 5px; }
+.sg-row { display: flex; align-items: center; gap: 10px; }
+.mv-row .logo { margin-right: 2px; }
+
+/* ---------- calendar ---------- */
+.daystrip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin: 12px 0 6px; }
+.daystrip .dd { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 0 6px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--text); }
+.daystrip .dd .dw { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.daystrip .dd .dn { font-size: 17px; font-weight: 800; }
+.daystrip .dd .dc { font-size: 10.5px; font-weight: 700; color: var(--accent); min-height: 13px; }
+.daystrip .dd.today { border-color: var(--accent); }
+.daystrip .dd.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.daystrip .dd.on .dw, .daystrip .dd.on .dc { color: var(--on-accent); }
+.cal-day { display: flex; justify-content: space-between; align-items: baseline; padding: 11px 14px; border-bottom: 1px solid var(--line); background: var(--card2); border-radius: 16px 16px 0 0; }
+.cal-day.today b { color: var(--accent); }
+.cal-row { align-items: center; }
+.cal-num { text-align: right; min-width: 74px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.cal-add { border: 1px solid var(--line); background: var(--card2); color: var(--text); border-radius: 10px; padding: 5px 6px; font-size: 12px; flex: 0 0 auto; }
+.cal-add:hover { border-color: var(--accent); }
+.cal-q { width: 100%; margin-top: 10px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--text); font-size: 14px; }
+.tagc.warnc { background: rgba(245,158,11,.15); color: var(--warn); } .tagc.offc { background: rgba(56,189,248,.14); color: var(--ok); }
+.ev-row { display: flex; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--line); cursor: pointer; align-items: flex-start; }
+.ev-row:last-child { border-bottom: 0; } .ev-row:hover { background: var(--card2); }
+.ev-row.hi { box-shadow: inset 3px 0 0 var(--warn); }
+.ev-time { width: 74px; flex: 0 0 auto; font-size: 13px; }
+.ev-vals { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 5px; }
+.ev-more { margin-top: 8px; display: grid; gap: 4px; line-height: 1.5; padding: 8px 10px; border-radius: 10px; background: var(--card2); }
+.stars { color: var(--warn); font-size: 11px; letter-spacing: 1px; margin-left: 4px; } .stars .off { opacity: .22; }
+.big-list { display: grid; gap: 8px; }
+.big-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--card2); }
+.big-cd { font-size: 20px; font-weight: 800; color: var(--accent); margin: 2px 0; }
+.src { padding: 4px 6px 14px; line-height: 1.5; }
+.cal-mine .chip { margin: 0 6px 6px 0; }
+@media (max-width: 1099px) {
+  .big-list { grid-auto-flow: column; grid-auto-columns: 78%; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .big-list::-webkit-scrollbar { display: none; }
+  .big-card { scroll-snap-align: start; }
+}
+.res-chip { cursor: pointer; color: var(--accent); border-color: var(--accent); font-weight: 600; margin-top: 4px; }
+@media (max-width: 480px) { .mv-row .rank-num { width: 14px; font-size: 11px; } .mv-row { gap: 8px; padding: 10px; } }

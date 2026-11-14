@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ScoreRing } from '../components/ui'
+import { Logo, ScoreRing } from '../components/ui'
 import { ExplainList } from './AI'
 import { ago, api, cr, getMarket, go, isDesktop, num, pct, scoreColor, signed, ticker } from '../util'
 
@@ -88,7 +88,7 @@ export default function Rankings() {
               <tbody>{rows.map((r, i) => (
                 <tr key={r.symbol} className="click" onClick={() => go(`stock/${r.symbol}`)}>
                   <td className="muted">{i + 1}</td>
-                  <td style={{ minWidth: 220 }}><b>{r.name}</b><div className="small muted">{ticker(r.symbol)} · {r.sector || '—'}</div></td>
+                  <td style={{ minWidth: 240 }}><div className="row" style={{ gap: 10 }}><Logo sym={r.symbol} name={r.name} size={30} /><div><b>{r.name}</b><div className="small muted">{ticker(r.symbol)} · {r.sector || '—'}</div></div></div></td>
                   <td><b style={{ color: scoreColor(r.overall) }}>{r.overall ?? '—'}</b></td>
                   <td><span className={`badge sm t-${r.tone} bg-${r.tone}`}>{r.verdict}</span></td>
                   <td>{cr(r.market_cap)}</td><td>{num(r.pe, 1)}</td><td>{pct(r.roce)}</td>
@@ -109,7 +109,7 @@ export default function Rankings() {
             <div className="rank-num">{i + 1}</div>
             <div className="ring-sm"><ScoreRing value={r.overall} size={44} /></div>
             <div className="grow">
-              <div className="ellip"><b>{r.name}</b> <span className="small muted">{ticker(r.symbol)}</span></div>
+              <div className="ellip"><Logo sym={r.symbol} name={r.name} size={20} /><b>{r.name}</b> <span className="small muted">{ticker(r.symbol)}</span></div>
               <div className="small muted ellip">{r.sector || '—'} · {cr(r.market_cap)} · P/E {num(r.pe, 1)}</div>
               <div className="small" style={{ marginTop: 3 }}>
                 Base /yr: <b>{pct(r.base_3y)}</b> 3y · <b>{pct(r.base_5y)}</b> 5y · <b>{pct(r.base_10y)}</b> 10y

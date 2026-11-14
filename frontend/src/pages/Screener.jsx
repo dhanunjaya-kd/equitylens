@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ScoreRing } from '../components/ui'
+import { Logo, ScoreRing } from '../components/ui'
 import { ExplainList } from './AI'
 import { api, cr, getMarket, go, num, ok, ticker } from '../util'
 
@@ -143,7 +143,7 @@ export default function Screener() {
           <div key={r.symbol} className="rank-item" onClick={() => go(`stock/${r.symbol}`)}>
             <div className="ring-sm"><ScoreRing value={r.overall} size={44} /></div>
             <div className="grow">
-              <div className="ellip"><b>{r.name}</b> <span className="small muted">{ticker(r.symbol)}</span></div>
+              <div className="ellip"><Logo sym={r.symbol} name={r.name} size={20} /><b>{r.name}</b> <span className="small muted">{ticker(r.symbol)}</span></div>
               <div className="small muted ellip">{r.sector || '—'} · {cr(r.market_cap)}</div>
               <div className="small" style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
                 {showCols.map((k) => <span key={k}><span className="muted">{F[k].label.split(' (')[0]}:</span> <b>{fmt(k, r[k])}</b></span>)}

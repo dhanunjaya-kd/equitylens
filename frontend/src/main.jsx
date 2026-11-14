@@ -10,6 +10,7 @@ import Watch from './pages/Watch'
 import Compare from './pages/Compare'
 import Screener from './pages/Screener'
 import Movers from './pages/Movers'
+import Calendar from './pages/Calendar'
 import { Settings } from './pages/AI'
 
 function App() {
@@ -59,6 +60,7 @@ function App() {
         {route.page === 'watch' && <Watch />}
         {route.page === 'screener' && <Screener />}
         {route.page === 'movers' && <Movers />}
+        {route.page === 'calendar' && <Calendar tab={route.tab} />}
         {route.page === 'settings' && <Settings />}
         {route.page === 'compare' && <Compare symbols={route.symbols} />}
       </main>

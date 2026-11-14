@@ -90,6 +90,19 @@ def test_movers_endpoints():
         assert C.post(f"/api/ai/movers?market={mk}&tf=1W").status_code == 200
 
 
+
+def test_calendar_and_logo_endpoints():
+    for mk in ("IN", "US"):
+        e = C.get(f"/api/calendar/earnings?market={mk}&days=7").json()
+        c = C.get(f"/api/calendar/economy?market={mk}&days=7").json()
+        assert "rows" in e and "events" in c and c["source"]
+        assert C.post(f"/api/ai/calendar?market={mk}").status_code == 200
+    assert C.get("/api/calendar/earnings?start=bad").status_code == 400
+    assert C.get("/api/calendar/next/TESTCO").status_code == 200
+    r = C.get("/api/logo/TESTCO?name=Test Industries Ltd")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("image/")
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

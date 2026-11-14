@@ -52,4 +52,31 @@ except Exception:
     ok = False
     print("FAILED (set EQL_SEC_USER_AGENT='Your Name your@email.com' in backend/.env)")
     traceback.print_exc()
+print("4) Calendars (Nasdaq earnings + economy, NSE results, official schedules) ...")
+try:
+    from app import calendars
+    from datetime import datetime
+    today = datetime.now(calendars.IST).date()
+    for mk in ("US", "IN"):
+        e = calendars.earnings(mk, today, 7)
+        c = calendars.economy(mk, today, 7)
+        res = [r for r in e["rows"] if r["type"] in ("Earnings", "Results")]
+        live = [x for x in c["events"] if not x.get("official")]
+        print(f"   {mk}: results this week={len(res)} (e.g. {[r['name'] for r in res[:3]]}) | economic events={len(c['events'])} "
+              f"(live {len(live)}) | notes={e['notes'] + c['notes']}")
+        if not res or not live:
+            print("   ⚠️ one source returned nothing — send me this output")
+except Exception:
+    ok = False
+    print("   FAILED")
+    traceback.print_exc()
+print("5) Logos ...", end=" ")
+try:
+    from app import logos
+    got = {s: logos.get(s)[1] for s in ("RELIANCE", "TCS", "US:AAPL", "US:MSFT")}
+    print(got, "(svg = initials fallback, png/jpg/ico = real logo)")
+except Exception:
+    ok = False
+    print("FAILED")
+    traceback.print_exc()
 print("\nALL GOOD" if ok else "\nSOME CHECKS FAILED - send me the output above")

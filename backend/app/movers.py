@@ -129,6 +129,7 @@ def compute_row(sym: str, name: str, sector: str, bars: list[dict], market: str)
         "closed_high": c[i] >= h[i] * 0.997 and (ret.get("1D") or 0) > 1.5,
         "closed_low": c[i] <= l[i] * 1.003 and (ret.get("1D") or 0) < -1.5,
         "spark": [round(x, 2) for x in c[-40:]],
+        "spark_t": [b["t"] for b in bars[-40:]],
         "date": bars[-1]["t"],
     }
 
