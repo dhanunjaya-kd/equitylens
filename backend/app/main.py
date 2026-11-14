@@ -126,6 +126,16 @@ def ai_doc(symbol: str, body: dict = Body(...)):
         raise HTTPException(502, f"Couldn't download the document: {e.__class__.__name__}")
 
 
+@app.post("/api/ai/chart/{symbol}")
+def ai_chart(symbol: str, interval: str = "1d"):
+    rep, _ = _report_and_tech(symbol)
+    try:
+        tech = technicals.build(rep["symbol"], interval)
+    except scraper.FetchError as e:
+        raise HTTPException(502, str(e))
+    return _ai(ai.explain_chart, rep, tech)
+
+
 @app.post("/api/ai/picks")
 def ai_picks(body: dict = Body(...)):
     syms = [s.upper() for s in body.get("symbols") or []][:15]

@@ -13,11 +13,12 @@
 ![Phone first](https://img.shields.io/badge/📱_phone-first-2dd4bf?style=flat-square)
 ![NIFTY 500](https://img.shields.io/badge/scan-NIFTY_500-f59e0b?style=flat-square)
 ![Indicators](https://img.shields.io/badge/indicators-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-9_passing-22c55e?style=flat-square)
+![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Ollama-d97757?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-18_passing-22c55e?style=flat-square)
 
 ### 🔎 Search any Indian stock → get a complete research report in seconds
 
-**10+ years of financials · 6 scores · red flags · forensic checks · fair value · 3/5/10-year outlook · technical chart**
+**10+ years of financials · 6 scores · red flags · forensic checks · fair value · 3/5/10-year outlook · technical chart · AI agents**
 
 </div>
 
@@ -28,7 +29,12 @@
 <table>
 <tr>
 <td align="center"><img src="docs/screenshots/overview.png" width="240"/><br/><b>🟢 Overview & verdict</b></td>
-<td align="center"><img src="docs/screenshots/chart.png" width="240"/><br/><b>📈 Technical chart</b></td>
+<td align="center"><img src="docs/screenshots/quarter.png" width="240"/><br/><b>📋 Key ratios & latest quarter</b></td>
+<td align="center"><img src="docs/screenshots/ai.png" width="240"/><br/><b>✨ AI research note & chat</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/chart.png" width="240"/><br/><b>📈 Chart + future range</b></td>
+<td align="center"><img src="docs/screenshots/chart_outlook.png" width="240"/><br/><b>🔭 What the chart says next</b></td>
 <td align="center"><img src="docs/screenshots/future.png" width="240"/><br/><b>🔮 3 · 5 · 10-year outlook</b></td>
 </tr>
 <tr>
@@ -38,7 +44,7 @@
 </tr>
 </table>
 
-<sub>Screenshots use the built-in sample company (demo mode). Real stocks look the same with live numbers.</sub>
+<sub>Screenshots use the built-in sample company (demo mode, offline AI). Real stocks show live numbers.</sub>
 
 ---
 
@@ -46,8 +52,10 @@
 
 | | Tab | What's inside |
 |:-:|---|---|
-| 🟢 | **Overview** | Verdict, overall score ring, 3/5/10-year stance, scorecard, strengths ✅ & red flags 🚩, quick checks |
+| 🟢 | **Overview** | Verdict, score ring, key ratios, latest quarter (YoY / QoQ), 3/5/10-year stance, scorecard, strengths ✅ & red flags 🚩, quick checks, company key points |
+| ✨ | **AI** | Research note · ask-anything chat · 🐂 bull vs 🐻 bear debate with a ⚖️ judge · annual report & concall reader |
 | 📈 | **Chart** | Candles (daily/weekly, 3M–10Y) · EMA 20/50/200 · Bollinger · Supertrend · golden/death crosses · support/resistance · Volume · RSI · MACD · ADX · signal checklist |
+| 🔭 | **Chart outlook** | Plain-English chart story · 🎯 if/then levels · 📐 likely price range (drawn on the chart) · 📜 what happened after the same setup before · ✨ AI chart explainer |
 | 🔮 | **Future 3·5·10y** | Bear / base / bull price and yearly return · reverse DCF ("what growth does today's price need?") · every assumption visible |
 | 💰 | **Valuation Lab** | Fair-value range from 5 methods · **DCF with sliders** · sensitivity grid · P/E bands · Graham number · EV/EBITDA · peers |
 | 🕵️ | **Forensics** | **Piotroski F** (9 health tests) · **Altman Z** (bankruptcy risk) · **Beneish M** (earnings manipulation) · **DuPont** ROE breakdown · accounting checks |
@@ -62,6 +70,21 @@
 - 🧮 **Screener:** 9 ready-made screens plus your own rules on **45+ fields**, saved on your phone
   > 💎 Quality compounders · 🏷️ Value with quality · 📉 Below fair value · 🏦 Holding-company discount · 🧱 Debt-free growers · 🚀 Piotroski 8+ · 🤝 Promoters buying · ⏳ Cheap vs own history · 🌳 10-year compounders
 - ⭐ **Watchlist** and ⚖️ **Compare up to 4 stocks** side by side
+
+---
+
+## ✨ AI agents (Claude · ChatGPT · Ollama)
+
+| | Feature | What it does |
+|:-:|---|---|
+| 🧠 | **Research note** | Full write-up: quality, growth, balance sheet, forensics, valuation, 3/5/10-year view, risks, what to watch |
+| 💬 | **Ask about this stock** | Chat grounded in that stock's own data: "Is the debt a worry?", "Why did margins fall?" |
+| ⚔️ | **Bull vs Bear debate** | Two agents argue for and against, a judge checks both against the data |
+| 📄 | **Document reader** | Reads annual reports and concall transcripts: guidance, capex, risks, tone |
+| 📈 | **Chart explainer** | Explains the chart, the levels that matter and what history says |
+| 🏆 | **Explain my list** | Why each Top Pick / Screener result ranks, and what they have in common |
+
+Pick the provider in **⚙️ Settings** (top-right): **Claude** or **ChatGPT** with your own API key (pay per use), **Ollama** (free, runs on your laptop) or **Demo** (offline). Keys stay on your laptop in `backend/data/ai_settings.json` (git-ignored) or `backend/.env` (see `.env.example`).
 
 ---
 
@@ -185,7 +208,8 @@ equitylens/
 │   │   ├── analysis.py       metrics, scores, flags, scenarios, verdict
 │   │   ├── forensics.py      Piotroski · Altman · Beneish · DuPont
 │   │   ├── valuation.py      DCF · Graham · P/E bands · EV · fair value
-│   │   ├── technicals.py     OHLC + EMA · RSI · MACD · ADX · Supertrend · BB
+│   │   ├── technicals.py     OHLC + indicators + chart outlook (range, analogs, levels)
+│   │   ├── ai.py             Claude / OpenAI / Ollama agents
 │   │   ├── service.py        fetch → cache → analyse, NIFTY 500 scan
 │   │   └── main.py           API + serves the web app
 │   ├── static/               prebuilt app (no npm needed to run)

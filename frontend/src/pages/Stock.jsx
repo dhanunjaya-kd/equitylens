@@ -7,6 +7,7 @@ import { Badge, DataTable, Loading, ScoreBar, ScoreRing, Tile } from '../compone
 import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import StockChart from './StockChart'
 import { StockAI } from './AI'
+import { KeyPoints, KeyRatios, LatestQuarter } from './OverviewExtra'
 import { ago, api, cr, go, num, ok, pct, recent, rs, scoreColor, signed, watchlist, x } from '../util'
 
 const TABS = [
@@ -122,6 +123,9 @@ function Overview({ d }) {
         </div>
       </div>
 
+      <KeyRatios d={d} />
+      <LatestQuarter d={d} />
+
       <div className="card">
         <h3>Outlook by holding period</h3>
         <div className="grid3">
@@ -162,6 +166,7 @@ function Overview({ d }) {
       </div>
 
       <QuickChecks d={d} />
+      <div style={{ marginTop: 12 }}><KeyPoints d={d} /></div>
 
       <div className="card" style={{ marginTop: 12 }}>
         <h3>About the company</h3>

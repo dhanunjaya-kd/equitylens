@@ -269,6 +269,7 @@ def compute_metrics(c: dict) -> dict:
     m["book_value"] = r1(bv)
     m["pb"] = r1(m["price"] / bv, 2) if _valid(m["price"]) and _valid(bv) and bv > 0 else r1(top.get("pb"), 2)
     m["dividend_yield"] = r1(top.get("dividend_yield"), 2)
+    m["face_value"] = r1(top.get("face_value"), 2)
     m["high_52w"], m["low_52w"] = top.get("high"), top.get("low")
     if _valid(m["price"]) and _valid(m["high_52w"]) and m["high_52w"] > 0:
         m["off_high_pct"] = r1((m["price"] / m["high_52w"] - 1) * 100)

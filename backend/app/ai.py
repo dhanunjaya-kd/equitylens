@@ -162,7 +162,7 @@ def build_context(report: dict, tech: Optional[dict] = None) -> str:
     fx = a.get("forensics", {})
     ctx = {
         "company": {"name": c.get("name"), "nse": c.get("nse_symbol"), "bse": c.get("bse_code"),
-                    "sector": c.get("sector_path"), "about": c.get("about"), "key_points": (c.get("key_points") or "")[:1500],
+                    "sector": c.get("sector_path"), "about": c.get("about"), "key_points": (c.get("key_points_md") or c.get("key_points") or "")[:6000],
                     "numbers_basis": report.get("view"), "data_fetched_unix": int(report.get("fetched_at") or 0)},
         "verdict": a["verdict"], "scores_0_100": a["scores"], "metrics": keep_m,
         "strengths": a["strengths"], "red_flags": a["flags"],
@@ -325,6 +325,26 @@ def fetch_document_text(url: str) -> tuple[str, int]:
         return re.sub(r"[ \t]+", " ", "\n".join(parts)), len(reader.pages)
     from bs4 import BeautifulSoup
     return BeautifulSoup(r.text, "lxml").get_text(" ", strip=True), 1
+
+
+def explain_chart(report: dict, tech: dict) -> dict:
+    s = load_settings()
+    o = tech.get("outlook") or {}
+    data = {"company": report["company"].get("name"), "interval": tech.get("interval"), "stats": tech.get("stats"),
+            "summary": tech.get("summary"), "levels": tech.get("levels"), "recent_crosses": tech.get("markers", [])[-3:],
+            "chart_story": o.get("story"), "if_then": o.get("scenarios"), "volatility_range": o.get("cone"),
+            "historical_analogs": o.get("analogs"), "setup_today": o.get("setup"),
+            "fundamental_verdict": report["analysis"]["verdict"], "business_score": report["analysis"]["scores"].get("business")}
+    system = RULES + "\nYou are explaining a stock's price chart to a beginner.\n<data>\n" + json.dumps(data, default=str) + "\n</data>"
+    prompt = """Explain this chart in plain English:
+## What the chart is saying now
+## What happened to reach here
+## Next 1-3 months: the levels that matter (use the if/then levels and the volatility range; no predictions, only conditions)
+## What history says (use historical_analogs: how often it rose after the same setup, compared with an average day)
+## How this fits the fundamentals (one short paragraph)
+## Watch-list (3 bullet points with exact price levels)
+Max 400 words."""
+    return {"text": complete(system, [{"role": "user", "content": prompt}], max_tokens=1500, s=s), "model": model_label(s)}
 
 
 def explain_picks(rows: list[dict], title: str = "Top Picks") -> dict:

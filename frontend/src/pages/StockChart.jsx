@@ -4,13 +4,14 @@ import {
 } from 'lightweight-charts'
 import { Badge, Loading, Tile } from '../components/ui'
 import { api, num, ok, pct, rs, signed } from '../util'
+import { Md } from './AI'
 
 const COL = {
   up: '#22c55e', down: '#ef4444', ema20: '#38bdf8', ema50: '#f59e0b', ema200: '#e879f9', bb: '#64748b',
   st_up: '#22c55e', st_dn: '#ef4444', rsi: '#a78bfa', macd: '#38bdf8', sig: '#f59e0b', adx: '#e6edf3', pdi: '#22c55e', mdi: '#ef4444',
   grid: '#1a2531', text: '#8b98a5',
 }
-const OVERLAYS = [['ema20', 'EMA 20'], ['ema50', 'EMA 50'], ['ema200', 'EMA 200'], ['bb', 'Bollinger'], ['st', 'Supertrend'], ['levels', 'Support/Resistance'], ['cross', 'Crosses']]
+const OVERLAYS = [['cone', 'Future range'], ['ema20', 'EMA 20'], ['ema50', 'EMA 50'], ['ema200', 'EMA 200'], ['bb', 'Bollinger'], ['st', 'Supertrend'], ['levels', 'Support/Resistance'], ['cross', 'Crosses']]
 const PANES = [['vol', 'Volume'], ['rsi', 'RSI'], ['macd', 'MACD'], ['adx', 'ADX']]
 const RANGES = { '1d': [['3M', 63], ['6M', 126], ['1Y', 252], ['3Y', 756], ['5Y', 1300]], '1wk': [['1Y', 52], ['3Y', 156], ['5Y', 260], ['10Y', 530]] }
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
@@ -20,7 +21,7 @@ export default function StockChart({ symbol }) {
   const [interval, setInterval_] = useState('1d')
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
-  const [over, setOver] = useState(() => load('eql_over', { ema20: true, ema50: true, ema200: true, bb: false, st: false, levels: true, cross: true }))
+  const [over, setOver] = useState(() => load('eql_over2', { cone: true, ema20: true, ema50: true, ema200: true, bb: false, st: false, levels: true, cross: true }))
   const [panes, setPanes] = useState(() => load('eql_panes', { vol: true, rsi: true, macd: true, adx: false }))
   const [range, setRange] = useState('1Y')
   const [legend, setLegend] = useState(null)
@@ -30,7 +31,7 @@ export default function StockChart({ symbol }) {
     setData(null); setErr(null)
     api(`/api/chart/${encodeURIComponent(symbol)}?interval=${interval}`).then(setData).catch((e) => setErr(e.message))
   }, [symbol, interval])
-  useEffect(() => save('eql_over', over), [over])
+  useEffect(() => save('eql_over2', over), [over])
   useEffect(() => save('eql_panes', panes), [panes])
 
   const rows = useMemo(() => {
@@ -74,6 +75,12 @@ export default function StockChart({ symbol }) {
       const dn = chart.addSeries(LineSeries, { color: COL.st_dn, lineWidth: 2, priceLineVisible: false, lastValueVisible: false }, 0)
       up.setData(d.t.map((t, i) => (d.st_trend[i] === 1 && d.st[i] !== null ? { time: t, value: d.st[i] } : { time: t })))
       dn.setData(d.t.map((t, i) => (d.st_trend[i] === -1 && d.st[i] !== null ? { time: t, value: d.st[i] } : { time: t })))
+    }
+    if (over.cone && d.outlook?.cone_points?.length) {
+      const last = { time: d.t[d.t.length - 1], value: d.c[d.c.length - 1] }
+      const opt = { lineWidth: 1.5, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false }
+      chart.addSeries(LineSeries, { ...opt, color: '#22c55e', title: '80% high' }, 0).setData([last, ...d.outlook.cone_points.map((p) => ({ time: p.t, value: p.hi }))])
+      chart.addSeries(LineSeries, { ...opt, color: '#ef4444', title: '80% low' }, 0).setData([last, ...d.outlook.cone_points.map((p) => ({ time: p.t, value: p.lo }))])
     }
     if (over.levels) {
       d.levels.resistance.forEach((p) => main.createPriceLine({ price: p, color: '#ef444499', lineStyle: LineStyle.Dotted, lineWidth: 1, axisLabelVisible: true, title: 'R' }))
@@ -121,7 +128,8 @@ export default function StockChart({ symbol }) {
     // ---- visible range
     const n = (RANGES[interval].find((r) => r[0] === range) || RANGES[interval][2])[1]
     const from = d.t[Math.max(d.t.length - n, 0)]
-    chart.timeScale().setVisibleRange({ from, to: d.t[d.t.length - 1] })
+    const to = over.cone && d.outlook?.cone_points?.length ? d.outlook.cone_points[Math.min(d.outlook.cone_points.length - 1, Math.round(n / 3))].t : d.t[d.t.length - 1]
+    chart.timeScale().setVisibleRange({ from, to })
 
     // ---- legend on hover
     const idx = Object.fromEntries(d.t.map((t, i) => [t, i]))
@@ -181,6 +189,8 @@ export default function StockChart({ symbol }) {
         <div className="small muted">Source: {data.source}{!data.ohlc && ' — closes only, so candles, Supertrend and ADX are off'}. Tap a chip to show/hide.</div>
       </div>
 
+      {data.outlook && <ChartOutlook o={data.outlook} symbol={symbol} interval={interval} last={st.last} />}
+
       <div className="grid-auto">
         <div className="card">
           <h3>Signal checklist</h3>
@@ -229,6 +239,93 @@ function Legend({ d, i, over, panes }) {
       {panes.rsi && <span style={{ color: COL.rsi }}>RSI {num(v('rsi'), 1)}</span>}
       {panes.macd && <span style={{ color: COL.macd }}>MACD {num(v('macd'), 2)}</span>}
       {panes.adx && d.ohlc && <span>ADX {num(v('adx'), 1)}</span>}
+    </div>
+  )
+}
+
+// ====================================================================== future of the chart
+function ChartOutlook({ o, symbol, interval, last }) {
+  const [ai, setAi] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
+  const explain = async () => {
+    setBusy(true); setErr(null)
+    try { setAi(await api(`/api/ai/chart/${encodeURIComponent(symbol)}?interval=${interval}`, { method: 'POST' })) } catch (e) { setErr(e.message) } finally { setBusy(false) }
+  }
+  const icon = { bull: '🟢', range: '🟡', bear: '🔴' }
+  return (
+    <>
+      <div className="card">
+        <h3>🔭 What the chart says about the coming months</h3>
+        <ul className="list">
+          {o.story.map((t, i) => <li key={i}><span className="ic" style={{ color: 'var(--accent)' }}>›</span>{t}</li>)}
+        </ul>
+      </div>
+
+      <div className="card">
+        <h3>🎯 If / then levels</h3>
+        {o.scenarios.map((sc) => (
+          <div key={sc.kind} className={`scen-card ${sc.kind}`}>
+            <div><b>{icon[sc.kind]} {sc.title}</b></div>
+            <div className="small" style={{ marginTop: 3, lineHeight: 1.45 }}>{sc.text}</div>
+          </div>
+        ))}
+        <div className="small muted" style={{ marginTop: 8 }}>Conditions, not predictions: the chart only tells you which level decides the next move.</div>
+      </div>
+
+      {o.cone?.length > 0 && (
+        <div className="card">
+          <h3>📐 Likely price range (from its own volatility)</h3>
+          <p className="small muted" style={{ marginTop: -4 }}>Annual volatility {o.volatility_annual}%. Assumes no direction: the dashed green/red lines on the chart show the 80% range.</p>
+          {o.cone.map((c) => <RangeRow key={c.horizon} label={c.horizon} lo={c.low80} hi={c.high80} lo68={c.low68} hi68={c.high68} now={last} />)}
+          <div className="small muted" style={{ marginTop: 6 }}>Dark band ≈ 2 in 3 chance · light band ≈ 4 in 5 chance, if volatility stays like the last year.</div>
+        </div>
+      )}
+
+      {o.analogs && (
+        <div className="card">
+          <h3>📜 What happened after the same setup before</h3>
+          <div style={{ marginBottom: 6 }}>{o.setup.map((x) => <span key={x} className="chip">{x}</span>)}</div>
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead><tr><th>After</th><th>Times</th><th>Went up</th><th>Median</th><th>Bad · Good (10–90%)</th><th>Any day: up</th></tr></thead>
+              <tbody>{o.analogs.map((a) => (
+                <tr key={a.horizon}>
+                  <td><b>{a.horizon}</b></td><td>{a.count}</td>
+                  <td style={{ color: a.pct_up >= a.all_pct_up ? 'var(--good)' : 'var(--bad)', fontWeight: 700 }}>{a.pct_up}%</td>
+                  <td style={{ color: a.median >= 0 ? 'var(--good)' : 'var(--bad)' }}>{signed(a.median, 1, '%')}</td>
+                  <td>{signed(a.p10, 0, '%')} · {signed(a.p90, 0, '%')}</td>
+                  <td className="muted">{a.all_pct_up}%</td>
+                </tr>))}
+              </tbody>
+            </table>
+          </div>
+          <div className="small muted" style={{ marginTop: 6 }}>Every past day this stock had the same trend and momentum setup ({o.setup_used.join(', ')}), and where it was later. Green = better than an average day. Past patterns can fail.</div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="row between"><h3 style={{ margin: 0 }}>✨ Explain this chart with AI</h3>
+          <button className="btn small primary" disabled={busy} onClick={explain}>{ai ? '↻ Again' : 'Explain'}</button></div>
+        {busy && <div className="small muted" style={{ marginTop: 8 }}>Reading the chart…</div>}
+        {err && <div className="small t-bad" style={{ marginTop: 8 }}>⚠️ {err}</div>}
+        {ai && <><Md text={ai.text} /><div className="small muted">{ai.model}</div></>}
+      </div>
+    </>
+  )
+}
+
+function RangeRow({ label, lo, hi, lo68, hi68, now }) {
+  const min = lo * 0.97, max = hi * 1.03
+  const p = (v) => `${((v - min) / (max - min)) * 100}%`
+  return (
+    <div style={{ margin: '12px 0 18px' }}>
+      <div className="row between small"><b>{label}</b><span className="muted">₹{num(lo)} – ₹{num(hi)}</span></div>
+      <div style={{ position: 'relative', height: 14, marginTop: 6 }}>
+        <div style={{ position: 'absolute', inset: '4px 0', background: 'var(--card2)', borderRadius: 99 }} />
+        <div style={{ position: 'absolute', top: 4, bottom: 4, left: p(lo), width: `calc(${p(hi)} - ${p(lo)})`, background: '#2dd4bf33', borderRadius: 99 }} />
+        <div style={{ position: 'absolute', top: 2, bottom: 2, left: p(lo68), width: `calc(${p(hi68)} - ${p(lo68)})`, background: '#2dd4bf88', borderRadius: 99 }} />
+        <div style={{ position: 'absolute', top: -2, bottom: -2, left: p(now), width: 3, background: '#e6edf3', transform: 'translateX(-50%)' }} />
+      </div>
+      <div className="row between small muted" style={{ marginTop: 2 }}><span>{signed((lo / now - 1) * 100, 0, '%')}</span><span>now ₹{num(now)}</span><span>{signed((hi / now - 1) * 100, 0, '%')}</span></div>
     </div>
   )
 }

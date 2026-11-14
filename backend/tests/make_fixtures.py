@@ -112,7 +112,9 @@ def manufacturer():
 <div class="company-links"><a href="https://www.testindustries.example" target="_blank">testindustries</a>
 <a href="https://www.bseindia.com/x" target="_blank"><span>BSE: 599999</span></a>
 <a href="https://www.nseindia.com/x" target="_blank"><span>NSE: TESTCO</span></a></div>
-<div class="company-profile"><div class="about"><p>Test Industries makes industrial pumps and valves for water and energy customers.</p></div></div>
+<div class="company-profile"><div class="about"><p>Test Industries makes industrial pumps and valves for water and energy customers.</p></div>
+<div class="commentary"><p><strong>Business Segments</strong><sup>[1]</sup><br><strong>i) Pumps (60% in FY25):</strong> Industrial and municipal pumps.</p>
+<p><strong>Capex</strong><sup>[2]</sup><br>Setting up a <strong>2,000 units/yr</strong> valve plant for <strong>Rs. 300 Cr</strong>.</p></div></div>
 {top([("Market Cap", "1,45,000"), ("Current Price", f"{price:,}"), ("High / Low", ("1,650", "1,120")),
       ("Stock P/E", f"{price/(eps[-1]*1.06):.1f}"), ("Book Value", f"{(res[-1]+100)/100:.0f}"),
       ("Dividend Yield", "0.80"), ("ROCE", "21.0"), ("ROE", "17.5"), ("Face Value", "1.00")])}

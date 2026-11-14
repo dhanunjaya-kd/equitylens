@@ -147,3 +147,15 @@ html, body { overflow-x: hidden; }
 .debate.bear { border-left: 4px solid var(--bad); }
 .debate.judge { border-left: 4px solid var(--warn); }
 .debate .dh { font-weight: 800; }
+
+.scen-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 8px; background: var(--card2); }
+.scen-card.bull { border-left: 4px solid var(--good); }
+.scen-card.range { border-left: 4px solid var(--warn); }
+.scen-card.bear { border-left: 4px solid var(--bad); }
+.kp { max-height: 260px; overflow: hidden; position: relative; }
+.kp.open { max-height: none; }
+.kp:not(.open)::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: linear-gradient(transparent, var(--card)); }
+.delta-up { color: var(--good); } .delta-dn { color: var(--bad); }
+.ratio-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; }
+.ratio-grid > div { background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 9px; min-width: 0; }
+.ratio-grid .rv { font-weight: 700; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }

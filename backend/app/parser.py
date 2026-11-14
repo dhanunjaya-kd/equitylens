@@ -90,6 +90,27 @@ def _section_table(soup: BeautifulSoup, section_id: str) -> Optional[Tag]:
     return None
 
 
+def _to_md(el: Tag) -> str:
+    """Rich 'key points' block -> light markdown (paragraphs, bold), citation marks removed."""
+    el = BeautifulSoup(str(el), "lxml")
+    for sup in el.find_all("sup"):
+        sup.decompose()
+    for b in el.find_all(["strong", "b"]):
+        t = b.get_text(" ", strip=True)
+        b.replace_with(f"**{t}**" if t else "")
+    for br in el.find_all("br"):
+        br.replace_with("\n")
+    blocks = []
+    for p in el.find_all(["p", "li", "h3", "h4"]):
+        t = re.sub(r"[ \t]+", " ", p.get_text("", strip=False)).strip()
+        t = re.sub(r"\s*\n\s*", "\n", t)
+        if t:
+            blocks.append(("- " + t) if p.name == "li" else t)
+    if not blocks:
+        blocks = [re.sub(r"\s+", " ", el.get_text(" ", strip=True))]
+    return "\n\n".join(blocks)[:12000]
+
+
 def _parse_top_ratios(soup: BeautifulSoup) -> dict:
     out: dict = {}
     keymap = {
@@ -157,7 +178,9 @@ def parse_company(html: str, symbol: str = "") -> dict:
         if el and _text(el):
             about = _text(el)
             break
-    key_points = _text(soup.select_one(".company-profile .commentary")) or ""
+    kp_el = soup.select_one(".company-profile .commentary") or soup.select_one(".commentary")
+    key_points = _text(kp_el) if kp_el else ""
+    key_points_md = _to_md(kp_el) if kp_el else ""
 
     bse_code = nse_symbol = website = None
     for a in soup.select(".company-links a, a[href]"):
@@ -201,6 +224,7 @@ def parse_company(html: str, symbol: str = "") -> dict:
         "website": website,
         "about": about,
         "key_points": key_points,
+        "key_points_md": key_points_md,
         "sector_path": sector_path,
         "ratios": _parse_top_ratios(soup),
         "tables": tables,

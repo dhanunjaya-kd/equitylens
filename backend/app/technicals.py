@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import statistics
 import time
 from typing import Optional
 from urllib.parse import quote
@@ -328,6 +329,139 @@ def summarise(c, e20, e50, e200, rs, mline, msig, mhist, st_trend, ax, pdi, mdi,
     return {"label": label, "tone": tone, "bullish": bull, "bearish": bear, "checks": checks}
 
 
+# ------------------------------------------------------------------ outlook
+def _pct(vals: list[float], q: float) -> Optional[float]:
+    if not vals:
+        return None
+    v = sorted(vals)
+    k = (len(v) - 1) * q
+    f = math.floor(k)
+    c = min(f + 1, len(v) - 1)
+    return v[f] + (v[c] - v[f]) * (k - f)
+
+
+def _future_dates(last: str, n: int, weekly: bool) -> list[str]:
+    d = dt.date.fromisoformat(last)
+    out = []
+    while len(out) < n:
+        d += dt.timedelta(days=7 if weekly else 1)
+        if weekly or d.weekday() < 5:
+            out.append(d.isoformat())
+    return out
+
+
+def outlook(t, h, l, c, e50, e200, rs, ml, ms, levels, interval: str) -> dict:
+    """What the chart's own history says about the next months. Not a prediction:
+    a volatility range plus how this stock behaved after the same setup before."""
+    weekly = interval == "1wk"
+    n = len(c)
+    i = n - 1
+    yr = 52 if weekly else 252
+    hz = [("1 month", 4), ("3 months", 13), ("6 months", 26)] if weekly else [("1 month", 21), ("3 months", 63), ("6 months", 126)]
+
+    # -- volatility cone (no direction assumed)
+    rets = [math.log(c[k] / c[k - 1]) for k in range(max(1, n - yr), n) if c[k - 1] > 0 and c[k] > 0]
+    sd = statistics.pstdev(rets) if len(rets) > 20 else None
+    cone, cone_pts = [], []
+    if sd:
+        z80, z68 = 1.2816, 1.0
+        for label, k in hz:
+            s_ = sd * math.sqrt(k)
+            cone.append({"horizon": label, "low80": round(c[i] * math.exp(-z80 * s_), 2), "high80": round(c[i] * math.exp(z80 * s_), 2),
+                         "low68": round(c[i] * math.exp(-z68 * s_), 2), "high68": round(c[i] * math.exp(z68 * s_), 2),
+                         "move68_pct": round((math.exp(s_) - 1) * 100, 1)})
+        steps = hz[-1][1]
+        for k, d in enumerate(_future_dates(t[i], steps, weekly), start=1):
+            s_ = sd * math.sqrt(k)
+            cone_pts.append({"t": d, "hi": round(c[i] * math.exp(z80 * s_), 2), "lo": round(c[i] * math.exp(-z80 * s_), 2)})
+
+    # -- historical analogs: same trend/momentum setup as today
+    def state(k):
+        if e200[k] is None or e50[k] is None or rs[k] is None or ml[k] is None or ms[k] is None:
+            return None
+        r = rs[k]
+        return (c[k] > e200[k], e50[k] > e200[k], 0 if r < 40 else 1 if r <= 60 else 2, ml[k] > ms[k])
+
+    now = state(i)
+    names = ["price vs 200 EMA", "50 vs 200 EMA", "RSI zone", "MACD vs signal"]
+    analogs, used_keys = None, None
+    if now:
+        for keys in ((0, 1, 2, 3), (0, 1, 2), (0, 1)):
+            res = []
+            for label, k in hz:
+                fw, base = [], []
+                for j in range(n - k):
+                    sj = state(j)
+                    if sj is None:
+                        continue
+                    r = (c[j + k] / c[j] - 1) * 100
+                    base.append(r)
+                    if all(sj[q] == now[q] for q in keys):
+                        fw.append(r)
+                res.append((label, fw, base))
+            if min(len(fw) for _, fw, _ in res) >= 20:
+                used_keys = keys
+                analogs = [{
+                    "horizon": label, "count": len(fw), "median": round(_pct(fw, .5), 1), "p10": round(_pct(fw, .1), 1),
+                    "p90": round(_pct(fw, .9), 1), "pct_up": round(sum(1 for x in fw if x > 0) / len(fw) * 100),
+                    "all_median": round(_pct(base, .5), 1), "all_pct_up": round(sum(1 for x in base if x > 0) / len(base) * 100),
+                } for label, fw, base in res]
+                break
+    zone = {0: "below 40", 1: "40-60", 2: "above 60"}
+    setup = None
+    if now:
+        setup = [f"Price {'above' if now[0] else 'below'} 200 EMA", f"50 EMA {'above' if now[1] else 'below'} 200 EMA",
+                 f"RSI {zone[now[2]]}", f"MACD {'above' if now[3] else 'below'} signal"]
+
+    # -- if / then levels
+    px = c[i]
+    res_ = levels.get("resistance") or []
+    sup = levels.get("support") or []
+    hi52, lo52 = max(h[-yr:]), min(l[-yr:])
+    r1 = res_[0] if res_ else round(hi52, 2)
+    r2 = res_[1] if len(res_) > 1 else round(hi52, 2)
+    s1 = sup[0] if sup else round(lo52, 2)
+    s2 = sup[1] if len(sup) > 1 else round(lo52, 2)
+    scenarios = [
+        {"kind": "bull", "title": f"Bullish if it closes above ₹{r1:,.0f}",
+         "text": f"That clears the nearest resistance ({(r1/px-1)*100:+.1f}%). Next zone ₹{max(r2, r1):,.0f}"
+                 + (f", then the 52-week high ₹{hi52:,.0f}." if hi52 > max(r1, r2) * 1.01 else ".")
+                 + (" A move back above the 200 EMA would also turn the long-term trend up." if e200[i] and px < e200[i] else "")},
+        {"kind": "range", "title": f"Sideways between ₹{s1:,.0f} and ₹{r1:,.0f}",
+         "text": "While price stays inside this band, the chart is undecided. Wait for a close outside it."},
+        {"kind": "bear", "title": f"Bearish if it closes below ₹{s1:,.0f}",
+         "text": f"That breaks the nearest support ({(s1/px-1)*100:+.1f}%). Next support ₹{min(s2, s1):,.0f}"
+                 + (f", then the 52-week low ₹{lo52:,.0f}." if lo52 < min(s1, s2) * 0.99 else ".")},
+    ]
+
+    # -- chart story
+    look = min(yr, i)
+    chg = (px / c[i - look] - 1) * 100 if look else 0
+    story = [f"Over the last {'year' if look >= yr else f'{look} bars'} the price {'rose' if chg >= 0 else 'fell'} {abs(chg):.1f}%."]
+    story.append(f"It is {abs(px/hi52-1)*100:.1f}% below its 52-week high (₹{hi52:,.0f}) and {abs(px/lo52-1)*100:.1f}% above its 52-week low (₹{lo52:,.0f}).")
+    if e50[i] and e200[i]:
+        pos = ("above both" if px > e50[i] and px > e200[i] else "below both" if px < e50[i] and px < e200[i] else
+               "between")
+        u = "week" if weekly else "day"
+        story.append(f"Price is {pos} its 50-{u} (₹{e50[i]:,.0f}) and 200-{u} (₹{e200[i]:,.0f}) averages"
+                     + (" — sellers have had the upper hand." if pos == "below both" else " — buyers are in control." if pos == "above both" else " — the trend is mixed."))
+    if rs[i] is not None:
+        story.append(f"RSI is {rs[i]:.0f}: " + ("stretched, short-term pullbacks are common." if rs[i] >= 70 else
+                     "oversold, bounces often start here but need confirmation." if rs[i] <= 30 else
+                     "momentum is positive." if rs[i] >= 55 else "momentum is weak." if rs[i] <= 45 else "momentum is neutral."))
+    if analogs:
+        a3 = analogs[1]
+        story.append(f"In the past, after a setup like today's, the stock was higher 3 months later {a3['pct_up']}% of the time "
+                     f"(median {a3['median']:+.1f}%), versus {a3['all_pct_up']}% on an average day.")
+    if cone:
+        story.append(f"Based on its own volatility, a typical 3-month move is about ±{cone[1]['move68_pct']}% "
+                     f"(₹{cone[1]['low68']:,.0f} – ₹{cone[1]['high68']:,.0f}).")
+
+    return {"story": story, "scenarios": scenarios, "cone": cone, "cone_points": cone_pts,
+            "analogs": analogs, "setup": setup, "setup_used": [names[k] for k in (used_keys or ())],
+            "volatility_annual": round(sd * math.sqrt(52 if weekly else 252) * 100, 1) if sd else None}
+
+
 # ------------------------------------------------------------------ entry
 def r2(x):
     return None if x is None else round(x, 2)
@@ -365,6 +499,8 @@ def build(symbol: str, interval: str = "1d", refresh: bool = False) -> dict:
         "ret_6m": r2((c[i] / c[max(i - 126, 0)] - 1) * 100) if interval == "1d" else None,
         "ret_1y": r2((c[i] / yr[0] - 1) * 100) if yr else None,
     }
+    lv = swing_levels(h, l, c) if len(c) > 20 else {"support": [], "resistance": []}
+    look = outlook(t, h, l, c, e50, e200, rs, ml, ms, lv, interval) if len(c) > 260 or (interval == "1wk" and len(c) > 60) else None
     # indicators were computed on the full history; send the last ~5 years of daily bars
     keep = 1300 if interval == "1d" else len(c)
     cut = max(len(c) - keep, 0)
@@ -375,7 +511,7 @@ def build(symbol: str, interval: str = "1d", refresh: bool = False) -> dict:
         "bb_up": [r2(x) for x in bb_up], "bb_lo": [r2(x) for x in bb_lo],
         "rsi": [r2(x) for x in rs], "macd": [r2(x) for x in ml], "macd_signal": [r2(x) for x in ms], "macd_hist": [r2(x) for x in mh],
         "st": [r2(x) for x in st], "st_trend": st_tr, "adx": [r2(x) for x in ax], "pdi": [r2(x) for x in pdi], "mdi": [r2(x) for x in mdi],
-        "markers": markers[-12:], "levels": swing_levels(h, l, c) if len(c) > 20 else {"support": [], "resistance": []},
+        "markers": markers[-12:], "levels": lv, "outlook": look,
         "stats": stats,
         "summary": summarise(c, e20, e50, e200, rs, ml, ms, mh, st_tr, ax, pdi, mdi, bb_up, bb_lo, v, ohlc),
     }

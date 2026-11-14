@@ -102,6 +102,18 @@ def test_demo_features_end_to_end():
     assert "guidance" in ai.read_document(rep, "https://example.com/x.pdf", "Concall")["text"].lower()
 
 
+def test_chart_outlook():
+    from app import technicals
+    t = technicals.build("TESTCO")
+    o = t["outlook"]
+    assert o["story"] and len(o["scenarios"]) == 3 and len(o["cone"]) == 3
+    assert all(c["low80"] < t["c"][-1] < c["high80"] for c in o["cone"])
+    assert o["analogs"] and all(a["count"] >= 20 for a in o["analogs"])
+    assert o["cone_points"][0]["t"] > t["t"][-1]
+    rep = service.build_report("TESTCO")
+    assert ai.explain_chart(rep, t)["text"]
+
+
 if __name__ == "__main__":
     import requests as _r
     orig = _r.post
