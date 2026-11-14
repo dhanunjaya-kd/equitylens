@@ -369,9 +369,13 @@ def _demo_answer(system: str, messages: list[dict]) -> str:
         d = json.loads(m.group(1)) if m else {}
     except json.JSONDecodeError:
         d = {}
-    name = (d.get("company") or {}).get("name", "This company")
+    comp = d.get("company")
+    name = comp.get("name", "This company") if isinstance(comp, dict) else (comp or "This company")
     met = d.get("metrics", {})
     q = messages[-1]["content"]
+    if "chart_story" in d:
+        story = "\n".join(f"- {x}" for x in (d.get("chart_story") or []))
+        return f"## What the chart is saying now\n{story}\n\n_(Demo mode — add an API key in ⚙️ Settings for a real AI explanation.)_"
     if "ROLE: You are the BULL" in system:
         return f"- **{met.get('profit_cagr_5')}%** profit CAGR over 5 years\n- ROCE near **{met.get('roce_avg_5')}%**\n- Almost no debt (D/E **{met.get('debt_to_equity')}**)\n\nBiggest risk: valuation already prices in growth."
     if "ROLE: You are the BEAR" in system:
