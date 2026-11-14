@@ -201,3 +201,81 @@ if __name__ == "__main__":
     bank()
     (HERE / "peers.html").write_text(PEERS, encoding="utf-8")
     print("fixtures written to", HERE)
+
+
+# ---------------------------------------------------------------- US (SEC EDGAR format)
+def us_company():
+    import datetime as dt
+    import json
+    fx = HERE
+    facts = {"us-gaap": {}, "dei": {}}
+
+    def put(tag, unit, entry, ns="us-gaap"):
+        facts[ns].setdefault(tag, {"label": tag, "units": {}})["units"].setdefault(unit, []).append(entry)
+
+    years = list(range(2014, 2026))  # fiscal years ending Sep 30
+    rev = {y: 20000e6 * 1.10 ** (y - 2014) for y in years}
+    for y in years:
+        start, end = f"{y-1}-10-01", f"{y}-09-30"
+        filed, nxt_filed = f"{y}-11-05", f"{y+1}-11-05"
+        tag = "SalesRevenueNet" if y < 2018 else "RevenueFromContractWithCustomerExcludingAssessedTax"
+        r = rev[y]; op = r * 0.22; dep = r * 0.04; intr = 150e6; pbt = op - intr + 80e6; ni = pbt * 0.79
+        shares = 1000e6 - (y - 2014) * 5e6; eps = ni / shares
+        for f_ in (filed, nxt_filed):  # same value repeated as a prior-year comparative in next 10-K
+            base = {"start": start, "end": end, "fy": y, "fp": "FY", "form": "10-K", "filed": f_}
+            put(tag, "USD", {**base, "val": r}); put("OperatingIncomeLoss", "USD", {**base, "val": op})
+            put("DepreciationDepletionAndAmortization", "USD", {**base, "val": dep}); put("InterestExpense", "USD", {**base, "val": intr})
+            put("NonoperatingIncomeExpense", "USD", {**base, "val": 80e6})
+            put("IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest", "USD", {**base, "val": pbt})
+            put("IncomeTaxExpenseBenefit", "USD", {**base, "val": pbt * 0.21}); put("NetIncomeLoss", "USD", {**base, "val": ni})
+            put("EarningsPerShareDiluted", "USD/shares", {**base, "val": round(eps, 2)})
+            put("CommonStockDividendsPerShareDeclared", "USD/shares", {**base, "val": round(eps * 0.3, 2)})
+            put("NetCashProvidedByUsedInOperatingActivities", "USD", {**base, "val": ni * 1.15})
+            put("NetCashProvidedByUsedInInvestingActivities", "USD", {**base, "val": -ni * 0.5})
+            put("NetCashProvidedByUsedInFinancingActivities", "USD", {**base, "val": -ni * 0.55})
+            put("CostOfRevenue", "USD", {**base, "val": r * 0.6})
+            put("WeightedAverageNumberOfDilutedSharesOutstanding", "shares", {**base, "val": shares})
+            inst = {"end": end, "fy": y, "fp": "FY", "form": "10-K", "filed": f_}
+            eq = 30000e6 * 1.08 ** (y - 2014)
+            put("StockholdersEquity", "USD", {**inst, "val": eq}); put("CommonStockValue", "USD", {**inst, "val": 10e6})
+            put("Assets", "USD", {**inst, "val": eq * 1.9}); put("Liabilities", "USD", {**inst, "val": eq * 0.9})
+            put("LongTermDebtNoncurrent", "USD", {**inst, "val": 9000e6 - (y - 2014) * 300e6})
+            put("LongTermDebtCurrent", "USD", {**inst, "val": 500e6})
+            put("PropertyPlantAndEquipmentNet", "USD", {**inst, "val": eq * 0.5})
+            put("AccountsReceivableNetCurrent", "USD", {**inst, "val": r * 0.12})
+            put("InventoryNet", "USD", {**inst, "val": r * 0.6 * 0.15})
+        # quarters: Q1-Q3 as 3-month values plus 6/9-month YTD values that must be ignored
+        q_ends = [f"{y-1}-12-31", f"{y}-03-31", f"{y}-06-30"]
+        q_starts = [f"{y-1}-10-01", f"{y}-01-01", f"{y}-04-01"]
+        for qi, (qs, qe) in enumerate(zip(q_starts, q_ends)):
+            share = [0.26, 0.24, 0.24][qi]
+            base = {"start": qs, "end": qe, "fy": y, "fp": f"Q{qi+1}", "form": "10-Q", "filed": qe[:8] + "28"}
+            put(tag, "USD", {**base, "val": r * share})
+            put("OperatingIncomeLoss", "USD", {**base, "val": r * share * 0.22})
+            put("DepreciationDepletionAndAmortization", "USD", {**base, "val": r * share * 0.04})
+            put("NetIncomeLoss", "USD", {**base, "val": ni * share})
+            put("EarningsPerShareDiluted", "USD/shares", {**base, "val": round(eps * share, 2)})
+            if qi > 0:  # YTD duration (6 or 9 months)
+                put(tag, "USD", {**base, "start": f"{y-1}-10-01", "val": r * sum([0.26, 0.24, 0.24][:qi+1])})
+    # latest partial year: Q1 FY2026 (Oct-Dec 2025)
+    put("RevenueFromContractWithCustomerExcludingAssessedTax", "USD", {"start": "2025-10-01", "end": "2025-12-31", "fy": 2026, "fp": "Q1", "form": "10-Q", "filed": "2026-01-30", "val": rev[2025] * 1.1 * 0.26})
+    put("NetIncomeLoss", "USD", {"start": "2025-10-01", "end": "2025-12-31", "fy": 2026, "fp": "Q1", "form": "10-Q", "filed": "2026-01-30", "val": rev[2025] * 1.1 * 0.26 * 0.15})
+    put("EarningsPerShareDiluted", "USD/shares", {"start": "2025-10-01", "end": "2025-12-31", "fy": 2026, "fp": "Q1", "form": "10-Q", "filed": "2026-01-30", "val": 1.2})
+    put("OperatingIncomeLoss", "USD", {"start": "2025-10-01", "end": "2025-12-31", "fy": 2026, "fp": "Q1", "form": "10-Q", "filed": "2026-01-30", "val": rev[2025] * 1.1 * 0.26 * 0.22})
+    put("EntityCommonStockSharesOutstanding", "shares", {"end": "2026-01-20", "fy": 2026, "fp": "Q1", "form": "10-Q", "filed": "2026-01-30", "val": 940e6}, ns="dei")
+    (fx / "us_facts_TSTUS.json").write_text(json.dumps({"cik": 1234567, "entityName": "Test Corp US", "facts": facts}), encoding="utf-8")
+    subs = {"cik": "1234567", "name": "Test Corp US", "tickers": ["TSTUS"], "exchanges": ["Nasdaq"], "sic": "3571",
+            "sicDescription": "Electronic Computers", "fiscalYearEnd": "0930", "website": "",
+            "filings": {"recent": {
+                "accessionNumber": ["0001234567-25-000010", "0001234567-26-000002", "0001234567-26-000005"],
+                "filingDate": ["2025-11-05", "2026-01-30", "2026-02-10"], "reportDate": ["2025-09-30", "2025-12-31", ""],
+                "form": ["10-K", "10-Q", "8-K"], "primaryDocument": ["tstus-20250930.htm", "tstus-20251231.htm", "ex99.htm"],
+                "primaryDocDescription": ["10-K", "10-Q", "Results of Operations"]}}}
+    (fx / "us_subs_TSTUS.json").write_text(json.dumps(subs), encoding="utf-8")
+    (fx / "us_tickers.json").write_text(json.dumps({"0": {"cik_str": 1234567, "ticker": "TSTUS", "title": "TEST CORP US"},
+                                                     "1": {"cik_str": 7654321, "ticker": "NOFIN", "title": "No Filings Inc"}}), encoding="utf-8")
+
+
+if __name__ == "__main__":
+    us_company()
+    print("US fixtures written")

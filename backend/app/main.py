@@ -13,7 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ai, config, scraper, service, store, technicals, universe
+from . import ai, config, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
@@ -29,7 +29,12 @@ def health():
 
 
 @app.get("/api/search")
-def search(q: str = Query(..., min_length=1)):
+def search(q: str = Query(..., min_length=1), market: str = "IN"):
+    if market.upper() == "US":
+        try:
+            return {"results": us.search(q), "source": "sec"}
+        except us.USFetchError as e:
+            raise HTTPException(502, str(e))
     try:
         res = scraper.search(q)
         if res:
@@ -45,6 +50,8 @@ def stock(symbol: str, refresh: bool = False):
         return service.build_report(symbol, refresh=refresh)
     except scraper.NotFound:
         raise HTTPException(404, f"'{symbol}' not found. Search by company name and pick from the list.")
+    except us.USFetchError as e:
+        raise HTTPException(404 if ("isn't a US-listed" in str(e) or "Not found" in str(e)) else 502, str(e))
     except scraper.FetchError as e:
         raise HTTPException(502, str(e))
 
@@ -63,7 +70,7 @@ def chart(symbol: str, interval: str = "1d", refresh: bool = False):
 def _report_and_tech(symbol: str):
     try:
         rep = service.build_report(symbol)
-    except scraper.FetchError as e:
+    except (scraper.FetchError, us.USFetchError) as e:
         raise HTTPException(502, str(e))
     try:
         tech = technicals.build(rep["symbol"])
@@ -174,8 +181,11 @@ def compare(symbols: str):
 
 
 @app.get("/api/rankings")
-def rankings(sort: str = "overall", verdict: Optional[str] = None, min_mcap: float = 0, q: Optional[str] = None):
+def rankings(sort: str = "overall", verdict: Optional[str] = None, min_mcap: float = 0, q: Optional[str] = None,
+             market: Optional[str] = None):
     rows = store.all_rankings()
+    if market:
+        rows = [r for r in rows if r.get("market", "IN") == market.upper()]
     if verdict:
         rows = [r for r in rows if r.get("verdict") == verdict]
     if min_mcap:
@@ -189,8 +199,8 @@ def rankings(sort: str = "overall", verdict: Optional[str] = None, min_mcap: flo
 
 
 @app.post("/api/scan/start")
-def scan_start(limit: Optional[int] = None):
-    return service.start_scan(limit)
+def scan_start(limit: Optional[int] = None, market: str = "IN"):
+    return service.start_scan(limit, market=market.upper())
 
 
 @app.post("/api/scan/stop")

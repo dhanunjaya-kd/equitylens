@@ -16,6 +16,7 @@ import math
 from typing import Optional
 
 from .analysis import Table, _valid, aligned, r1
+from .money import sym, unit
 
 Num = Optional[float]
 
@@ -74,26 +75,26 @@ def piotroski(rows: list[dict], fin: bool) -> dict:
         checks.append({"group": group, "name": name, "pass": bool(ok) if ok is not None else None, "detail": detail, "proxy": proxy})
 
     roa_c, roa_p = _div(cur["np"], cur["ta"]), _div(prv["np"], prv["ta"])
-    add("Profitability", "Positive net profit", _valid(cur["np"]) and cur["np"] > 0, f"Net profit ₹{_f(cur['np'])} Cr")
+    add("Profitability", "Positive net profit", _valid(cur["np"]) and cur["np"] > 0, f"Net profit {sym()}{_f(cur['np'])} {unit()}")
     if fin:
-        add("Profitability", "Positive operating profit", _valid(cur["op"]) and cur["op"] > 0, f"Financing profit ₹{_f(cur['op'])} Cr")
+        add("Profitability", "Positive operating profit", _valid(cur["op"]) and cur["op"] > 0, f"Financing profit {sym()}{_f(cur['op'])} {unit()}")
     else:
-        add("Profitability", "Positive operating cash flow", _valid(cur["cfo"]) and cur["cfo"] > 0, f"Operating cash ₹{_f(cur['cfo'])} Cr")
+        add("Profitability", "Positive operating cash flow", _valid(cur["cfo"]) and cur["cfo"] > 0, f"Operating cash {sym()}{_f(cur['cfo'])} {unit()}")
     add("Profitability", "Return on assets improved", _valid(roa_c) and _valid(roa_p) and roa_c > roa_p,
         f"ROA {_p(roa_c)} vs {_p(roa_p)} last year")
     if fin:
         add("Profitability", "Profit grew", _valid(cur["np"]) and _valid(prv["np"]) and cur["np"] > prv["np"],
-            f"₹{_f(cur['np'])} vs ₹{_f(prv['np'])} Cr")
+            f"{sym()}{_f(cur['np'])} vs {sym()}{_f(prv['np'])} {unit()}")
     else:
         add("Profitability", "Cash flow beats profit (low accruals)", _valid(cur["cfo"]) and _valid(cur["np"]) and cur["cfo"] > cur["np"],
-            f"Operating cash ₹{_f(cur['cfo'])} vs profit ₹{_f(cur['np'])} Cr")
+            f"Operating cash {sym()}{_f(cur['cfo'])} vs profit {sym()}{_f(cur['np'])} {unit()}")
 
     if fin:
         lev_c, lev_p = _div(cur["equity"], cur["ta"]), _div(prv["equity"], prv["ta"])
         add("Safety", "Capital cushion improved", _valid(lev_c) and _valid(lev_p) and lev_c >= lev_p,
             f"Equity/assets {_p(lev_c)} vs {_p(lev_p)}")
         add("Safety", "Deposits grew", _valid(cur["deposits"]) and _valid(prv["deposits"]) and cur["deposits"] > prv["deposits"],
-            f"₹{_f(cur['deposits'])} vs ₹{_f(prv['deposits'])} Cr")
+            f"{sym()}{_f(cur['deposits'])} vs {sym()}{_f(prv['deposits'])} {unit()}")
     else:
         lev_c, lev_p = _div(cur["borrow"], cur["ta"]), _div(prv["borrow"], prv["ta"])
         add("Safety", "Debt fell (vs assets)", _valid(lev_c) and _valid(lev_p) and (lev_c <= lev_p or lev_c < 0.02),

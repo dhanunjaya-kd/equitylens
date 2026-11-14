@@ -9,15 +9,16 @@
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-build-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 
+![Markets](https://img.shields.io/badge/markets-🇮🇳_India_·_🇺🇸_US-ff9933?style=flat-square)
 ![Data](https://img.shields.io/badge/data-no_API_keys_needed-22c55e?style=flat-square)
 ![Phone first](https://img.shields.io/badge/📱_phone-first-2dd4bf?style=flat-square)
-![NIFTY 500](https://img.shields.io/badge/scan-NIFTY_500-f59e0b?style=flat-square)
+![Scans](https://img.shields.io/badge/scan-NIFTY_500_·_S%26P_500-f59e0b?style=flat-square)
 ![Forensics](https://img.shields.io/badge/forensics-Piotroski·Altman·Beneish-ef4444?style=flat-square)
 ![Indicators](https://img.shields.io/badge/chart-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-29_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-36_passing-22c55e?style=flat-square)
 
-### 🔎 Search any Indian stock → a complete, explained research report in seconds
+### 🔎 Search any 🇮🇳 Indian or 🇺🇸 US stock → a complete, explained research report in seconds
 
 **Not just numbers: a verdict, the reasons, the risks, what the chart says next, and what has to go right for 3, 5 and 10 years.**
 
@@ -43,6 +44,7 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 | **Peer ranking** bars (where it stands on ROCE, P/E, growth…) | ➖ | ✅ |
 | **AI analyst**: research note, chat, bull-vs-bear debate, guidance check, report reader | ➖ | ✅ |
 | Your own **screens on 45+ fields** incl. forensic & fair-value fields | ➖ | ✅ |
+| **🇮🇳 India + 🇺🇸 US** in one app, one tap to switch, same analysis for both | ➖ | ✅ |
 | Runs on **your** laptop, your data and keys stay with you | ➖ | ✅ |
 
 <sub>➖ = not offered, or only partly, by most free sites.</sub>
@@ -72,9 +74,35 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 <td align="center"><img src="docs/screenshots/guidance.png" width="230"/><br/><b>🎯 Guidance check</b></td>
 <td align="center"><img src="docs/screenshots/screener.png" width="230"/><br/><b>🧮 Screener</b></td>
 </tr>
+<tr>
+<td align="center"><img src="docs/screenshots/us_search.png" width="230"/><br/><b>🇮🇳 / 🇺🇸 one-tap market switch</b></td>
+<td align="center"><img src="docs/screenshots/us_stock.png" width="230"/><br/><b>🇺🇸 US stock in $ (SEC filings)</b></td>
+<td align="center"><img src="docs/screenshots/chart_outlook.png" width="230"/><br/><b>🔭 Same depth for both markets</b></td>
+</tr>
 </table>
 
-<sub>Screenshots use the built-in sample company (demo mode, offline AI). Real stocks show live numbers.</sub>
+<sub>Screenshots use built-in sample companies (demo mode, offline AI). Real stocks show live numbers.</sub>
+
+---
+
+## 🇮🇳 / 🇺🇸 Two markets, one app
+
+Tap **🇮🇳 IND** or **🇺🇸 US** at the top. Search, Top Picks and Screener switch to that market; every stock page works the same way.
+
+| | 🇮🇳 India | 🇺🇸 United States |
+|---|---|---|
+| Stocks | NSE & BSE | NYSE & Nasdaq (every SEC filer) |
+| Fundamentals | screener.in public pages | **SEC EDGAR**: official 10-K / 10-Q XBRL filings, free |
+| Prices & chart | Yahoo Finance | Yahoo Finance |
+| Money shown in | ₹ crore | US$ million (per-share in $) |
+| Top Picks scan | NIFTY 500 | S&P 500 |
+| Reports tab & AI reader | Annual reports, concalls, announcements | 10-K, 10-Q, 8-K filings |
+| Ownership | Promoter / FII / DII trend | Not reported the same way, so ownership is left out of the score |
+| Peers | Source's peer group | Same-industry companies from your S&P 500 scan |
+
+> [!TIP]
+> For US stocks the SEC asks every user to identify themselves. Put your name and contact in `backend/.env`
+> as `EQL_SEC_USER_AGENT` (see `backend/.env.example`). It's only sent to sec.gov.
 
 ---
 
@@ -97,7 +125,7 @@ Most stock sites show you the numbers. EquityLens **reads them for you**, explai
 
 ### 🏆 Top Picks · 🧮 Screener · ⭐ Watchlist · ⚖️ Compare
 
-- 🏆 **Top Picks:** scans the whole **NIFTY 500** and ranks every company by the same rules, plus ✨ "explain this list with AI"
+- 🏆 **Top Picks:** scans the whole **NIFTY 500** 🇮🇳 or **S&P 500** 🇺🇸 and ranks every company by the same rules, plus ✨ "explain this list with AI"
 - 🧮 **Screener:** 9 ready-made screens and your own rules on **45+ fields**, saved on your phone
   > 💎 Quality compounders · 🏷️ Value with quality · 📉 Below fair value · 🏦 Holding-company discount · 🧱 Debt-free growers · 🚀 Piotroski 8+ · 🤝 Promoters buying · ⏳ Cheap vs own history · 🌳 10-year compounders
 - ⭐ **Watchlist** and ⚖️ **Compare up to 4 stocks** side by side
@@ -160,11 +188,12 @@ python run.py
 
 | # | Do this | Why |
 |:-:|---|---|
-| 1️⃣ | `python selftest.py` in `backend/` | Fetches RELIANCE, HDFCBANK, ITC live and prints what was read |
+| 1️⃣ | `python selftest.py` in `backend/` | Fetches RELIANCE, HDFCBANK, ITC and Apple (US) live and prints what was read |
 | 2️⃣ | Search any stock in the app | Full report in ~5 s, cached for 24 h (↻ Refresh fetches new data) |
 | 3️⃣ | ⚙️ Settings → pick an AI provider | Claude / ChatGPT / Gemini key, or Ollama for free |
-| 4️⃣ | Top Picks → **Quick scan (30)** | See the ranking work in ~3 min |
-| 5️⃣ | Top Picks → **Scan NIFTY 500** (or `python scan.py`) | Full ranking in ~40–60 min. Re-run weekly or after results season |
+| 🇺🇸 | Add `EQL_SEC_USER_AGENT` to `backend/.env` | Needed once for US stocks (SEC rule) |
+| 4️⃣ | Top Picks → **Quick scan (30)** | See the ranking work in ~3 min (in whichever market is selected) |
+| 5️⃣ | Top Picks → **Scan NIFTY 500 / S&P 500** | Full ranking in ~30–60 min. Re-run weekly or after results season |
 
 ### 📱 Use it on your phone
 
@@ -178,7 +207,7 @@ python run.py
 
 ```mermaid
 flowchart LR
-    A[🔎 Search stock]:::blue --> B[🌐 Public pages<br/>screener.in]:::teal
+    A[🔎 Search stock<br/>🇮🇳 / 🇺🇸]:::blue --> B[🌐 🇮🇳 screener.in<br/>🇺🇸 SEC EDGAR]:::teal
     A --> C[📈 Daily prices<br/>Yahoo Finance]:::teal
     B --> D[🧩 Parser<br/>10-12y tables]:::purple
     C --> E[📐 Indicators<br/>+ chart outlook]:::purple
@@ -244,7 +273,8 @@ flowchart LR
 | `EQL_SCAN_DELAY` | `3` | Seconds between companies in a scan (keep it polite) |
 | `EQL_PORT` | `8600` | Web port |
 | `EQL_AI_PROVIDER` | `claude` | `claude` · `openai` · `gemini` · `ollama` · `demo` |
-| `EQL_DEMO` | `0` | `1` = offline demo with sample companies **TESTCO** and **TESTBANK** |
+| `EQL_SEC_USER_AGENT` | — | Your name + contact for SEC EDGAR (US stocks) |
+| `EQL_DEMO` | `0` | `1` = offline demo with sample companies **TESTCO**, **TESTBANK** and 🇺🇸 **TSTUS** |
 
 AI keys and models: see `backend/.env.example`, or just use ⚙️ Settings.
 </details>
@@ -264,6 +294,7 @@ python run_tests.py
 | `test_stress.py` | 12 broken / partial-data cases (no cash flow, 2 years only, negative equity, all losses, no price…) never crash and are never over-rated |
 | `test_api.py` | Every endpoint, including error paths: bad symbols, missing keys, blocked document links |
 | `test_ai.py` | Exact request format for Claude, OpenAI, Gemini and Ollama; friendly errors; masked keys; every AI feature end to end |
+| `test_us.py` | SEC filings read correctly: revenue tag changes merged, 6/9-month YTD figures ignored, Q4 derived, TTM, ratios, $ throughout |
 
 ---
 
@@ -274,7 +305,9 @@ equitylens/
 ├── 🟦 start.bat              one-click start (Windows)
 ├── 🐍 backend/
 │   ├── app/
-│   │   ├── scraper.py        public-page fetcher (paced, retries, cached)
+│   │   ├── scraper.py        🇮🇳 public-page fetcher (paced, retries, cached)
+│   │   ├── us.py             🇺🇸 SEC EDGAR → same tables (10-K/10-Q, TTM, Q4, filings)
+│   │   ├── money.py          ₹ Cr / $ M currency context
 │   │   ├── parser.py         HTML → clean tables, key points, peers, documents
 │   │   ├── analysis.py       metrics, scores, flags, scenarios, verdict, 10-year story
 │   │   ├── forensics.py      Piotroski · Altman · Beneish · DuPont
@@ -284,7 +317,7 @@ equitylens/
 │   │   ├── service.py        fetch → cache → analyse, NIFTY 500 scan
 │   │   └── main.py           API + serves the web app
 │   ├── static/               prebuilt app (no npm needed to run)
-│   ├── tests/                29 offline tests + sample company pages
+│   ├── tests/                36 offline tests + sample Indian & US company data
 │   └── run.py · scan.py · selftest.py · run_tests.py
 ├── ⚛️ frontend/              React source (npm install && npm run build)
 └── 🖼️ docs/                  banner + screenshots
@@ -302,7 +335,7 @@ equitylens/
 ---
 
 > [!NOTE]
-> Fundamentals come from the same public company pages you'd open in a browser (screener.in), and chart prices from Yahoo Finance's public chart feed. No logins or paid data. If a site changes its layout, `selftest.py` shows exactly which section broke. Keep the app on your own network (Tailscale) rather than exposing port 8600 to the internet, since Settings can change AI keys.
+> Indian fundamentals come from the same public company pages you'd open in a browser (screener.in), US fundamentals from the SEC's official EDGAR filings, and chart prices from Yahoo Finance's public chart feed. No logins or paid data. If a site changes its layout, `selftest.py` shows exactly which section broke. Keep the app on your own network (Tailscale) rather than exposing port 8600 to the internet, since Settings can change AI keys.
 
 > [!WARNING]
 > Everything is built from **past numbers and stated assumptions**. EquityLens is a research aid, **not investment advice**. Read the red flags and the company's own annual report before investing.

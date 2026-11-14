@@ -318,14 +318,14 @@ function RangeRow({ label, lo, hi, lo68, hi68, now }) {
   const p = (v) => `${((v - min) / (max - min)) * 100}%`
   return (
     <div style={{ margin: '12px 0 18px' }}>
-      <div className="row between small"><b>{label}</b><span className="muted">₹{num(lo)} – ₹{num(hi)}</span></div>
+      <div className="row between small"><b>{label}</b><span className="muted">{rs(lo)} – {rs(hi)}</span></div>
       <div style={{ position: 'relative', height: 14, marginTop: 6 }}>
         <div style={{ position: 'absolute', inset: '4px 0', background: 'var(--card2)', borderRadius: 99 }} />
         <div style={{ position: 'absolute', top: 4, bottom: 4, left: p(lo), width: `calc(${p(hi)} - ${p(lo)})`, background: '#2dd4bf33', borderRadius: 99 }} />
         <div style={{ position: 'absolute', top: 2, bottom: 2, left: p(lo68), width: `calc(${p(hi68)} - ${p(lo68)})`, background: '#2dd4bf88', borderRadius: 99 }} />
         <div style={{ position: 'absolute', top: -2, bottom: -2, left: p(now), width: 3, background: '#e6edf3', transform: 'translateX(-50%)' }} />
       </div>
-      <div className="row between small muted" style={{ marginTop: 2 }}><span>{signed((lo / now - 1) * 100, 0, '%')}</span><span>now ₹{num(now)}</span><span>{signed((hi / now - 1) * 100, 0, '%')}</span></div>
+      <div className="row between small muted" style={{ marginTop: 2 }}><span>{signed((lo / now - 1) * 100, 0, '%')}</span><span>now {rs(now)}</span><span>{signed((hi / now - 1) * 100, 0, '%')}</span></div>
     </div>
   )
 }

@@ -42,7 +42,7 @@ export default function Compare({ symbols }) {
             onKeyDown={(e) => e.key === 'Enter' && go(`compare?s=${input.replace(/\s/g, '').toUpperCase()}`)} />
           <button className="btn primary" onClick={() => go(`compare?s=${input.replace(/\s/g, '').toUpperCase()}`)}>Go</button>
         </div>
-        <div className="small muted" style={{ marginTop: 6 }}>Use NSE symbols separated by commas.</div>
+        <div className="small muted" style={{ marginTop: 6 }}>Comma-separated. Indian: NSE symbols (TCS, INFY). US: add US: (US:AAPL, US:MSFT). Money values stay in each stock's own currency.</div>
       </div>
       {busy && <Loading text="Researching all of them…" />}
       {!busy && items.length > 0 && (

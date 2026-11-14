@@ -8,7 +8,7 @@ import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import StockChart from './StockChart'
 import { StockAI } from './AI'
 import { KeyPoints, KeyRatios, LatestQuarter, StoryTimeline } from './OverviewExtra'
-import { ago, api, cr, go, num, ok, pct, recent, rs, scoreColor, signed, watchlist, x } from '../util'
+import { ago, api, cr, cur, flag, go, isUS, num, ok, pct, recent, rs, scoreColor, setCurrency, signed, ticker, unitLabel, unitWords, watchlist, x } from '../util'
 
 const TABS = [
   ['overview', 'Overview'], ['ai', '✨ AI'], ['chart', 'Chart'], ['future', 'Future 3·5·10y'], ['valuation', 'Valuation Lab'], ['forensics', 'Forensics'],
@@ -45,7 +45,7 @@ export default function Stock({ symbol, tab }) {
     setBusy(true); setErr(null)
     try {
       const r = await api(`/api/stock/${encodeURIComponent(symbol)}${refresh ? '?refresh=1' : ''}`)
-      setD(r); recent.add(r.symbol, r.company.name)
+      setCurrency(r.currency); setD(r); recent.add(r.symbol, r.company.name)
     } catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
   useEffect(() => { load() }, [symbol])
@@ -64,7 +64,7 @@ export default function Stock({ symbol, tab }) {
           <div className="grow">
             <h2 className="h-name">{c.name}</h2>
             <div className="small muted" style={{ margin: '4px 0 8px' }}>
-              {[c.nse_symbol && `NSE: ${c.nse_symbol}`, c.bse_code && `BSE: ${c.bse_code}`].filter(Boolean).join(' · ')}
+              {flag(d.symbol)} {isUS(d.symbol) ? `US: ${ticker(d.symbol)} · SEC filings` : [c.nse_symbol && `NSE: ${c.nse_symbol}`, c.bse_code && `BSE: ${c.bse_code}`].filter(Boolean).join(' · ')}
               {d.view === 'standalone' && ' · standalone numbers'}
             </div>
             <div>{(c.sector_path || []).map((s) => <span key={s} className="chip">{s}</span>)}</div>
@@ -293,7 +293,7 @@ function Financials({ d }) {
     <>
       <StoryTimeline d={d} />
       <div className="card">
-        <h3>Sales & net profit (₹ Cr, yearly)</h3>
+        <h3>Sales & net profit ({unitLabel()}, yearly)</h3>
         <div style={{ height: 230 }}>
           <ResponsiveContainer>
             <ComposedChart data={pl} margin={{ top: 6, right: 0, left: -6, bottom: 0 }}>
@@ -312,7 +312,7 @@ function Financials({ d }) {
       </div>
       <div className="grid-auto">
         <div className="card">
-          <h3>EPS (₹ per share)</h3>
+          <h3>EPS ({cur()} per share)</h3>
           <div style={{ height: 170 }}>
             <ResponsiveContainer>
               <AreaChart data={pl} margin={{ top: 6, right: 4, left: -14, bottom: 0 }}>
@@ -324,7 +324,7 @@ function Financials({ d }) {
           </div>
         </div>
         <div className="card">
-          <h3>Last quarters (₹ Cr)</h3>
+          <h3>Last quarters ({unitLabel()})</h3>
           <div style={{ height: 170 }}>
             <ResponsiveContainer>
               <BarChart data={q} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
@@ -344,7 +344,7 @@ function Financials({ d }) {
           ))}
         </div>
         <DataTable table={t[view]} />
-        <div className="small muted" style={{ marginTop: 6 }}>₹ crore unless marked. Scroll sideways for older years.</div>
+        <div className="small muted" style={{ marginTop: 6 }}>{unitWords()} unless marked. Scroll sideways for older years.</div>
       </div>
     </>
   )
@@ -391,7 +391,7 @@ function Quality({ d }) {
       {!fin && (
         <div className="grid-auto">
           <div className="card">
-            <h3>Profit vs operating cash (₹ Cr)</h3>
+            <h3>Profit vs operating cash ({unitLabel()})</h3>
             <div style={{ height: 190 }}>
               <ResponsiveContainer>
                 <BarChart data={cash} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
@@ -405,7 +405,7 @@ function Quality({ d }) {
             <div className="small muted">Healthy companies turn most of their profit into cash.</div>
           </div>
           <div className="card">
-            <h3>Cash left after investing (₹ Cr)</h3>
+            <h3>Cash left after investing ({unitLabel()})</h3>
             <div style={{ height: 190 }}>
               <ResponsiveContainer>
                 <BarChart data={fcf} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
@@ -444,6 +444,9 @@ function Quality({ d }) {
 // ================================================================ OWNERSHIP
 function Ownership({ d }) {
   const t = d.company.tables, m = d.analysis.metrics
+  if (isUS(d.symbol)) return (
+    <div className="card empty">🇺🇸 Promoter / FII / DII shareholding is an Indian disclosure.<br />US companies don't report it the same way, so the ownership score is left out for US stocks.</div>
+  )
   const data = series(t.shareholding_quarterly, [['Promoters', 'Promoter'], ['FIIs', 'FII'], ['DIIs', 'DII'], ['Public', 'Public'], ['Govt', 'Government']], false)
   return (
     <>

@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-files = ["test_engine.py", "test_stress.py", "test_api.py", "test_ai.py"]
+files = ["test_engine.py", "test_stress.py", "test_api.py", "test_ai.py", "test_us.py"]
 total = failed = 0
 for f in files:
     r = subprocess.run([sys.executable, str(Path(__file__).parent / "tests" / f)], capture_output=True, text=True)

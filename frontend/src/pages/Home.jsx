@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react'
 import { SearchBox, ScoreRing } from '../components/ui'
-import { api, go, pct, recent, watchlist } from '../util'
+import { api, flag, getMarket, go, pct, recent, ticker, watchlist } from '../util'
 
 export default function Home() {
   const [top, setTop] = useState([])
-  useEffect(() => { api('/api/rankings?sort=overall').then((d) => setTop((d.rows || []).slice(0, 5))).catch(() => {}) }, [])
+  const mk = getMarket()
+  useEffect(() => { api(`/api/rankings?sort=overall&market=${mk}`).then((d) => setTop((d.rows || []).slice(0, 5))).catch(() => {}) }, [mk])
   const rec = recent.all(), watch = watchlist.all()
   return (
     <>
       <div style={{ padding: '18px 2px 6px' }}>
-        <h1 style={{ margin: '0 0 6px', fontSize: 24 }}>Research any stock in one place</h1>
+        <h1 style={{ margin: '0 0 6px', fontSize: 24 }}>{mk === 'US' ? '🇺🇸 Research any US stock' : '🇮🇳 Research any Indian stock'}</h1>
         <div className="muted" style={{ marginBottom: 14 }}>
-          10+ years of financials, quality checks, ownership, valuation, and a 3 / 5 / 10-year outlook.
+          {mk === 'US'
+            ? 'NYSE & Nasdaq companies from official SEC filings: 10+ years of financials, forensics, valuation, chart outlook and a 3 / 5 / 10-year view.'
+            : 'NSE & BSE companies: 10+ years of financials, forensics, valuation, chart outlook and a 3 / 5 / 10-year view.'}
         </div>
         <SearchBox autoFocus />
       </div>
@@ -19,13 +22,13 @@ export default function Home() {
       {rec.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <h3>Recent</h3>
-          {rec.map((r) => <span key={r.symbol} className="chip" style={{ cursor: 'pointer' }} onClick={() => go(`stock/${r.symbol}`)}>{r.symbol}</span>)}
+          {rec.map((r) => <span key={r.symbol} className="chip" style={{ cursor: 'pointer' }} onClick={() => go(`stock/${r.symbol}`)}>{flag(r.symbol)} {ticker(r.symbol)}</span>)}
         </div>
       )}
       {watch.length > 0 && (
         <div className="card">
           <h3>Watchlist</h3>
-          {watch.map((r) => <span key={r.symbol} className="chip" style={{ cursor: 'pointer', color: '#fbbf24' }} onClick={() => go(`stock/${r.symbol}`)}>★ {r.symbol}</span>)}
+          {watch.map((r) => <span key={r.symbol} className="chip" style={{ cursor: 'pointer', color: '#fbbf24' }} onClick={() => go(`stock/${r.symbol}`)}>★ {flag(r.symbol)} {ticker(r.symbol)}</span>)}
         </div>
       )}
 
@@ -36,7 +39,7 @@ export default function Home() {
         </div>
         {top.length === 0 ? (
           <div className="muted small" style={{ padding: '6px 14px 14px' }}>
-            No scan yet. Open <a href="#/rankings">Top Picks</a> and run a scan to rank the whole NIFTY 500.
+            No scan yet. Open <a href="#/rankings">Top Picks</a> and run a scan to rank the whole {mk === 'US' ? 'S&P 500' : 'NIFTY 500'}.
           </div>
         ) : top.map((r, i) => (
           <div key={r.symbol} className="rank-item" onClick={() => go(`stock/${r.symbol}`)}>

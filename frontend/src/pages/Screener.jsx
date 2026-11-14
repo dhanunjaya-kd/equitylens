@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ScoreRing } from '../components/ui'
 import { ExplainList } from './AI'
-import { api, cr, go, num, ok } from '../util'
+import { api, cr, getMarket, go, num, ok, ticker } from '../util'
 
 // key, label, group, unit
 export const FIELDS = [
   ['overall', 'Overall score', 'Scores', ''], ['business', 'Business score', 'Scores', ''], ['valuation', 'Valuation score', 'Scores', ''],
   ['growth', 'Growth score', 'Scores', ''], ['quality', 'Quality score', 'Scores', ''],
-  ['market_cap', 'Market cap (₹ Cr)', 'Size', ''], ['price', 'Price (₹)', 'Size', ''], ['off_high_pct', '% from 52w high', 'Size', '%'],
+  ['market_cap', 'Market cap (₹ Cr / $ M)', 'Size', ''], ['price', 'Price', 'Size', ''], ['off_high_pct', '% from 52w high', 'Size', '%'],
   ['pe', 'P/E', 'Valuation', ''], ['pb', 'Price / Book', 'Valuation', 'x'], ['peg', 'PEG', 'Valuation', ''],
   ['pe_vs_median', 'P/E ÷ own 10y median', 'Valuation', 'x'], ['ev_ebitda', 'EV / EBITDA', 'Valuation', 'x'],
   ['earnings_yield', 'Earnings yield', 'Valuation', '%'], ['dividend_yield', 'Dividend yield', 'Valuation', '%'],
@@ -32,10 +32,10 @@ export const PRESETS = [
   { name: 'Quality compounders', desc: 'High returns, steady growth, low debt, real cash', rules: [['roce', '>=', 20], ['profit_cagr_5', '>=', 15], ['debt_to_equity', '<=', 0.5], ['cfo_to_pat', '>=', 0.8]] },
   { name: 'Value with quality', desc: 'Cheap P/E but still a good business', rules: [['pe', '<=', 18], ['roce', '>=', 15], ['piotroski', '>=', 6], ['high_flags', '=', 0]] },
   { name: 'Below fair value', desc: 'Fair-value estimates well above price', rules: [['fair_value_upside', '>=', 20], ['business', '>=', 60]] },
-  { name: 'Holding-company discount', desc: 'Elcid-type: investment cos far below book', rules: [['is_holdco', '=', 1], ['pb', '<=', 0.5]] },
+  { name: 'Holding-company discount', inOnly: true, desc: 'Elcid-type: investment cos far below book', rules: [['is_holdco', '=', 1], ['pb', '<=', 0.5]] },
   { name: 'Debt-free growers', desc: 'No debt, double-digit growth', rules: [['debt_to_equity', '<=', 0.1], ['sales_cagr_5', '>=', 12], ['profit_cagr_5', '>=', 12]] },
   { name: 'Improving fast (Piotroski 8+)', desc: 'Fundamentals improving on almost every test', rules: [['piotroski', '>=', 8]] },
-  { name: 'Promoters buying', desc: 'Insiders raising their stake, no big red flags', rules: [['promoter_change', '>=', 1], ['high_flags', '=', 0]] },
+  { name: 'Promoters buying', inOnly: true, desc: 'Insiders raising their stake, no big red flags', rules: [['promoter_change', '>=', 1], ['high_flags', '=', 0]] },
   { name: 'Cheap vs own history', desc: 'P/E below 10-yr median, safe balance sheet', rules: [['pe_vs_median', '<=', 0.85], ['altman_z', '>=', 3], ['profit_cagr_5', '>=', 8]] },
   { name: '10-year compounders', desc: 'Best base-case 10y return with a strong business', rules: [['base_10y', '>=', 13], ['business', '>=', 70]] },
 ]
@@ -66,7 +66,8 @@ export default function Screener() {
   const [saved, setSaved] = useState(loadSaved())
   const [name, setName] = useState('')
   const [active, setActive] = useState(PRESETS[0].name)
-  useEffect(() => { api('/api/rankings').then((d) => setRows(d.rows || [])).catch(() => setRows([])) }, [])
+  const mk = getMarket()
+  useEffect(() => { api(`/api/rankings?market=${mk}`).then((d) => setRows(d.rows || [])).catch(() => setRows([])) }, [mk])
 
   const res = useMemo(() => (rows || []).filter((r) => rules.every((ru) => pass(r, ru)))
     .sort((a, b) => (ok(b[sort]) ? b[sort] : -1e9) - (ok(a[sort]) ? a[sort] : -1e9)), [rows, rules, sort])
@@ -86,10 +87,10 @@ export default function Screener() {
   return (
     <>
       <div className="card">
-        <h3>Screener</h3>
+        <h3>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Screener</h3>
         <div className="small muted" style={{ marginTop: -4, marginBottom: 8 }}>Ready-made screens. Tap one, then tweak the rules below.</div>
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-          {[...saved.map((s) => ({ ...s, desc: 'Saved screen', mine: true })), ...PRESETS].map((p) => (
+          {[...saved.map((s) => ({ ...s, desc: 'Saved screen', mine: true })), ...PRESETS.filter((p) => !(mk === 'US' && p.inOnly))].map((p) => (
             <div key={p.name} className="tile" style={{ minWidth: 165, cursor: 'pointer', borderColor: active === p.name ? 'var(--accent)' : null }} onClick={() => usePreset(p)}>
               <div className="row between"><b style={{ fontSize: 13 }}>{p.mine ? '★ ' : ''}{p.name}</b>
                 {p.mine && <span className="small muted" onClick={(e) => { e.stopPropagation(); del(p.name) }}>✕</span>}</div>
@@ -142,7 +143,7 @@ export default function Screener() {
           <div key={r.symbol} className="rank-item" onClick={() => go(`stock/${r.symbol}`)}>
             <div className="ring-sm"><ScoreRing value={r.overall} size={44} /></div>
             <div className="grow">
-              <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol}</span></div>
+              <div className="ellip"><b>{r.name}</b> <span className="small muted">{ticker(r.symbol)}</span></div>
               <div className="small muted ellip">{r.sector || '—'} · {cr(r.market_cap)}</div>
               <div className="small" style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
                 {showCols.map((k) => <span key={k}><span className="muted">{F[k].label.split(' (')[0]}:</span> <b>{fmt(k, r[k])}</b></span>)}

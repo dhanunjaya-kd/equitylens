@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 import requests
 
-from . import config, parser, scraper, store
+from . import config, money, parser, scraper, store
 
 Num = Optional[float]
 YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
@@ -77,7 +77,7 @@ def _demo(symbol: str) -> list[dict]:
             out.append({"t": day.isoformat(), "o": o, "h": h, "l": l, "c": c, "v": int(abs(rnd.gauss(2e6, 6e5)))})
             px = c
         day += dt.timedelta(days=1)
-    k = 1450 / out[-1]["c"]
+    k = (180 if symbol.startswith("US:") else 1450) / out[-1]["c"]
     for b in out:
         for f in "ohlc":
             b[f] *= k
@@ -94,6 +94,10 @@ def get_bars(symbol: str, refresh: bool = False) -> tuple[list[dict], str, bool]
         return p["bars"], p["source"], p["ohlc"]
     if config.DEMO:
         bars, src, ohlc = _demo(sym), "demo data", True
+    elif sym.startswith("US:"):
+        t = sym[3:]
+        bars = _yahoo(t)
+        src, ohlc = f"Yahoo Finance ({t})", True
     else:
         comp = store.get_company(sym)
         nse = bse = None
@@ -354,6 +358,7 @@ def outlook(t, h, l, c, e50, e200, rs, ml, ms, levels, interval: str) -> dict:
     """What the chart's own history says about the next months. Not a prediction:
     a volatility range plus how this stock behaved after the same setup before."""
     weekly = interval == "1wk"
+    C = money.sym()
     n = len(c)
     i = n - 1
     yr = 52 if weekly else 252
@@ -423,27 +428,27 @@ def outlook(t, h, l, c, e50, e200, rs, ml, ms, levels, interval: str) -> dict:
     s1 = sup[0] if sup else round(lo52, 2)
     s2 = sup[1] if len(sup) > 1 else round(lo52, 2)
     scenarios = [
-        {"kind": "bull", "title": f"Bullish if it closes above ₹{r1:,.0f}",
-         "text": f"That clears the nearest resistance ({(r1/px-1)*100:+.1f}%). Next zone ₹{max(r2, r1):,.0f}"
-                 + (f", then the 52-week high ₹{hi52:,.0f}." if hi52 > max(r1, r2) * 1.01 else ".")
+        {"kind": "bull", "title": f"Bullish if it closes above {C}{r1:,.0f}",
+         "text": f"That clears the nearest resistance ({(r1/px-1)*100:+.1f}%). Next zone {C}{max(r2, r1):,.0f}"
+                 + (f", then the 52-week high {C}{hi52:,.0f}." if hi52 > max(r1, r2) * 1.01 else ".")
                  + (" A move back above the 200 EMA would also turn the long-term trend up." if e200[i] and px < e200[i] else "")},
-        {"kind": "range", "title": f"Sideways between ₹{s1:,.0f} and ₹{r1:,.0f}",
+        {"kind": "range", "title": f"Sideways between {C}{s1:,.0f} and {C}{r1:,.0f}",
          "text": "While price stays inside this band, the chart is undecided. Wait for a close outside it."},
-        {"kind": "bear", "title": f"Bearish if it closes below ₹{s1:,.0f}",
-         "text": f"That breaks the nearest support ({(s1/px-1)*100:+.1f}%). Next support ₹{min(s2, s1):,.0f}"
-                 + (f", then the 52-week low ₹{lo52:,.0f}." if lo52 < min(s1, s2) * 0.99 else ".")},
+        {"kind": "bear", "title": f"Bearish if it closes below {C}{s1:,.0f}",
+         "text": f"That breaks the nearest support ({(s1/px-1)*100:+.1f}%). Next support {C}{min(s2, s1):,.0f}"
+                 + (f", then the 52-week low {C}{lo52:,.0f}." if lo52 < min(s1, s2) * 0.99 else ".")},
     ]
 
     # -- chart story
     look = min(yr, i)
     chg = (px / c[i - look] - 1) * 100 if look else 0
     story = [f"Over the last {'year' if look >= yr else f'{look} bars'} the price {'rose' if chg >= 0 else 'fell'} {abs(chg):.1f}%."]
-    story.append(f"It is {abs(px/hi52-1)*100:.1f}% below its 52-week high (₹{hi52:,.0f}) and {abs(px/lo52-1)*100:.1f}% above its 52-week low (₹{lo52:,.0f}).")
+    story.append(f"It is {abs(px/hi52-1)*100:.1f}% below its 52-week high ({C}{hi52:,.0f}) and {abs(px/lo52-1)*100:.1f}% above its 52-week low ({C}{lo52:,.0f}).")
     if e50[i] and e200[i]:
         pos = ("above both" if px > e50[i] and px > e200[i] else "below both" if px < e50[i] and px < e200[i] else
                "between")
         u = "week" if weekly else "day"
-        story.append(f"Price is {pos} its 50-{u} (₹{e50[i]:,.0f}) and 200-{u} (₹{e200[i]:,.0f}) averages"
+        story.append(f"Price is {pos} its 50-{u} ({C}{e50[i]:,.0f}) and 200-{u} ({C}{e200[i]:,.0f}) averages"
                      + (" — sellers have had the upper hand." if pos == "below both" else " — buyers are in control." if pos == "above both" else " — the trend is mixed."))
     if rs[i] is not None:
         story.append(f"RSI is {rs[i]:.0f}: " + ("stretched, short-term pullbacks are common." if rs[i] >= 70 else
@@ -455,7 +460,7 @@ def outlook(t, h, l, c, e50, e200, rs, ml, ms, levels, interval: str) -> dict:
                      f"(median {a3['median']:+.1f}%), versus {a3['all_pct_up']}% on an average day.")
     if cone:
         story.append(f"Based on its own volatility, a typical 3-month move is about ±{cone[1]['move68_pct']}% "
-                     f"(₹{cone[1]['low68']:,.0f} – ₹{cone[1]['high68']:,.0f}).")
+                     f"({C}{cone[1]['low68']:,.0f} – {C}{cone[1]['high68']:,.0f}).")
 
     return {"story": story, "scenarios": scenarios, "cone": cone, "cone_points": cone_pts,
             "analogs": analogs, "setup": setup, "setup_used": [names[k] for k in (used_keys or ())],
@@ -468,6 +473,7 @@ def r2(x):
 
 
 def build(symbol: str, interval: str = "1d", refresh: bool = False) -> dict:
+    money.set_market(money.market_of(scraper.clean_symbol(symbol)))
     bars, src, ohlc = get_bars(symbol, refresh)
     if interval == "1wk":
         bars = to_weekly(bars)

@@ -194,7 +194,7 @@ export function ValuationLab({ d }) {
           <p className="small muted" style={{ margin: '6px 0' }}>Move the sliders. The value updates instantly.</p>
           {Object.keys(dc.options).length > 1 && (
             <select value={base} onChange={(e) => setBase(e.target.value)} style={{ width: '100%', marginTop: 4 }}>
-              {Object.entries(dc.options).map(([k, o]) => <option key={k} value={k}>Start from: {o.label} ₹{o.value}</option>)}
+              {Object.entries(dc.options).map(([k, o]) => <option key={k} value={k}>Start from: {o.label} {rs(o.value, 2)}</option>)}
             </select>
           )}
           <Slider label="Growth, years 1–5" value={g1} set={setG1} min={0} max={35} />

@@ -193,7 +193,8 @@ def build_context(report: dict, tech: Optional[dict] = None) -> str:
     val = a.get("valuation", {})
     fx = a.get("forensics", {})
     ctx = {
-        "company": {"name": c.get("name"), "nse": c.get("nse_symbol"), "bse": c.get("bse_code"),
+        "company": {"name": c.get("name"), "market": report.get("market", "IN"), "us_ticker": c.get("us_ticker"),
+                    "nse": c.get("nse_symbol"), "bse": c.get("bse_code"),
                     "sector": c.get("sector_path"), "about": c.get("about"), "key_points": (c.get("key_points_md") or c.get("key_points") or "")[:6000],
                     "numbers_basis": report.get("view"), "data_fetched_unix": int(report.get("fetched_at") or 0)},
         "verdict": a["verdict"], "scores_0_100": a["scores"], "metrics": keep_m,
@@ -229,17 +230,23 @@ def build_context(report: dict, tech: Optional[dict] = None) -> str:
     return json.dumps(ctx, separators=(",", ":"), default=str)
 
 
-RULES = """You are EquityLens AI, an equity research analyst for Indian listed companies.
+RULES = """You are EquityLens AI, an equity research analyst for companies listed in India and the US.
 Ground rules:
 - Use ONLY the data in the <data> block (and any document text provided). If something isn't there, say "not in the data" instead of guessing. Never invent numbers, events, management names or news.
-- Money is in ₹ crore unless stated. Percentages are already in %. Quote the actual figures you rely on.
+- Money is in {MONEY} unless stated. Percentages are already in %. Quote the actual figures you rely on.
 - Be balanced: give real risks as clearly as strengths.
 - This is research support, not investment advice. Don't tell the user to buy or sell; describe what the numbers say and what would change the picture.
 - Write in clear, simple English for a retail investor. Use short sections, bullet points and **bold** for key numbers. Markdown only, no HTML."""
 
 
+def _rules(report: Optional[dict] = None) -> str:
+    us_ = (report or {}).get("market") == "US"
+    return RULES.replace("{MONEY}", "US$ million (per-share values in dollars); this is a US-listed company reporting to the SEC"
+                         if us_ else "₹ crore")
+
+
 def _system(report: dict, tech: Optional[dict], extra: str = "") -> str:
-    return f"{RULES}\n{extra}\n<data>\n{build_context(report, tech)}\n</data>"
+    return f"{_rules(report)}\n{extra}\n<data>\n{build_context(report, tech)}\n</data>"
 
 
 # ------------------------------------------------------------------ features
@@ -336,8 +343,10 @@ def fetch_document_text(url: str) -> tuple[str, int]:
         return ("Demo document. Revenue grew 12% this year to ₹36,000 crore. Management guides 12-14% volume growth "
                 "next year, capex of ₹1,200 crore for a new plant commissioning in Q3 FY27, and net debt to stay near zero. "
                 "Raw material prices remain a risk. " * 8), 12
-    r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0",
-                                                "Referer": "https://www.bseindia.com/"})
+    from .us import SEC_UA
+    hdr = ({"User-Agent": SEC_UA} if "sec.gov" in url else
+           {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0", "Referer": "https://www.bseindia.com/"})
+    r = requests.get(url, timeout=60, headers=hdr)
     if r.status_code != 200:
         raise AIError(f"Couldn't download the document (HTTP {r.status_code}).")
     ctype = r.headers.get("content-type", "")
@@ -386,7 +395,7 @@ def explain_chart(report: dict, tech: dict) -> dict:
             "chart_story": o.get("story"), "if_then": o.get("scenarios"), "volatility_range": o.get("cone"),
             "historical_analogs": o.get("analogs"), "setup_today": o.get("setup"),
             "fundamental_verdict": report["analysis"]["verdict"], "business_score": report["analysis"]["scores"].get("business")}
-    system = RULES + "\nYou are explaining a stock's price chart to a beginner.\n<data>\n" + json.dumps(data, default=str) + "\n</data>"
+    system = _rules(report) + "\nYou are explaining a stock's price chart to a beginner.\n<data>\n" + json.dumps(data, default=str) + "\n</data>"
     prompt = """Explain this chart in plain English:
 ## What the chart is saying now
 ## What happened to reach here
@@ -403,7 +412,8 @@ def explain_picks(rows: list[dict], title: str = "Top Picks") -> dict:
     fields = ("symbol", "name", "sector", "market_cap", "pe", "pb", "roce", "profit_cagr_5", "sales_cagr_5", "debt_to_equity",
               "piotroski", "fair_value_upside", "overall", "business", "valuation", "verdict", "base_5y", "base_10y", "high_flags")
     data = [{k: r.get(k) for k in fields} for r in rows[:15]]
-    system = RULES + f"\n<data>\n{json.dumps({'list': title, 'stocks': data}, default=str)}\n</data>"
+    us_ = bool(rows) and all(r.get("market") == "US" for r in rows)
+    system = _rules({"market": "US"} if us_ else None) + f"\n<data>\n{json.dumps({'list': title, 'stocks': data}, default=str)}\n</data>"
     prompt = """For each stock in the list, write 2-3 lines: why it ranks here (cite 2-3 numbers) and the main thing to check before trusting the ranking.
 Then finish with:
 ## Patterns

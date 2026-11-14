@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { cr, num, ok, pct, rs, signed } from '../util'
+import { cr, cur, num, ok, pct, rs, signed, unitWords } from '../util'
 import { Md } from './AI'
 
 const find = (t, ...names) => {
@@ -32,7 +32,7 @@ export function LatestQuarter({ d }) {
   const L = q.columns.length - 1
   const rows = [
     ['Sales', find(q, 'Sales', 'Revenue')], ['Operating profit', find(q, 'Operating Profit', 'Financing Profit')],
-    ['Net profit', find(q, 'Net Profit')], ['EPS (₹)', find(q, 'EPS')],
+    ['Net profit', find(q, 'Net Profit')], [`EPS (${cur()})`, find(q, 'EPS')],
   ].filter(([, v]) => v)
   const opm = find(q, 'OPM', 'Financing Margin')
   const ch = (v, i) => (v && ok(v[L]) && ok(v[i]) && v[i] !== 0 ? ((v[L] - v[i]) / Math.abs(v[i])) * 100 : null)
@@ -70,7 +70,7 @@ export function LatestQuarter({ d }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="small muted">YoY = vs same quarter last year (removes seasonal effects) · QoQ = vs previous quarter. Last 8 quarters, ₹ crore.</div>
+      <div className="small muted">YoY = vs same quarter last year (removes seasonal effects) · QoQ = vs previous quarter. Last 8 quarters, {unitWords()}.</div>
     </div>
   )
 }
@@ -108,7 +108,7 @@ export function StoryTimeline({ d }) {
                 <div className="bar s" style={{ width: `${Math.max(2, ((t.sales || 0) / maxS) * 100)}%` }} />
                 <div className={`bar p ${(t.profit || 0) < 0 ? 'neg' : ''}`} style={{ width: `${Math.max(2, (Math.abs(t.profit || 0) / maxP) * 100)}%` }} />
               </div>
-              <div className="small muted">Sales ₹{num(t.sales)} Cr · Profit ₹{num(t.profit)} Cr{ok(t.opm) ? ` · OPM ${t.opm}%` : ''}</div>
+              <div className="small muted">Sales {cr(t.sales)} · Profit {cr(t.profit)}{ok(t.opm) ? ` · OPM ${t.opm}%` : ''}</div>
               {t.events.map((e, i) => <div key={i} className="small" style={{ color: col[e.kind], fontWeight: 600 }}>{e.kind === 'up' ? '▲' : e.kind === 'down' ? '▼' : '●'} {e.text}</div>)}
             </div>
           </div>
@@ -121,7 +121,7 @@ export function StoryTimeline({ d }) {
 
 const PEER_METRICS = [
   ['ROCE %', 'ROCE', true], ['P/E', 'P/E (lower = cheaper)', false], ['Qtr Sales Var %', 'Latest qtr sales growth', true],
-  ['Qtr Profit Var %', 'Latest qtr profit growth', true], ['Div Yld %', 'Dividend yield', true], ['Mar Cap Rs.Cr.', 'Size (market cap)', true],
+  ['Qtr Profit Var %', 'Latest qtr profit growth', true], ['Div Yld %', 'Dividend yield', true], ['Mar Cap Rs.Cr.', 'Size (market cap)', true], ['Mar Cap $M', 'Size (market cap)', true], ['CMP $', 'Price', true],
 ]
 
 export function PeerRank({ d }) {

@@ -8,7 +8,7 @@ import threading
 import time
 from typing import Optional
 
-from . import analysis, config, parser, scraper, store, universe
+from . import analysis, config, money, parser, scraper, store, universe, us
 
 log = logging.getLogger("equitylens")
 
@@ -50,8 +50,48 @@ def _fetch_extras(company: dict, view: str, full: bool) -> dict:
     return extras
 
 
+def fetch_payload_us(sym: str, full: bool = True) -> dict:
+    from . import technicals
+    info, facts, subs = us.fetch_raw(sym)
+    try:
+        bars, _, _ = technicals.get_bars(sym)
+    except Exception:  # noqa: BLE001 - fundamentals still useful without prices
+        bars = []
+    price = bars[-1]["c"] if bars else None
+    yr = bars[-252:]
+    hi52 = max(b["h"] for b in yr) if yr else None
+    lo52 = min(b["l"] for b in yr) if yr else None
+    company = us.build_company(sym, price, hi52, lo52, info, facts, subs)
+    pe = us.pe_history(bars[-2600:], company.pop("annual_eps_points", []))
+    weekly = bars[-2600::5]
+    extras = {"errors": [] if bars else ["Price history unavailable"], "full": True,
+              "pe_chart": pe,
+              "price_chart": {"Price": [[b["t"], b["c"]] for b in weekly]} if bars else None,
+              "peers": None}
+    return {"symbol": f"US:{info['ticker']}", "view": "consolidated", "company": company, "extras": extras}
+
+
+def us_peers(symbol: str, company: dict) -> Optional[dict]:
+    sector = (company.get("sector_path") or [None])[-1]
+    rows = [r for r in store.all_rankings() if r.get("market") == "US" and r.get("sector") == sector]
+    if len(rows) < 2:
+        return None
+    rows.sort(key=lambda r: -(r.get("market_cap") or 0))
+    cols = ["Name", "CMP $", "P/E", "Mar Cap $M", "Div Yld %", "ROCE %"]
+    out = [{"name": r["name"], "symbol": r["symbol"], "CMP $": r.get("price"), "P/E": r.get("pe"),
+            "Mar Cap $M": r.get("market_cap"), "Div Yld %": r.get("dividend_yield"), "ROCE %": r.get("roce")} for r in rows[:10]]
+    import statistics as st
+    med = {}
+    for k in cols[1:]:
+        vals = [x[k] for x in out if isinstance(x.get(k), (int, float))]
+        med[k] = round(st.median(vals), 2) if vals else None
+    return {"columns": cols, "rows": out, "median": med}
+
+
 def fetch_payload(symbol: str, full: bool = True) -> dict:
     sym = scraper.clean_symbol(symbol)
+    if money.market_of(sym) == "US":
+        return fetch_payload_us(sym, full)
     html, view = scraper.fetch_company_html(sym)
     company = parser.parse_company(html, sym)
     if not company["tables"]["profit_loss"]["rows"]:
@@ -90,8 +130,11 @@ def median_pe_from(extras: dict) -> Optional[float]:
 
 
 def build_report(symbol: str, refresh: bool = False) -> dict:
+    money.set_market(money.market_of(scraper.clean_symbol(symbol)))
     payload, ts = get_payload(symbol, refresh=refresh, full=True)
     company, extras = payload["company"], payload["extras"]
+    if company.get("market") == "US":
+        extras = dict(extras, peers=us_peers(payload["symbol"], company))
     a = analysis.analyse(company, median_pe_from(extras), extras.get("peers"), extras.get("pe_chart"))
     store.put_ranking(payload["symbol"], ranking_row(payload, a))
     return {
@@ -104,7 +147,10 @@ def build_report(symbol: str, refresh: bool = False) -> dict:
         "pe_chart": extras.get("pe_chart"),
         "extras_errors": extras.get("errors", []),
         "analysis": a,
-        "source": f"{config.SOURCE_BASE}/company/{payload['symbol']}/",
+        "source": (f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={company.get('cik')}&type=10-K"
+                   if company.get("market") == "US" else f"{config.SOURCE_BASE}/company/{payload['symbol']}/"),
+        "market": company.get("market", "IN"),
+        "currency": company.get("currency") or {"code": "INR", "symbol": "₹", "unit": "Cr"},
     }
 
 
@@ -119,7 +165,7 @@ def ranking_row(payload: dict, a: dict) -> dict:
     text = (" ".join(sector_path) + " " + (c.get("name") or "")).lower()
     fin = m.get("is_financial")
     return {
-        "symbol": payload["symbol"], "name": c.get("name"),
+        "symbol": payload["symbol"], "name": c.get("name"), "market": c.get("market", "IN"),
         "sector": sector_path[-1] if sector_path else "",
         "broad_sector": sector_path[0] if sector_path else "",
         "is_financial": fin,
@@ -162,13 +208,14 @@ def ranking_row(payload: dict, a: dict) -> dict:
 
 
 # ----------------------------------------------------------------- scan
-SCAN = {"running": False, "total": 0, "done": 0, "failed": 0, "current": None,
+SCAN = {"market": "IN", "running": False, "total": 0, "done": 0, "failed": 0, "current": None,
         "started_at": None, "finished_at": None, "source": None, "errors": [], "stop": False}
 _scan_lock = threading.Lock()
 
 
-def _scan_worker(limit: Optional[int]) -> None:
-    rows, src = universe.load(download=True)
+def _scan_worker(limit: Optional[int], market: str = "IN") -> None:
+    rows, src = (us.sp500_universe(download=True) if market == "US" else universe.load(download=True))
+    SCAN["market"] = market
     if limit:
         rows = rows[:limit]
     SCAN.update(total=len(rows), done=0, failed=0, source=src, errors=[], started_at=time.time(), finished_at=None)
@@ -176,7 +223,8 @@ def _scan_worker(limit: Optional[int]) -> None:
         if SCAN["stop"]:
             break
         sym = r["symbol"]
-        SCAN["current"] = sym
+        SCAN["current"] = sym.replace("US:", "")
+        money.set_market(market)
         try:
             cached = store.get_company(scraper.clean_symbol(sym))
             fresh = cached and time.time() - cached[0] < config.SCAN_REUSE_HOURS * 3600
@@ -197,15 +245,15 @@ def _scan_worker(limit: Optional[int]) -> None:
     SCAN.update(running=False, current=None, finished_at=time.time(), stop=False)
 
 
-def start_scan(limit: Optional[int] = None, block: bool = False) -> dict:
+def start_scan(limit: Optional[int] = None, block: bool = False, market: str = "IN") -> dict:
     with _scan_lock:
         if SCAN["running"]:
             return scan_status()
         SCAN.update(running=True, stop=False)
     if block:
-        _scan_worker(limit)
+        _scan_worker(limit, market)
     else:
-        threading.Thread(target=_scan_worker, args=(limit,), daemon=True).start()
+        threading.Thread(target=_scan_worker, args=(limit, market), daemon=True).start()
     return scan_status()
 
 

@@ -36,6 +36,9 @@ CHECKS = [
     ("post", "/api/ai/note/TESTCO?refresh=1", 400, None),  # no key -> friendly 400
     ("get", "/api/ai/gemini-models", 400, None),
     ("post", "/api/ai/settings", 200, {"provider": "demo"}),
+    ("get", "/api/search?q=tst&market=US", 200, None), ("get", "/api/stock/US:TSTUS", 200, None),
+    ("get", "/api/stock/US:ZZZZ", 404, None), ("get", "/api/chart/US:TSTUS", 200, None),
+    ("post", "/api/ai/note/US:TSTUS", 200, None), ("get", "/api/rankings?market=US", 200, None),
     ("get", "/", 200, None),
 ]
 
@@ -66,6 +69,9 @@ def test_stock_report_shape():
     a = d["analysis"]
     for k in ("verdict", "scores", "forensics", "valuation", "projection", "horizons", "timeline", "data_quality"):
         assert k in a, k
+    u = C.get("/api/stock/US:TSTUS").json()
+    assert u["market"] == "US" and u["currency"]["symbol"] == "$" and "₹" not in str(u["analysis"]["flags"])
+    assert d["currency"]["symbol"] == "₹"
     t = C.get("/api/chart/TESTCO").json()
     assert t["outlook"]["scenarios"] and len(t["t"]) == len(t["rsi"]) == len(t["ema200"])
 

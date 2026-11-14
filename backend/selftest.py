@@ -41,4 +41,15 @@ for sym in (sys.argv[1:] or ["RELIANCE", "HDFCBANK", "ITC"]):
         ok = False
         print("FAILED")
         traceback.print_exc()
+print("3) US stock (SEC EDGAR + Yahoo): AAPL ...", end=" ")
+try:
+    rep = service.build_report("US:AAPL", refresh=True)
+    m = rep["analysis"]["metrics"]
+    print("OK")
+    print(f"   {rep['company']['name']} | years={len(rep['company']['tables']['profit_loss']['columns'])} | "
+          f"price=${m['price']} pe={m['pe']} mcap=${m['market_cap']}M | verdict={rep['analysis']['verdict']['label']}")
+except Exception:
+    ok = False
+    print("FAILED (set EQL_SEC_USER_AGENT='Your Name your@email.com' in backend/.env)")
+    traceback.print_exc()
 print("\nALL GOOD" if ok else "\nSOME CHECKS FAILED - send me the output above")

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ScoreRing } from '../components/ui'
 import { ExplainList } from './AI'
-import { ago, api, cr, go, num, pct } from '../util'
+import { ago, api, cr, getMarket, go, num, pct, ticker } from '../util'
 
 const SORTS = [
   ['overall', 'Overall score'], ['business', 'Business quality'], ['valuation', 'Cheapest (valuation)'],
@@ -19,8 +19,11 @@ export default function Rankings() {
   const [scan, setScan] = useState(null)
   const poll = useRef()
 
+  const mk = getMarket()
+  const caps = mk === 'US' ? [[0, 'Any size'], [2000, 'Above $2 B'], [10000, 'Above $10 B'], [50000, 'Above $50 B'], [200000, 'Above $200 B']]
+    : [[0, 'Any size'], [1000, 'Above ₹1,000 Cr'], [5000, 'Above ₹5,000 Cr'], [20000, 'Above ₹20,000 Cr'], [100000, 'Above ₹1 L Cr']]
   const load = () => {
-    const p = new URLSearchParams({ sort })
+    const p = new URLSearchParams({ sort, market: mk })
     if (verdict) p.set('verdict', verdict)
     if (q) p.set('q', q)
     if (minCap) p.set('min_mcap', minCap)
@@ -36,7 +39,7 @@ export default function Rankings() {
     return () => clearInterval(poll.current)
   }, [scan?.running])
 
-  const start = async (limit) => setScan(await api(`/api/scan/start${limit ? `?limit=${limit}` : ''}`, { method: 'POST' }))
+  const start = async (limit) => setScan(await api(`/api/scan/start?market=${mk}${limit ? `&limit=${limit}` : ''}`, { method: 'POST' }))
   const stop = async () => setScan(await api('/api/scan/stop', { method: 'POST' }))
   const rows = d?.rows || []
 
@@ -45,14 +48,15 @@ export default function Rankings() {
       <div className="card">
         <div className="row between wrapflex">
           <div>
-            <h3 style={{ margin: 0 }}>Top Picks</h3>
+            <h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Top Picks</h3>
             <div className="small muted">Every scanned company, ranked by the same rules.</div>
           </div>
           {scan?.running
             ? <button className="btn small" onClick={stop}>Stop scan</button>
-            : <div className="row"><button className="btn small" onClick={() => start(30)}>Quick scan (30)</button><button className="btn primary small" onClick={() => start()}>Scan NIFTY 500</button></div>}
+            : <div className="row"><button className="btn small" onClick={() => start(30)}>Quick scan (30)</button><button className="btn primary small" onClick={() => start()}>Scan {mk === 'US' ? 'S&P 500' : 'NIFTY 500'}</button></div>}
         </div>
-        {scan?.running && (
+        {scan?.running && scan.market && scan.market !== mk && <div className="small t-warn" style={{ marginTop: 8 }}>A {scan.market === 'US' ? 'US' : 'Indian'} scan is running. Switch market to watch it.</div>}
+        {scan?.running && scan.market === mk && (
           <>
             <div className="small" style={{ marginTop: 10 }}>Scanning {scan.current || '…'} — {scan.done}/{scan.total}{scan.failed ? ` · ${scan.failed} failed` : ''}</div>
             <div className="progress"><div style={{ width: `${scan.total ? (scan.done / scan.total) * 100 : 0}%` }} /></div>
@@ -66,8 +70,7 @@ export default function Rankings() {
         <div className="grid2">
           <select value={sort} onChange={(e) => setSort(e.target.value)}>{SORTS.map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}</select>
           <select value={minCap} onChange={(e) => setMinCap(+e.target.value)}>
-            <option value={0}>Any size</option><option value={1000}>Above ₹1,000 Cr</option>
-            <option value={5000}>Above ₹5,000 Cr</option><option value={20000}>Above ₹20,000 Cr</option><option value={100000}>Above ₹1 L Cr</option>
+            {caps.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
         <input style={{ width: '100%', marginTop: 10 }} placeholder="Filter by name, symbol or sector" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -85,7 +88,7 @@ export default function Rankings() {
             <div className="rank-num">{i + 1}</div>
             <div className="ring-sm"><ScoreRing value={r.overall} size={44} /></div>
             <div className="grow">
-              <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol}</span></div>
+              <div className="ellip"><b>{r.name}</b> <span className="small muted">{ticker(r.symbol)}</span></div>
               <div className="small muted ellip">{r.sector || '—'} · {cr(r.market_cap)} · P/E {num(r.pe, 1)}</div>
               <div className="small" style={{ marginTop: 3 }}>
                 Base /yr: <b>{pct(r.base_3y)}</b> 3y · <b>{pct(r.base_5y)}</b> 5y · <b>{pct(r.base_10y)}</b> 10y

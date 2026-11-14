@@ -6,18 +6,38 @@ export async function api(path, opts = {}) {
   return body
 }
 
-const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
-const inr2 = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 })
+// ---- market (🇮🇳 IND / 🇺🇸 US) and currency
+const readLS = (k, d) => { try { return localStorage.getItem(k) || d } catch { return d } }
+let MARKET = readLS('eql_market', 'IN')
+let CUR = { code: 'INR', symbol: '₹', unit: 'Cr' }
+export const getMarket = () => MARKET
+export const setMarketLS = (m) => { MARKET = m; try { localStorage.setItem('eql_market', m) } catch { /* ignore */ } }
+export const setCurrency = (c) => { CUR = c || { code: 'INR', symbol: '₹', unit: 'Cr' } }
+export const cur = () => CUR.symbol
+export const unitLabel = () => (CUR.code === 'USD' ? '$ M' : '₹ Cr')
+export const unitWords = () => (CUR.code === 'USD' ? 'US$ million' : '₹ crore')
+export const isUS = (sym) => String(sym || '').toUpperCase().startsWith('US:')
+export const ticker = (sym) => String(sym || '').replace(/^US:/i, '')
+export const flag = (sym) => (isUS(sym) ? '🇺🇸' : '🇮🇳')
+export const marketCurrency = (m) => (m === 'US' ? { code: 'USD', symbol: '$', unit: 'M' } : { code: 'INR', symbol: '₹', unit: 'Cr' })
+
+const nf = () => new Intl.NumberFormat(CUR.code === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits: 0 })
+const nf2 = () => new Intl.NumberFormat(CUR.code === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits: 2 })
 
 export const ok = (v) => v !== null && v !== undefined && !Number.isNaN(v)
-export const num = (v, d = 0) => (ok(v) ? (d ? inr2.format(+(+v).toFixed(d)) : inr.format(v)) : '—')
+export const num = (v, d = 0) => (ok(v) ? (d ? nf2().format(+(+v).toFixed(d)) : nf().format(v)) : '—')
 export const pct = (v, d = 1) => (ok(v) ? `${(+v).toFixed(d)}%` : '—')
 export const x = (v, d = 2) => (ok(v) ? `${(+v).toFixed(d)}x` : '—')
-export const rs = (v, d = 0) => (ok(v) ? `₹${num(v, d)}` : '—')
+export const rs = (v, d = 0) => (ok(v) ? `${CUR.symbol}${num(v, d)}` : '—')
 export const cr = (v) => {
   if (!ok(v)) return '—'
+  if (CUR.code === 'USD') {
+    if (Math.abs(v) >= 1e6) return `$${(v / 1e6).toFixed(2)} T`
+    if (Math.abs(v) >= 1e3) return `$${(v / 1e3).toFixed(1)} B`
+    return `$${nf().format(v)} M`
+  }
   if (Math.abs(v) >= 100000) return `₹${(v / 100000).toFixed(2)} L Cr`
-  return `₹${inr.format(v)} Cr`
+  return `₹${nf().format(v)} Cr`
 }
 export const signed = (v, d = 1, unit = '') => (ok(v) ? `${v > 0 ? '+' : ''}${(+v).toFixed(d)}${unit}` : '—')
 

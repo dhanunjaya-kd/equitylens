@@ -13,6 +13,7 @@ import statistics
 from typing import Optional
 
 from . import config
+from .money import big, sym, unit
 
 Num = Optional[float]
 
@@ -357,7 +358,7 @@ def compute_flags(m: dict, c: dict) -> tuple[list[dict], list[str]]:
     if _valid(m.get("eps_ttm")) and m["eps_ttm"] <= 0:
         add("high", "Loss-making on the latest 12 months — earnings-based valuation doesn't apply.")
     if _valid(m.get("net_worth")) and m["net_worth"] <= 0:
-        add("high", f"Negative net worth (₹{m['net_worth']:,.0f} Cr): past losses have wiped out shareholders' equity.")
+        add("high", f"Negative net worth ({big(m['net_worth'])}): past losses have wiped out shareholders' equity.")
     if not fin:
         de = m["debt_to_equity"]
         if _valid(de) and de > 1:
@@ -394,8 +395,9 @@ def compute_flags(m: dict, c: dict) -> tuple[list[dict], list[str]]:
         add("medium", f"Other income is {m['other_income_share']}% of pre-tax profit — core business earns less than it looks.")
     if _valid(m["pe"]) and m["pe"] > 80:
         add("medium", f"Very expensive: P/E of {m['pe']}.")
-    if _valid(m["market_cap"]) and m["market_cap"] < 500:
-        add("info", f"Small company (market cap ₹{int(m['market_cap'])} Cr): lower liquidity, higher risk.")
+    small = 300 if sym() == "$" else 500
+    if _valid(m["market_cap"]) and m["market_cap"] < small:
+        add("info", f"Small company (market cap {big(m['market_cap'])}): lower liquidity, higher risk.")
     if len(m.get("years") or []) < 5:
         add("info", "Less than 5 years of annual data — long-term numbers are limited.")
 
@@ -646,7 +648,7 @@ def story_timeline(c: dict) -> list[dict]:
             if _valid(b0) and _valid(b1) and b0 > 0:
                 g = (b1 / b0 - 1) * 100
                 if g >= 50 and eq1 > 0 and b1 > 0.1 * eq1:
-                    ev.append(("warn", f"Debt up {g:.0f}% to ₹{b1:,.0f} Cr"))
+                    ev.append(("warn", f"Debt up {g:.0f}% to {big(b1)}"))
                 elif g <= -40 and b0 > 0.05 * max(eq1, 1):
                     ev.append(("up", f"Debt cut {abs(g):.0f}%"))
             e0, e1 = eps.get(y0), eps.get(y)

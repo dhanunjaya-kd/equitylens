@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, go, ok, scoreColor } from '../util'
+import { api, cur, getMarket, go, ok, scoreColor } from '../util'
 
 export function ScoreRing({ value, size = 84, label }) {
   const r = 34, c = 2 * Math.PI * r
@@ -47,14 +47,14 @@ export function SearchBox({ autoFocus }) {
     if (q.trim().length < 2) { setRes([]); return }
     t.current = setTimeout(async () => {
       setBusy(true)
-      try { const d = await api(`/api/search?q=${encodeURIComponent(q)}`); setRes(d.results || []); setOpen(true) }
+      try { const d = await api(`/api/search?q=${encodeURIComponent(q)}&market=${getMarket()}`); setRes(d.results || []); setOpen(true) }
       catch { setRes([]) } finally { setBusy(false) }
     }, 300)
   }, [q])
   const pick = (s) => { setOpen(false); setQ(''); go(`stock/${encodeURIComponent(s)}`) }
   return (
     <div className="search-box">
-      <input autoFocus={autoFocus} value={q} placeholder="Search any NSE/BSE stock — name or symbol"
+      <input autoFocus={autoFocus} value={q} placeholder={getMarket() === 'US' ? 'Search US stocks — ticker or name' : 'Search NSE/BSE stocks — name or symbol'}
         onChange={(e) => setQ(e.target.value)} onFocus={() => res.length && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 200)}
         onKeyDown={(e) => { if (e.key === 'Enter') { if (res[0]) pick(res[0].symbol); else if (q.trim()) pick(q.trim().toUpperCase()) } }} />
@@ -63,7 +63,7 @@ export function SearchBox({ autoFocus }) {
           {busy && !res.length && <div className="muted">Searching…</div>}
           {res.map((r) => (
             <div key={r.symbol + r.name} onMouseDown={() => pick(r.symbol)}>
-              <b>{r.name}</b> <span className="muted small">{r.symbol}</span>
+              <b>{r.name}</b> <span className="muted small">{r.symbol.replace(/^US:/, '')}</span>
             </div>
           ))}
         </div>
@@ -88,7 +88,7 @@ export function DataTable({ table, last = 0, pctRows = true }) {
         <thead><tr><th></th>{cols.map(([c]) => <th key={c}>{c}</th>)}</tr></thead>
         <tbody>
           {Object.entries(table.rows).map(([label, vals]) => (
-            <tr key={label}><td>{label}</td>{cols.map(([c, i]) => <td key={c}>{fmtCell(label, vals[i])}</td>)}</tr>
+            <tr key={label}><td>{label.replace(' in Rs', ` (${cur()})`)}</td>{cols.map(([c, i]) => <td key={c}>{fmtCell(label, vals[i])}</td>)}</tr>
           ))}
         </tbody>
       </table>
@@ -114,5 +114,17 @@ export function BottomNav({ page }) {
         </button>
       ))}
     </nav>
+  )
+}
+
+export function MarketToggle({ market, onChange }) {
+  return (
+    <div className="mkt">
+      {[['IN', '🇮🇳', 'IND'], ['US', '🇺🇸', 'US']].map(([k, f, l]) => (
+        <button key={k} className={market === k ? 'on' : ''} onClick={() => onChange(k)} aria-label={`${l} stocks`}>
+          <span className="fl">{f}</span>{l}
+        </button>
+      ))}
+    </div>
   )
 }

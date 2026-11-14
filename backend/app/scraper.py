@@ -72,6 +72,8 @@ def _get(url: str, params: Optional[dict] = None, expect_json: bool = False):
 
 def clean_symbol(symbol: str) -> str:
     s = symbol.strip().upper()
+    if s.startswith("US:"):
+        return "US:" + s[3:].replace(".", "-")
     s = re.sub(r"^(NSE|BSE):", "", s)
     s = re.sub(r"-EQ$", "", s)
     return s
