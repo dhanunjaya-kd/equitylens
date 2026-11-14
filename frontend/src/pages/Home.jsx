@@ -1,0 +1,65 @@
+import { useEffect, useState } from 'react'
+import { SearchBox, ScoreRing } from '../components/ui'
+import { api, go, pct, recent, watchlist } from '../util'
+
+export default function Home() {
+  const [top, setTop] = useState([])
+  useEffect(() => { api('/api/rankings?sort=overall').then((d) => setTop((d.rows || []).slice(0, 5))).catch(() => {}) }, [])
+  const rec = recent.all(), watch = watchlist.all()
+  return (
+    <>
+      <div style={{ padding: '18px 2px 6px' }}>
+        <h1 style={{ margin: '0 0 6px', fontSize: 24 }}>Research any stock in one place</h1>
+        <div className="muted" style={{ marginBottom: 14 }}>
+          10+ years of financials, quality checks, ownership, valuation, and a 3 / 5 / 10-year outlook.
+        </div>
+        <SearchBox autoFocus />
+      </div>
+
+      {rec.length > 0 && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <h3>Recent</h3>
+          {rec.map((r) => <span key={r.symbol} className="chip" style={{ cursor: 'pointer' }} onClick={() => go(`stock/${r.symbol}`)}>{r.symbol}</span>)}
+        </div>
+      )}
+      {watch.length > 0 && (
+        <div className="card">
+          <h3>Watchlist</h3>
+          {watch.map((r) => <span key={r.symbol} className="chip" style={{ cursor: 'pointer', color: '#fbbf24' }} onClick={() => go(`stock/${r.symbol}`)}>★ {r.symbol}</span>)}
+        </div>
+      )}
+
+      <div className="card" style={{ marginTop: rec.length ? 0 : 14, padding: 0 }}>
+        <div className="row between" style={{ padding: '14px 14px 4px' }}>
+          <h3 style={{ margin: 0 }}>Top picks by score</h3>
+          <button className="btn small" onClick={() => go('rankings')}>See all</button>
+        </div>
+        {top.length === 0 ? (
+          <div className="muted small" style={{ padding: '6px 14px 14px' }}>
+            No scan yet. Open <a href="#/rankings">Top Picks</a> and run a scan to rank the whole NIFTY 500.
+          </div>
+        ) : top.map((r, i) => (
+          <div key={r.symbol} className="rank-item" onClick={() => go(`stock/${r.symbol}`)}>
+            <div className="rank-num">{i + 1}</div>
+            <div className="ring-sm"><ScoreRing value={r.overall} size={44} /></div>
+            <div className="grow">
+              <div className="ellip"><b>{r.name}</b></div>
+              <div className="small muted ellip">{r.sector} · base 5y {pct(r.base_5y)}/yr</div>
+              <span className={`badge sm t-${r.tone} bg-${r.tone}`} style={{ marginTop: 4 }}>{r.verdict}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <h3>How it works</h3>
+        <ul className="list">
+          <li><span className="ic" style={{ color: 'var(--accent)' }}>1</span>Pulls the company's public financials: 10–12 years of P&L, balance sheet, cash flow, quarterly results, shareholding and peers.</li>
+          <li><span className="ic" style={{ color: 'var(--accent)' }}>2</span>Scores growth, quality, balance-sheet strength, cash generation, ownership and valuation (0–100), and flags risks.</li>
+          <li><span className="ic" style={{ color: 'var(--accent)' }}>3</span>Projects earnings and price for 3, 5 and 10 years under bear / base / bull assumptions you can see.</li>
+        </ul>
+        <p className="disclaimer">Model output from past numbers. It's a research aid, not investment advice — read the red flags and the company's own reports before investing.</p>
+      </div>
+    </>
+  )
+}

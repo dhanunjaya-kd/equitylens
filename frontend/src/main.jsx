@@ -1,0 +1,41 @@
+import React, { useEffect, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import './styles.css'
+import { BottomNav, SearchBox } from './components/ui'
+import { go, parseHash } from './util'
+import Home from './pages/Home'
+import Stock from './pages/Stock'
+import Rankings from './pages/Rankings'
+import Watch from './pages/Watch'
+import Compare from './pages/Compare'
+
+function App() {
+  const [route, setRoute] = useState(parseHash())
+  useEffect(() => {
+    const on = () => { setRoute(parseHash()); window.scrollTo(0, 0) }
+    window.addEventListener('hashchange', on)
+    return () => window.removeEventListener('hashchange', on)
+  }, [])
+  return (
+    <>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand" onClick={() => go('')} style={{ cursor: 'pointer' }}>
+            <img src="/icon.svg" alt="" />Equity<span>Lens</span>
+          </div>
+          {route.page !== 'home' && <div className="grow"><SearchBox /></div>}
+        </div>
+      </header>
+      <main className="wrap">
+        {route.page === 'home' && <Home />}
+        {route.page === 'stock' && <Stock key={route.symbol} symbol={route.symbol} tab={route.tab} />}
+        {route.page === 'rankings' && <Rankings />}
+        {route.page === 'watch' && <Watch />}
+        {route.page === 'compare' && <Compare symbols={route.symbols} />}
+      </main>
+      <BottomNav page={route.page === 'stock' ? '' : route.page} />
+    </>
+  )
+}
+
+createRoot(document.getElementById('root')).render(<App />)

@@ -1,0 +1,117 @@
+import { useEffect, useRef, useState } from 'react'
+import { api, go, ok, scoreColor } from '../util'
+
+export function ScoreRing({ value, size = 84, label }) {
+  const r = 34, c = 2 * Math.PI * r
+  const v = ok(value) ? Math.max(0, Math.min(100, value)) : 0
+  const col = scoreColor(value)
+  return (
+    <svg viewBox="0 0 84 84" width={size} height={size} role="img" aria-label={`${label || 'Score'} ${ok(value) ? value : 'n/a'}`}>
+      <circle cx="42" cy="42" r={r} fill="none" stroke="var(--card2)" strokeWidth="8" />
+      <circle cx="42" cy="42" r={r} fill="none" stroke={col} strokeWidth="8" strokeLinecap="round"
+        strokeDasharray={`${(v / 100) * c} ${c}`} transform="rotate(-90 42 42)" />
+      <text x="42" y={label ? 42 : 48} textAnchor="middle" fill="var(--text)" fontSize="20" fontWeight="800">{ok(value) ? Math.round(value) : '—'}</text>
+      {label && <text x="42" y="57" textAnchor="middle" fill="var(--muted)" fontSize="9">{label}</text>}
+    </svg>
+  )
+}
+
+export function ScoreBar({ label, value, hint }) {
+  return (
+    <div className="scorebar">
+      <div className="top"><span>{label}</span><b style={{ color: scoreColor(value) }}>{ok(value) ? Math.round(value) : 'n/a'}</b></div>
+      <div className="track"><div className="fill" style={{ width: `${ok(value) ? value : 0}%`, background: scoreColor(value) }} /></div>
+      {hint && <div className="small muted" style={{ marginTop: 3 }}>{hint}</div>}
+    </div>
+  )
+}
+
+export const Badge = ({ tone = 'neutral', children }) => <span className={`badge t-${tone} bg-${tone}`}>{children}</span>
+
+export const Tile = ({ k, v, s, color }) => (
+  <div className="tile"><div className="k">{k}</div><div className="v" style={color ? { color } : null}>{v}</div>{s && <div className="s">{s}</div>}</div>
+)
+
+export function Loading({ text = 'Loading…' }) {
+  return <div className="empty"><div className="spinner" />{text}</div>
+}
+
+export function SearchBox({ autoFocus }) {
+  const [q, setQ] = useState('')
+  const [res, setRes] = useState([])
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const t = useRef()
+  useEffect(() => {
+    clearTimeout(t.current)
+    if (q.trim().length < 2) { setRes([]); return }
+    t.current = setTimeout(async () => {
+      setBusy(true)
+      try { const d = await api(`/api/search?q=${encodeURIComponent(q)}`); setRes(d.results || []); setOpen(true) }
+      catch { setRes([]) } finally { setBusy(false) }
+    }, 300)
+  }, [q])
+  const pick = (s) => { setOpen(false); setQ(''); go(`stock/${encodeURIComponent(s)}`) }
+  return (
+    <div className="search-box">
+      <input autoFocus={autoFocus} value={q} placeholder="Search any NSE/BSE stock — name or symbol"
+        onChange={(e) => setQ(e.target.value)} onFocus={() => res.length && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { if (res[0]) pick(res[0].symbol); else if (q.trim()) pick(q.trim().toUpperCase()) } }} />
+      {open && (res.length > 0 || busy) && (
+        <div className="suggest">
+          {busy && !res.length && <div className="muted">Searching…</div>}
+          {res.map((r) => (
+            <div key={r.symbol + r.name} onMouseDown={() => pick(r.symbol)}>
+              <b>{r.name}</b> <span className="muted small">{r.symbol}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Financial table: {columns, rows:{label:[...]}} */
+export function DataTable({ table, last = 0, pctRows = true }) {
+  if (!table || !table.columns?.length) return <div className="muted small">No data.</div>
+  let cols = table.columns.map((c, i) => [c, i])
+  if (last) cols = cols.slice(-last)
+  const fmtCell = (label, v) => {
+    if (v === null || v === undefined) return ''
+    if (pctRows && /%/.test(label)) return `${v}%`
+    return Math.abs(v) >= 1000 ? new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v) : (+v).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+  }
+  return (
+    <div className="tbl-wrap">
+      <table className="tbl">
+        <thead><tr><th></th>{cols.map(([c]) => <th key={c}>{c}</th>)}</tr></thead>
+        <tbody>
+          {Object.entries(table.rows).map(([label, vals]) => (
+            <tr key={label}><td>{label}</td>{cols.map(([c, i]) => <td key={c}>{fmtCell(label, vals[i])}</td>)}</tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const I = {
+  search: <path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm9 16-4.3-4.3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
+  rank: <path d="M5 20V10m7 10V4m7 16v-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />,
+  star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />,
+  compare: <path d="M8 4v16M16 4v16M4 8h8M12 16h8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
+}
+
+export function BottomNav({ page }) {
+  const items = [['home', '', 'Search', I.search], ['rankings', 'rankings', 'Top Picks', I.rank], ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare]]
+  return (
+    <nav className="bottomnav">
+      {items.map(([k, path, label, icon]) => (
+        <button key={k} className={page === k ? 'on' : ''} onClick={() => go(path)}>
+          <svg viewBox="0 0 24 24">{icon}</svg>{label}
+        </button>
+      ))}
+    </nav>
+  )
+}
