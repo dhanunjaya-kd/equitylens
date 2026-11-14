@@ -27,7 +27,8 @@ def _capture(provider, reply):
         calls.append((url, kw))
         return FakeResp(reply)
     ai.requests.post = fake_post
-    s = ai.load_settings() | {"provider": provider, "anthropic_api_key": "sk-ant-test", "openai_api_key": "sk-test"}
+    s = ai.load_settings() | {"provider": provider, "anthropic_api_key": "sk-ant-test", "openai_api_key": "sk-test",
+                              "gemini_api_key": "AIza-test"}
     return calls, s
 
 
@@ -55,6 +56,27 @@ def test_openai_request_shape():
     assert out == "hi" and url.endswith("/v1/chat/completions")
     assert kw["json"]["messages"][0] == {"role": "system", "content": "sys"}
     assert kw["json"]["max_completion_tokens"] == 50
+
+
+def test_gemini_request_shape():
+    calls, s = _capture("gemini", {"candidates": [{"content": {"parts": [{"text": "gem"}]}}]})
+    out = ai.complete("sys", [{"role": "user", "content": "q"}, {"role": "assistant", "content": "a"},
+                              {"role": "user", "content": "q2"}], 50, s)
+    url, kw = calls[0]
+    assert out == "gem" and url.endswith(":generateContent") and "/models/gemini" in url
+    assert kw["headers"]["x-goog-api-key"] == "AIza-test"
+    assert kw["json"]["systemInstruction"]["parts"][0]["text"] == "sys"
+    assert [c["role"] for c in kw["json"]["contents"]] == ["user", "model", "user"]
+    assert kw["json"]["generationConfig"]["maxOutputTokens"] == 50
+
+
+def test_gemini_blocked_is_friendly():
+    _, s = _capture("gemini", {"promptFeedback": {"blockReason": "SAFETY"}})
+    try:
+        ai.complete("s", [{"role": "user", "content": "q"}], 10, s)
+        raise AssertionError("should fail")
+    except ai.AIError as e:
+        assert "SAFETY" in str(e)
 
 
 def test_ollama_request_shape():

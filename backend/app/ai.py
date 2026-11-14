@@ -4,6 +4,7 @@ debate and a Top Picks explainer.
 Providers (switch in the app's ⚙️ Settings, or in backend/.env):
   * claude  — Anthropic Messages API      (needs ANTHROPIC_API_KEY)
   * openai  — OpenAI Chat Completions API (needs OPENAI_API_KEY)
+  * gemini  — Google Gemini API           (needs GEMINI_API_KEY; has a free tier)
   * ollama  — local models via Ollama      (free, runs on your laptop)
   * demo    — offline canned answers, for testing the screens
 
@@ -29,13 +30,16 @@ DEFAULTS = {
     "provider": os.getenv("EQL_AI_PROVIDER", "demo" if config.DEMO else "claude"),
     "claude_model": os.getenv("EQL_CLAUDE_MODEL", "claude-sonnet-5-5"),
     "openai_model": os.getenv("EQL_OPENAI_MODEL", "gpt-5.6-terra"),
+    "gemini_model": os.getenv("EQL_GEMINI_MODEL", "gemini-3.8-flash"),
     "ollama_model": os.getenv("EQL_OLLAMA_MODEL", "llama3.1:8b"),
     "ollama_url": os.getenv("EQL_OLLAMA_URL", "http://localhost:11434"),
     "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY", ""),
     "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
+    "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
     "max_tokens": int(os.getenv("EQL_AI_MAX_TOKENS", "2500")),
 }
-SECRET_KEYS = ("anthropic_api_key", "openai_api_key")
+SECRET_KEYS = ("anthropic_api_key", "openai_api_key", "gemini_api_key")
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 class AIError(Exception):
@@ -84,13 +88,14 @@ def public_settings() -> dict:
 
 def _ready(s: dict) -> bool:
     p = s["provider"]
-    return p in ("demo", "ollama") or (p == "claude" and bool(s["anthropic_api_key"])) or (p == "openai" and bool(s["openai_api_key"]))
+    return (p in ("demo", "ollama") or (p == "claude" and bool(s["anthropic_api_key"]))
+            or (p == "openai" and bool(s["openai_api_key"])) or (p == "gemini" and bool(s["gemini_api_key"])))
 
 
 def model_label(s: Optional[dict] = None) -> str:
     s = s or load_settings()
     p = s["provider"]
-    return {"claude": f"Claude · {s['claude_model']}", "openai": f"OpenAI · {s['openai_model']}",
+    return {"claude": f"Claude · {s['claude_model']}", "openai": f"OpenAI · {s['openai_model']}", "gemini": f"Gemini · {s['gemini_model']}",
             "ollama": f"Ollama · {s['ollama_model']}", "demo": "Demo (offline)"}.get(p, p)
 
 
@@ -116,6 +121,19 @@ def complete(system: str, messages: list[dict], max_tokens: Optional[int] = None
                       "messages": [{"role": "system", "content": system}] + messages})
             _raise(r, "OpenAI")
             return (r.json()["choices"][0]["message"].get("content") or "").strip()
+        if p == "gemini":
+            contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in messages]
+            r = requests.post(f"{GEMINI_BASE}/models/{s['gemini_model']}:generateContent", timeout=180,
+                              headers={"x-goog-api-key": s["gemini_api_key"], "Content-Type": "application/json"},
+                              json={"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
+                                    "generationConfig": {"maxOutputTokens": mt}})
+            _raise(r, "Gemini")
+            body = r.json()
+            cands = body.get("candidates") or []
+            if not cands:
+                reason = (body.get("promptFeedback") or {}).get("blockReason", "no answer returned")
+                raise AIError(f"Gemini returned no answer ({reason}).")
+            return "".join(pt.get("text", "") for pt in (cands[0].get("content") or {}).get("parts", [])).strip()
         if p == "ollama":
             r = requests.post(s["ollama_url"].rstrip("/") + "/api/chat", timeout=600,
                               json={"model": s["ollama_model"], "stream": False, "options": {"num_predict": mt},
@@ -130,6 +148,20 @@ def complete(system: str, messages: list[dict], max_tokens: Optional[int] = None
     except requests.Timeout as e:
         raise AIError(f"{p} took too long to answer. Try again or use a smaller model.") from e
     raise AIError(f"Unknown provider '{p}'")
+
+
+def list_gemini_models() -> list[str]:
+    """Models your Gemini key can use for text generation (newest names first)."""
+    s = load_settings()
+    if not s["gemini_api_key"]:
+        raise AIError("Add your Gemini API key first.")
+    r = requests.get(f"{GEMINI_BASE}/models", params={"pageSize": 1000},
+                     headers={"x-goog-api-key": s["gemini_api_key"]}, timeout=30)
+    _raise(r, "Gemini")
+    names = [m["name"].split("/", 1)[-1] for m in r.json().get("models", [])
+             if "generateContent" in (m.get("supportedGenerationMethods") or []) and "gemini" in m.get("name", "")
+             and not any(x in m["name"] for x in ("image", "tts", "embedding", "audio", "live", "robotics"))]
+    return sorted(set(names), reverse=True)
 
 
 def _raise(r: requests.Response, name: str) -> None:

@@ -13,8 +13,8 @@
 ![Phone first](https://img.shields.io/badge/📱_phone-first-2dd4bf?style=flat-square)
 ![NIFTY 500](https://img.shields.io/badge/scan-NIFTY_500-f59e0b?style=flat-square)
 ![Indicators](https://img.shields.io/badge/indicators-EMA·RSI·MACD·ADX·Supertrend-a78bfa?style=flat-square)
-![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-18_passing-22c55e?style=flat-square)
+![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-20_passing-22c55e?style=flat-square)
 
 ### 🔎 Search any Indian stock → get a complete research report in seconds
 
@@ -73,7 +73,7 @@
 
 ---
 
-## ✨ AI agents (Claude · ChatGPT · Ollama)
+## ✨ AI agents (Claude · ChatGPT · Gemini · Ollama)
 
 | | Feature | What it does |
 |:-:|---|---|
@@ -84,7 +84,7 @@
 | 📈 | **Chart explainer** | Explains the chart, the levels that matter and what history says |
 | 🏆 | **Explain my list** | Why each Top Pick / Screener result ranks, and what they have in common |
 
-Pick the provider in **⚙️ Settings** (top-right): **Claude** or **ChatGPT** with your own API key (pay per use), **Ollama** (free, runs on your laptop) or **Demo** (offline). Keys stay on your laptop in `backend/data/ai_settings.json` (git-ignored) or `backend/.env` (see `.env.example`).
+Pick the provider in **⚙️ Settings** (top-right): **Claude**, **ChatGPT** or **Gemini** with your own API key (Gemini has a free tier; tap *Load my models* to pick one), **Ollama** (free, runs on your laptop) or **Demo** (offline). Keys stay on your laptop in `backend/data/ai_settings.json` (git-ignored) or `backend/.env` (see `.env.example`).
 
 ---
 
@@ -209,7 +209,7 @@ equitylens/
 │   │   ├── forensics.py      Piotroski · Altman · Beneish · DuPont
 │   │   ├── valuation.py      DCF · Graham · P/E bands · EV · fair value
 │   │   ├── technicals.py     OHLC + indicators + chart outlook (range, analogs, levels)
-│   │   ├── ai.py             Claude / OpenAI / Ollama agents
+│   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents
 │   │   ├── service.py        fetch → cache → analyse, NIFTY 500 scan
 │   │   └── main.py           API + serves the web app
 │   ├── static/               prebuilt app (no npm needed to run)

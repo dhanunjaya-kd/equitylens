@@ -17,7 +17,7 @@ export function useAISettings() {
 
 function ModelBar({ settings }) {
   if (!settings) return null
-  const label = { claude: `Claude · ${settings.claude_model}`, openai: `OpenAI · ${settings.openai_model}`, ollama: `Ollama · ${settings.ollama_model}`, demo: 'Demo (offline)' }[settings.provider]
+  const label = { claude: `Claude · ${settings.claude_model}`, openai: `OpenAI · ${settings.openai_model}`, gemini: `Gemini · ${settings.gemini_model}`, ollama: `Ollama · ${settings.ollama_model}`, demo: 'Demo (offline)' }[settings.provider]
   return (
     <div className="card row between" style={{ padding: '10px 14px' }}>
       <div className="small"><span className="muted">AI model:</span> <b>{label}</b> {settings.ready ? <span className="t-good">● ready</span> : <span className="t-bad">● needs a key</span>}</div>
@@ -175,12 +175,13 @@ export function ExplainList({ symbols, title }) {
 // ====================================================================== settings page
 export function Settings() {
   const [s, setS] = useState(null), [saved, setSaved] = useState(false), [test, setTest] = useState(null), [busy, setBusy] = useState(false)
+  const [gm, setGm] = useState(null), [gmErr, setGmErr] = useState(null)
   useEffect(() => { api('/api/ai/settings').then(setS) }, [])
   if (!s) return <div className="empty">Loading…</div>
   const set = (k, v) => { setS({ ...s, [k]: v }); setSaved(false) }
   const saveIt = async () => { setS(await post('/api/ai/settings', s)); setSaved(true) }
   const testIt = async () => { setBusy(true); setTest(null); try { await saveIt(); setTest(await post('/api/ai/test')) } catch (e) { setTest({ error: e.message }) } finally { setBusy(false) } }
-  const P = [['claude', 'Claude', 'Anthropic · best for long reports'], ['openai', 'ChatGPT', 'OpenAI'], ['ollama', 'Ollama', 'Free · runs on your laptop'], ['demo', 'Demo', 'Offline sample answers']]
+  const P = [['claude', 'Claude', 'Anthropic · best for long reports'], ['openai', 'ChatGPT', 'OpenAI'], ['gemini', 'Gemini', 'Google · has a free tier'], ['ollama', 'Ollama', 'Free · runs on your laptop'], ['demo', 'Demo', 'Offline sample answers']]
   return (
     <>
       <div className="card">
@@ -215,6 +216,28 @@ export function Settings() {
           <label className="small muted">Model name</label>
           <input style={{ width: '100%', marginTop: 4 }} value={s.openai_model} onChange={(e) => set('openai_model', e.target.value)} />
           <p className="small muted" style={{ marginBottom: 0 }}>Get a key at platform.openai.com → API keys. Billed per use. Any chat model name from your account works here.</p>
+        </div>
+      )}
+      {s.provider === 'gemini' && (
+        <div className="card">
+          <h3>Gemini (Google)</h3>
+          <label className="small muted">API key</label>
+          <input style={{ width: '100%', margin: '4px 0 10px' }} type="password" placeholder="AIza…" value={s.gemini_api_key} onChange={(e) => set('gemini_api_key', e.target.value)} />
+          <label className="small muted">Model</label>
+          <div className="row" style={{ marginTop: 4 }}>
+            {gm?.length ? (
+              <select className="grow" value={s.gemini_model} onChange={(e) => set('gemini_model', e.target.value)}>
+                {!gm.includes(s.gemini_model) && <option value={s.gemini_model}>{s.gemini_model}</option>}
+                {gm.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            ) : <input className="grow" value={s.gemini_model} onChange={(e) => set('gemini_model', e.target.value)} />}
+            <button className="btn small" onClick={async () => {
+              setGmErr(null)
+              try { await saveIt(); setGm((await api('/api/ai/gemini-models')).models) } catch (e) { setGmErr(e.message) }
+            }}>Load my models</button>
+          </div>
+          {gmErr && <div className="small t-bad" style={{ marginTop: 6 }}>⚠️ {gmErr}</div>}
+          <p className="small muted" style={{ marginBottom: 0 }}>Get a free key at aistudio.google.com → Get API key. The free tier has daily limits; paid use is billed per use. Tap "Load my models" to pick from the models your key can use.</p>
         </div>
       )}
       {s.provider === 'ollama' && (

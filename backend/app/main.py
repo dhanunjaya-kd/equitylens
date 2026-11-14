@@ -89,6 +89,11 @@ def ai_settings_save(body: dict = Body(...)):
     return ai.save_settings(body)
 
 
+@app.get("/api/ai/gemini-models")
+def ai_gemini_models():
+    return {"models": _ai(ai.list_gemini_models)}
+
+
 @app.post("/api/ai/test")
 def ai_test():
     t = time.time()
