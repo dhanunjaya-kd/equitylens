@@ -5,10 +5,11 @@ import {
 } from 'recharts'
 import { Badge, DataTable, Loading, ScoreBar, ScoreRing, Tile } from '../components/ui'
 import { Documents, Forensics, ValuationLab } from './StockAdvanced'
+import StockChart from './StockChart'
 import { ago, api, cr, go, num, ok, pct, recent, rs, scoreColor, signed, watchlist, x } from '../util'
 
 const TABS = [
-  ['overview', 'Overview'], ['future', 'Future 3·5·10y'], ['valuation', 'Valuation Lab'], ['forensics', 'Forensics'],
+  ['overview', 'Overview'], ['chart', 'Chart'], ['future', 'Future 3·5·10y'], ['valuation', 'Valuation Lab'], ['forensics', 'Forensics'],
   ['financials', 'Financials'], ['quality', 'Quality'], ['ownership', 'Ownership'], ['price', 'Price'], ['documents', 'Reports'],
 ]
 const C = { a: '#2dd4bf', b: '#38bdf8', c: '#a78bfa', d: '#f59e0b', e: '#f472b6', good: '#22c55e', bad: '#ef4444', grid: '#223040', muted: '#8b98a5' }
@@ -85,6 +86,7 @@ export default function Stock({ symbol, tab }) {
       </div>
 
       {tab === 'overview' && <Overview d={d} />}
+      {tab === 'chart' && <StockChart symbol={d.symbol} />}
       {tab === 'future' && <Future d={d} />}
       {tab === 'financials' && <Financials d={d} />}
       {tab === 'quality' && <Quality d={d} />}

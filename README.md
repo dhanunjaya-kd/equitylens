@@ -4,13 +4,15 @@ Search any Indian stock and get a full research report: 10–12 years of financi
 ownership trends, valuation vs history and peers, red flags, and a 3 / 5 / 10-year outlook with
 bear / base / bull scenarios. A **Top Picks** page ranks the whole NIFTY 500 by the same rules.
 
-No API keys, no logins, no paid data. It reads the same public company pages you'd open in a browser
-(screener.in), paced and cached.
+No API keys, no logins, no paid data. Fundamentals come from the same public company pages you'd open in a
+browser (screener.in); daily prices for the chart come from Yahoo Finance's public chart feed (falls back to
+daily closes if that's unavailable). Everything is paced and cached.
 
 ## What's in a stock report
 | Tab | What you see |
 |---|---|
 | Overview | Verdict, overall score, 3/5/10-year stance, scorecard, strengths & red flags, quick checks |
+| Chart | Candlesticks (daily / weekly, 3M–10Y) with EMA 20/50/200, Bollinger, Supertrend, golden/death crosses, support & resistance, volume, RSI, MACD, ADX; technical-view summary + signal checklist |
 | Future 3·5·10y | Bear / base / bull price and yearly return, reverse DCF, every assumption shown |
 | Valuation Lab | Fair-value range from several methods, **interactive DCF with sliders**, sensitivity table, P/E bands, Graham number, EV/EBITDA, peers |
 | Forensics | **Piotroski F-score** (9 tests), **Altman Z** (bankruptcy risk), **Beneish M** (earnings manipulation), **DuPont** ROE breakdown, accounting checks |

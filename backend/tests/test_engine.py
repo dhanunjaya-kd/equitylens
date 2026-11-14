@@ -77,6 +77,29 @@ def test_documents():
     assert "Annual reports" in cats and "Concalls" in cats
 
 
+def test_indicators_match_reference():
+    from app import technicals as T
+    c = [100 + i * 0.5 + (3 if i % 7 == 0 else -2 if i % 5 == 0 else 0) for i in range(300)]
+    h = [x + 1.5 for x in c]
+    lo = [x - 1.5 for x in c]
+    # EMA: seeded with SMA, then the standard recursion
+    e = T.ema(c, 20)
+    k, ref = 2 / 21, sum(c[:20]) / 20
+    for x in c[20:]:
+        ref = x * k + ref * (1 - k)
+    assert abs(e[-1] - ref) < 1e-9
+    r = T.rsi(c)
+    assert all(v is None or 0 <= v <= 100 for v in r) and r[-1] is not None
+    line, sig, hist = T.macd(c)
+    assert abs(hist[-1] - (line[-1] - sig[-1])) < 1e-9
+    st, tr, _ = T.supertrend(h, lo, c)
+    assert tr[-1] == 1 and st[-1] < c[-1]          # steady uptrend -> buy mode, line below price
+    ax, p, m = T.adx(h, lo, c)
+    assert ax[-1] > 20 and p[-1] > m[-1]
+    w = T.to_weekly([{"t": f"2026-11-{d:02d}", "o": 1, "h": d, "l": 1, "c": d, "v": 1} for d in (9, 10, 11, 12, 13, 16)])
+    assert len(w) == 2 and w[0]["h"] == 13 and w[0]["v"] == 5
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

@@ -6,15 +6,17 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, scraper, service, store, universe
+from . import config, scraper, service, store, technicals, universe
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
 
 app = FastAPI(title="EquityLens", version="1.0.0")
+app.add_middleware(GZipMiddleware, minimum_size=2000)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -40,6 +42,16 @@ def stock(symbol: str, refresh: bool = False):
         return service.build_report(symbol, refresh=refresh)
     except scraper.NotFound:
         raise HTTPException(404, f"'{symbol}' not found. Search by company name and pick from the list.")
+    except scraper.FetchError as e:
+        raise HTTPException(502, str(e))
+
+
+@app.get("/api/chart/{symbol}")
+def chart(symbol: str, interval: str = "1d", refresh: bool = False):
+    if interval not in ("1d", "1wk"):
+        raise HTTPException(400, "interval must be 1d or 1wk")
+    try:
+        return technicals.build(symbol, interval, refresh)
     except scraper.FetchError as e:
         raise HTTPException(502, str(e))
 
