@@ -231,11 +231,11 @@ def parse_pit(j) -> list[dict]:
     for r in data:
         sym = (r.get("symbol") or "").strip().upper()
         sec = (r.get("secType") or "").lower()
-        if not sym or (sec and "equity" not in sec):
+        if not sym or (sec and not any(w in sec for w in ("equity", "share"))):
             continue
         typ = (r.get("tdpTransactionType") or r.get("transactionType") or "").strip()
         qty, val = _f(r.get("secAcq")), _f(r.get("secVal"))
-        d = calendars._nse_date(r.get("acqfromDt") or r.get("date") or r.get("acqtoDt") or "")
+        d = next((x for x in (calendars._nse_date(r.get(k) or "") for k in ("acqfromDt", "acqtoDt", "date", "intimDt")) if x), None)
         cat = (r.get("personCategory") or "").strip()
         mode = (r.get("acqMode") or "").strip()
         side = "BUY" if typ.lower().startswith("buy") or typ.lower() == "acquisition" else "SELL" if typ.lower().startswith(("sell", "sale", "disposal")) \
@@ -250,7 +250,7 @@ def parse_pit(j) -> list[dict]:
 
 
 def insiders_in(days: int = 30) -> dict:
-    key = f"PIT::IN::{days}"
+    key = f"PIT2::IN::{days}"   # v2: dates with a time part no longer dropped
     hit = store.get_company(key)
     if hit and time.time() - hit[0] < 6 * 3600:
         return hit[1]
@@ -336,20 +336,37 @@ def parse_reg_ind(text: str) -> dict:
     return out
 
 
+def surveillance_urls(d) -> list[str]:
+    """REG_IND file names NSE has used: DDMMYY, DDMMYYYY, and the REG1_IND variant."""
+    a, b = d.strftime("%d%m%y"), d.strftime("%d%m%Y")
+    return [f"{ARCH}/archives/equities/mkt/REG_IND{a}.csv", f"{ARCH}/archives/equities/mkt/REG1_IND{a}.csv",
+            f"{ARCH}/archives/equities/mkt/REG_IND{b}.csv", f"{ARCH}/archives/equities/mkt/REG1_IND{b}.csv"]
+
+
 def surveillance() -> dict:
     hit = store.get_company("SURV::IN")
     if hit and time.time() - hit[0] < 6 * 3600:
         return hit[1]
-    d, text, used = _today(), None, None
-    for _ in range(10):
+    d, text, used, tried = _today(), None, None, 0
+    for _ in range(12):
         if d.weekday() < 5:
-            text = _demo_reg_ind() if config.DEMO else _nse_text(f"{ARCH}/archives/equities/mkt/REG_IND{d.strftime('%d%m%y')}.csv")
+            if config.DEMO:
+                text = _demo_reg_ind()
+            else:
+                for url in surveillance_urls(d):
+                    tried += 1
+                    try:
+                        text = _nse_text(url)
+                    except FlowError:
+                        text = None
+                    if text:
+                        break
             if text:
                 used = d
                 break
         d -= timedelta(days=1)
     if not text:
-        raise FlowError("NSE surveillance file not found for the last two weeks")
+        raise FlowError(f"NSE surveillance file not found for the last two weeks ({tried} file names tried)")
     out = {"date": used.isoformat(), "flags": parse_reg_ind(text), "source": "NSE surveillance indicator file (REG_IND)"}
     store.put_company("SURV::IN", out)
     return out

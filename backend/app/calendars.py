@@ -171,11 +171,13 @@ def classify_purpose(text: str) -> str:
 
 
 def _nse_date(s: str) -> Optional[date]:
-    for fmt in ("%d-%b-%Y", "%d-%m-%Y", "%Y-%m-%d", "%d %b %Y"):
-        try:
-            return datetime.strptime((s or "").strip(), fmt).date()
-        except ValueError:
-            pass
+    s = (s or "").strip()
+    for cand in (s, s.split(" ")[0], s[:11].strip(), s[:10]):          # NSE sometimes adds a time: "13-Nov-2026 18:42"
+        for fmt in ("%d-%b-%Y", "%d-%m-%Y", "%Y-%m-%d", "%d %b %Y", "%d/%m/%Y", "%d-%B-%Y"):
+            try:
+                return datetime.strptime(cand, fmt).date()
+            except ValueError:
+                pass
     return None
 
 

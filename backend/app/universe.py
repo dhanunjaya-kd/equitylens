@@ -42,7 +42,7 @@ def _from_csv_text(text: str) -> list[dict]:
     rows = []
     for r in csv.DictReader(io.StringIO(text)):
         sym = (r.get("Symbol") or "").strip()
-        if sym and (r.get("Series") or "EQ").strip() == "EQ":
+        if sym:                                            # index lists: keep every constituent (a few trade in BE / BZ series)
             rows.append({"symbol": sym, "name": (r.get("Company Name") or "").strip(),
                          "industry": (r.get("Industry") or "").strip()})
     return rows
