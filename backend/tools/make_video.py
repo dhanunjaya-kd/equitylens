@@ -187,6 +187,11 @@ def film(base: str, sc: list, out_dir: Path) -> list:
                 pg.goto(base + "/#/" + route)
                 pg.reload()
                 pg.wait_for_timeout(4000)
+                try:                      # wait until nothing on screen still says "Loading…"
+                    pg.wait_for_function("() => !/Loading/.test(document.querySelector('main')?.innerText || '')", timeout=45000)
+                    pg.wait_for_timeout(800)
+                except Exception:  # noqa: BLE001
+                    log("    (still loading after 45 s, filmed as is)")
                 for a in acts:
                     if a.startswith("CLICK:"):
                         try:
@@ -266,10 +271,13 @@ def main() -> None:
     encode(meta, work, target)
     for extra in (ROOT / "frontend" / "public" / "guide.mp4", ROOT / "backend" / "static" / "guide.mp4"):
         shutil.copyfile(target, extra)
-    shutil.copyfile(meta[3][0], ROOT / "docs" / "screenshots" / "walkthrough_poster.jpg")
+    for poster in (ROOT / "docs" / "screenshots" / "walkthrough_poster.jpg", ROOT / "frontend" / "public" / "guide_poster.jpg",
+                   ROOT / "backend" / "static" / "guide_poster.jpg"):
+        shutil.copyfile(meta[3][0], poster)     # cover image: the stock's verdict screen
     total = sum(d for _, d in meta)
     log(f"\nDONE: {target}  ({int(total // 60)} min {int(total % 60)} s)")
-    log("The in-app video (Beginner guide) is updated too. Send me the mp4 or push it to GitHub.")
+    log("The in-app video (Beginner guide) is updated too. Push it to GitHub:")
+    log("  git add docs frontend/public backend/static && git commit -m \"New walkthrough video\" && git push")
 
 
 if __name__ == "__main__":

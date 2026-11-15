@@ -49,7 +49,7 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 
 <a href="docs/equitylens_walkthrough.mp4"><img src="docs/screenshots/walkthrough_poster.jpg" alt="Watch the EquityLens walkthrough" width="100%"/></a>
 
-**[▶️ Watch the 3½-minute walkthrough](docs/equitylens_walkthrough.mp4)**: every step of reading a company, plus the daily market tools, with captions. The same video plays inside the app on the **📘 Beginner guide** page.
+**[▶️ Watch the 4-minute walkthrough](docs/equitylens_walkthrough.mp4)**, filmed with live data on a real 🇮🇳 company (**Gravita India**) and a real 🇺🇸 company (**Apple**): every step of reading a company, plus the daily market tools, with captions. The same video plays inside the app on the **📘 Beginner guide** page.
 
 To film it again with real companies and live data on your own laptop: `python tools\make_video.py --india GRAVITA --us US:AAPL` (see the top of that file for the two packages it needs).
 
