@@ -12,83 +12,86 @@ from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app import calendars, flows, parser, scraper, universe  # noqa: E402
+from app import calendars, flows, parser, scraper, service, universe  # noqa: E402
 
 
 def show(title: str) -> None:
     print("\n" + "=" * 70 + f"\n{title}\n" + "=" * 70)
 
 
-def get(url: str, params=None):
+def get(url: str, params=None, headers=None):
     try:
-        r = calendars._nse_session().get(url, params=params, timeout=25)
-        return r.status_code, r.headers.get("content-type", ""), r.text
+        r = calendars._nse_session().get(url, params=params, headers=headers, timeout=25)
+        return r.status_code, r.text
     except Exception as e:  # noqa: BLE001
-        return None, "", f"ERROR {e.__class__.__name__}: {e}"
+        return None, f"ERROR {e.__class__.__name__}: {e}"
 
 
-show("1) NSE insider trades (api/corporates-pit, last 30 days)")
 end = flows._today()
 start = end - timedelta(days=30)
-st, ct, text = get("https://www.nseindia.com/api/corporates-pit",
-                   {"index": "equities", "from_date": start.strftime("%d-%m-%Y"), "to_date": end.strftime("%d-%m-%Y")})
-print(f"status={st} type={ct} length={len(text)}")
-print("first 300 chars:", text[:300].replace("\n", " "))
-try:
-    j = json.loads(text)
-    data = j if isinstance(j, list) else j.get("data") or []
-    print("top-level keys:", list(j.keys())[:15] if isinstance(j, dict) else f"list of {len(j)}")
-    print("records:", len(data))
-    if data:
-        print("first record:", json.dumps(data[0])[:900])
-    rows = flows.parse_pit(j)
-    print(f"parsed rows: {len(rows)} | with a date: {sum(1 for r in rows if r['date'])}")
-except Exception as e:  # noqa: BLE001
-    print("not JSON:", e)
 
-show("2) NSE surveillance file (REG_IND), last 3 weekdays")
-d, n = flows._today(), 0
-while n < 3:
-    if d.weekday() < 5:
-        n += 1
-        for url in flows.surveillance_urls(d):
-            st, ct, text = get(url)
-            print(f"{st}  {url.rsplit('/', 1)[1]:28s} {len(text):>8} bytes  {text[:60]!r}")
-    d -= timedelta(days=1)
+show("1) NSE insider trades: each way of asking")
+get(flows.PIT_PAGE)
+for label, params in flows.pit_variants(start, end):
+    st, text = get(flows.PIT_API, params, {"Referer": flows.PIT_PAGE})
+    try:
+        j = json.loads(text)
+        data = j if isinstance(j, list) else j.get("data") or []
+        print(f"{label:34s} status={st} records={len(data)}")
+        if data:
+            print("   first record:", json.dumps(data[0])[:700])
+    except Exception:  # noqa: BLE001
+        print(f"{label:34s} status={st} not JSON: {text[:120]!r}")
+try:
+    j = flows.pit_fetch(start, end)
+    rows = flows.parse_pit(j)
+    print(f"EquityLens result: {len(j['data'])} records -> {len(rows)} trades, {sum(1 for r in rows if r['date'])} with a date")
+except Exception as e:  # noqa: BLE001
+    print("EquityLens result: error", e)
+
+show("2) NSE 'All reports' list (where the surveillance file lives now)")
+try:
+    files = flows.report_files("CM")
+    print(f"{len(files)} files listed")
+    for f in files:
+        if any(k in (f["name"] + f["title"]).upper() for k in ("REG", "SURV", "IND")):
+            print(f"   {f['group']:12s} {f['name']:30s} {f['title'][:40]:40s} {f['url']}")
+    if files and not any("REG" in f["name"].upper() for f in files):
+        print("   (no REG_IND file in the list; all names:)")
+        for f in files[:60]:
+            print(f"   {f['group']:12s} {f['name']:34s} {f['title'][:50]}")
+except Exception as e:  # noqa: BLE001
+    print("error:", e)
+    st, text = get(flows.REPORTS_API, {"key": "CM"}, {"Referer": "https://www.nseindia.com/all-reports"})
+    print(f"raw: status={st} {text[:400]!r}")
+try:
+    sv = flows.surveillance()
+    print(f"EquityLens result: {len(sv['flags'])} flagged stocks, file date {sv['date']}")
+except Exception as e:  # noqa: BLE001
+    print("EquityLens result:", e)
 
 show("3) screener.in peers for GRAVITA")
 try:
-    html = scraper.fetch_company_html("GRAVITA") if hasattr(scraper, "fetch_company_html") else None
-except Exception as e:  # noqa: BLE001
-    html = None
-    print("company page error:", e)
-if html is None:
-    try:
-        from app import service
-        rep = service.get_payload("GRAVITA", full=True, max_age_h=0)[0]
-        comp = rep["company"]
-        print("company_id:", comp.get("company_id"), "| warehouse_id:", comp.get("warehouse_id"))
-        print("peers rows:", len((rep["extras"].get("peers") or {}).get("rows", [])), "| errors:", rep["extras"].get("errors"))
-        wid = comp.get("warehouse_id")
-    except Exception as e:  # noqa: BLE001
-        wid = None
-        print("report error:", e)
-else:
-    c = parser.parse_company(html) if hasattr(parser, "parse_company") else {}
-    wid = c.get("warehouse_id")
-    print("warehouse_id:", wid)
-if wid:
-    try:
+    rep = service.get_payload("GRAVITA", refresh=True)[0]
+    comp = rep["company"]
+    wid = comp.get("warehouse_id")
+    print("company_id:", comp.get("company_id"), "| warehouse_id:", wid)
+    print("peers rows in report:", len((rep["extras"].get("peers") or {}).get("rows", [])), "| errors:", rep["extras"].get("errors"))
+    if wid:
         ph = scraper.fetch_peers_html(wid)
-        print(f"peers html: {len(ph)} chars, tables: {ph.count('<table')}")
-        print("first 400 chars:", ph[:400].replace("\n", " "))
+        print(f"peers reply: {len(ph)} chars, <table> count: {ph.count('<table')}")
+        print("first 500 chars:", ph[:500].replace("\n", " "))
         print("parsed peers:", len(parser.parse_peers(ph)["rows"]))
-    except Exception as e:  # noqa: BLE001
-        print("peers fetch error:", e)
-else:
-    print("no warehouse id found on the company page")
+    else:
+        html, view = scraper.fetch_company_html("GRAVITA")
+        i = html.find("warehouse")
+        print("no warehouse id. Page text around 'warehouse':", html[max(0, i - 200):i + 300].replace("\n", " ") if i >= 0 else "(word not on the page)")
+        j = html.find("peers")
+        print("around 'peers':", html[max(0, j - 200):j + 300].replace("\n", " ") if j >= 0 else "(word not on the page)")
+except Exception as e:  # noqa: BLE001
+    print("error:", e.__class__.__name__, e)
 
-show("4) NIFTY 500 list")
+show("4) Stock lists")
 for code in ("N50", "N100", "N500"):
     try:
         print(code, len(universe.index_list(code)))

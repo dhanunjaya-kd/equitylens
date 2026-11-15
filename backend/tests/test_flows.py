@@ -111,6 +111,52 @@ def test_stock_bundles_both_markets():
     assert not u["errors"] and u["insiders"]["rows"] and "net_value" in u["insiders"]["summary"]
 
 
+def test_nse_report_list_finds_surveillance_file():
+    import json
+    sample = {"CurrentDay": [
+        {"fileKey": "CM-BHAVDATA-FULL", "displayName": "Full Bhavcopy and Security Deliverable data", "fileActlName": "sec_bhavdata_full_13112026.csv",
+         "filePath": "https://nsearchives.nseindia.com/products/content/", "tradingDate": "13-Nov-2026"},
+        {"fileKey": "CM-REG-IND", "displayName": "Surveillance Indicator (csv)", "fileActlName": "REG1_IND13112026.csv",
+         "filePath": "https://nsearchives.nseindia.com/content/cm/", "tradingDate": "13-Nov-2026"}],
+        "PreviousDay": [{"fileKey": "CM-REG-IND", "displayName": "Surveillance Indicator (csv)", "fileActlName": "REG1_IND12112026.csv",
+                         "filePath": "https://nsearchives.nseindia.com/content/cm/"}]}
+    old = flows._nse_text
+    flows._nse_text = lambda url, params=None, headers=None: json.dumps(sample)
+    try:
+        files = flows.report_files()
+        assert {"name": "REG1_IND13112026.csv", "url": "https://nsearchives.nseindia.com/content/cm/REG1_IND13112026.csv",
+                "group": "CurrentDay", "title": "Surveillance Indicator (csv)"} in files
+        urls = flows.surveillance_report_urls()
+        assert urls[0].endswith("/content/cm/REG1_IND13112026.csv") and len(urls) == 2
+    finally:
+        flows._nse_text = old
+
+
+def test_insider_fetch_falls_back_to_other_request_shapes():
+    calls = []
+    old_json, old_sess = flows._pit_json, flows.calendars._nse_session
+
+    class S:
+        def get(self, *a, **k):
+            return None
+    flows.calendars._nse_session = lambda: S()
+
+    def fake(params):
+        calls.append(dict(params))
+        return [{"symbol": "ABC"}] if params == {"index": "equities"} else []
+    flows._pit_json = fake
+    try:
+        from datetime import date
+        j = flows.pit_fetch(date(2026, 10, 14), date(2026, 11, 13))
+        assert j["data"] == [{"symbol": "ABC"}] and len(calls) == 2          # date range empty -> latest list used
+        flows._pit_json = lambda params: calls.append(params) or []
+        calls.clear()
+        j = flows.pit_fetch(date(2026, 10, 14), date(2026, 11, 13))
+        assert j["data"] == [] and len(calls) == 3 + 5                      # 3 shapes, then 7-day windows over 30 days
+    finally:
+        flows._pit_json, flows.calendars._nse_session = old_json, old_sess
+
+
 if __name__ == "__main__":
     bad = 0
     for n, f in list(globals().items()):

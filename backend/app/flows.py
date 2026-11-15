@@ -37,7 +37,7 @@ def _today() -> date:
     return datetime.now(IST).date()
 
 
-def _nse_text(url: str, params: Optional[dict] = None) -> Optional[str]:
+def _nse_text(url: str, params: Optional[dict] = None, headers: Optional[dict] = None) -> Optional[str]:
     """GET from NSE with the browser-like cookie session. None = file not published (holiday / not yet)."""
     for attempt in range(2):
         with _lock:
@@ -46,7 +46,7 @@ def _nse_text(url: str, params: Optional[dict] = None) -> Optional[str]:
                 time.sleep(w)
             _last[0] = time.time()
         try:
-            r = calendars._nse_session().get(url, params=params, timeout=config.REQUEST_TIMEOUT)
+            r = calendars._nse_session().get(url, params=params, headers=headers, timeout=config.REQUEST_TIMEOUT)
         except Exception as e:  # noqa: BLE001
             calendars._nse["s"] = None
             if attempt:
@@ -249,6 +249,50 @@ def parse_pit(j) -> list[dict]:
     return out
 
 
+PIT_API = "https://www.nseindia.com/api/corporates-pit"
+PIT_PAGE = "https://www.nseindia.com/companies-listing/corporate-filings-insider-trading"
+
+
+def _pit_json(params: dict) -> list:
+    import json as _json
+    text = _nse_text(PIT_API, params, headers={"Referer": PIT_PAGE})
+    j = _json.loads(text) if text else {}
+    return j if isinstance(j, list) else (j or {}).get("data") or []
+
+
+def pit_variants(start, end) -> list[tuple[str, dict]]:
+    f = "%d-%m-%Y"
+    return [("date range", {"index": "equities", "from_date": start.strftime(f), "to_date": end.strftime(f)}),
+            ("latest (as NSE's page loads it)", {"index": "equities"}),
+            ("date range, no index", {"from_date": start.strftime(f), "to_date": end.strftime(f)})]
+
+
+def pit_fetch(start, end) -> dict:
+    """NSE's insider API can answer an empty list unless it is asked the way its own page asks:
+    open the insider-trading page first (cookies + referer), then try the request shapes the page uses,
+    and finally week by week."""
+    try:
+        calendars._nse_session().get(PIT_PAGE, timeout=config.REQUEST_TIMEOUT)
+    except Exception:  # noqa: BLE001
+        pass
+    for _, params in pit_variants(start, end):
+        try:
+            data = _pit_json(params)
+        except Exception:  # noqa: BLE001
+            data = []
+        if data:
+            return {"data": data}
+    data, d = [], end
+    while d > start:                                      # last resort: 7-day windows
+        a = max(start, d - timedelta(days=6))
+        try:
+            data += _pit_json({"index": "equities", "from_date": a.strftime("%d-%m-%Y"), "to_date": d.strftime("%d-%m-%Y")})
+        except Exception:  # noqa: BLE001
+            pass
+        d = a - timedelta(days=1)
+    return {"data": data}
+
+
 def insiders_in(days: int = 30) -> dict:
     key = f"PIT2::IN::{days}"   # v2: dates with a time part no longer dropped
     hit = store.get_company(key)
@@ -258,10 +302,7 @@ def insiders_in(days: int = 30) -> dict:
     if config.DEMO:
         j = _demo_pit(start, end)
     else:
-        text = _nse_text("https://www.nseindia.com/api/corporates-pit",
-                         {"index": "equities", "from_date": start.strftime("%d-%m-%Y"), "to_date": end.strftime("%d-%m-%Y")})
-        import json as _json
-        j = _json.loads(text) if text else []
+        j = pit_fetch(start, end)
     rows = [r for r in parse_pit(j) if r["date"]]
     rows.sort(key=lambda r: (r["date"], r["value"] or 0), reverse=True)
     out = {"rows": rows, "from": start.isoformat(), "to": end.isoformat(),
@@ -336,6 +377,52 @@ def parse_reg_ind(text: str) -> dict:
     return out
 
 
+REPORTS_API = "https://www.nseindia.com/api/daily-reports"
+
+
+def report_files(key: str = "CM") -> list[dict]:
+    """NSE's 'All reports' page lists each day's files with their real names and folders.
+    Returns [{"name": "REG_IND131126.csv", "url": "https://nsearchives…/REG_IND131126.csv", "group": "CurrentDay"}]."""
+    import json as _json
+    text = _nse_text(REPORTS_API, {"key": key}, headers={"Referer": "https://www.nseindia.com/all-reports"})
+    j = _json.loads(text) if text else {}
+    out = []
+    for group, items in (j.items() if isinstance(j, dict) else [("all", j)]):
+        for it in items if isinstance(items, list) else []:
+            if not isinstance(it, dict):
+                continue
+            vals = [str(v) for v in it.values() if isinstance(v, str)]
+            name = next((v for v in vals if re.search(r"\.(csv|zip|txt|dat)$", v, re.I) and "/" not in v), "")
+            path = next((v for v in vals if v.startswith("http")), "")
+            if name and path:
+                url = path if path.lower().endswith(name.lower()) else path.rstrip("/") + "/" + name
+                out.append({"name": name, "url": url, "group": group, "title": it.get("displayName") or it.get("fileKey") or ""})
+    return out
+
+
+def surveillance_report_urls() -> list[str]:
+    try:
+        files = report_files("CM")
+    except Exception:  # noqa: BLE001
+        return []
+    hits = [f for f in files if re.match(r"REG1?_IND", f["name"], re.I) or "surveillance" in f["title"].lower()]
+    hits.sort(key=lambda f: (f["group"] != "CurrentDay", not f["name"].upper().startswith("REG_IND")))
+    return [f["url"] for f in hits]
+
+
+def _fetch_report(url: str) -> Optional[str]:
+    """A report file as text; zipped reports are unpacked."""
+    if not url.lower().endswith(".zip"):
+        return _nse_text(url)
+    import zipfile
+    r = calendars._nse_session().get(url, timeout=config.REQUEST_TIMEOUT)
+    if r.status_code != 200:
+        return None
+    with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+        inner = next((n for n in z.namelist() if n.lower().endswith(".csv")), None)
+        return z.read(inner).decode("utf-8", "replace") if inner else None
+
+
 def surveillance_urls(d) -> list[str]:
     """REG_IND file names NSE has used: DDMMYY, DDMMYYYY, and the REG1_IND variant."""
     a, b = d.strftime("%d%m%y"), d.strftime("%d%m%Y")
@@ -348,7 +435,26 @@ def surveillance() -> dict:
     if hit and time.time() - hit[0] < 6 * 3600:
         return hit[1]
     d, text, used, tried = _today(), None, None, 0
-    for _ in range(12):
+    if not config.DEMO:                                  # 1) the file NSE's own report list points to
+        for url in surveillance_report_urls():
+            tried += 1
+            try:
+                text = _fetch_report(url)
+            except Exception:  # noqa: BLE001
+                text = None
+            if text and parse_reg_ind(text):
+                used = _today()
+                m = re.search(r"(\d{6,8})\.", url)
+                if m:
+                    try:
+                        used = datetime.strptime(m.group(1), "%d%m%y" if len(m.group(1)) == 6 else "%d%m%Y").date()
+                    except ValueError:
+                        pass
+                out = {"date": used.isoformat(), "flags": parse_reg_ind(text), "source": "NSE surveillance indicator file (REG_IND)"}
+                store.put_company("SURV::IN", out)
+                return out
+            text = None
+    for _ in range(12):                                  # 2) the usual archive file names
         if d.weekday() < 5:
             if config.DEMO:
                 text = _demo_reg_ind()
