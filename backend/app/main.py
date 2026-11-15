@@ -13,7 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import ai, calendars, config, flows, indices, logos, movers, scraper, service, store, technicals, universe, us
+from . import ai, calendars, config, enrich, flows, indices, logos, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
@@ -47,7 +47,9 @@ def search(q: str = Query(..., min_length=1), market: str = "IN"):
 @app.get("/api/stock/{symbol}")
 def stock(symbol: str, refresh: bool = False):
     try:
-        return service.build_report(symbol, refresh=refresh)
+        rep = service.build_report(symbol, refresh=refresh)
+        rep["fno"] = enrich.fno_info(rep.get("symbol") or symbol)
+        return rep
     except scraper.NotFound:
         raise HTTPException(404, f"'{symbol}' not found. Search by company name and pick from the list.")
     except us.USFetchError as e:
@@ -232,19 +234,24 @@ def flows_stock(symbol: str):
 
 
 @app.get("/api/flows/delivery")
-def flows_delivery(only_index: bool = True, min_turnover: float = 5.0):
+def flows_delivery(only_index: bool = True, min_turnover: float = 5.0, fno: bool = False):
     d = _flow(flows.delivery)
     names = {u["symbol"]: u.get("name") for u in movers._universe("IN")}
-    lists = flows.delivery_lists(d, only_index, min_turnover)
+    lots = enrich.fno()
+    src = {**d, "rows": [r for r in d["rows"] if r["symbol"] in lots]} if fno else d
+    lists = flows.delivery_lists(src, only_index and not fno, min_turnover)
     for rows in lists.values():
         for r in rows:
             r["name"] = names.get(r["symbol"]) or r["symbol"]
+            r["fno"] = r["symbol"] in lots
     return {"date": d["date"], "days": d["days"], "lists": {k: v[:80] for k, v in lists.items()}, "source": d["source"]}
 
 
 @app.get("/api/flows/deals")
 def flows_deals():
-    return _flow(flows.deals)
+    d = _flow(flows.deals)
+    lots = enrich.fno()
+    return {**d, "rows": [{**r, "fno": r["symbol"] in lots} for r in d["rows"]]}
 
 
 @app.get("/api/flows/insiders")
@@ -254,16 +261,25 @@ def flows_insiders(market: str = "IN", days: int = 30, symbols: str = ""):
         top = [r["symbol"] for r in sorted((r for r in store.all_rankings() if r.get("market") == "US"), key=lambda r: -(r.get("overall") or 0))[:15]]
         syms = list(dict.fromkeys([s for s in syms if s.startswith("US:")] + top))
         return flows.insiders_us_many(syms)
-    return _flow(flows.insiders_in, max(7, min(days, 90)))
+    d = _flow(flows.insiders_in, max(7, min(days, 90)))
+    lots = enrich.fno()
+    return {**d, "rows": [{**r, "fno": r["symbol"] in lots} for r in d["rows"]]}
 
 
 @app.get("/api/flows/surveillance")
 def flows_surveillance():
     d = _flow(flows.surveillance)
     names = {u["symbol"]: u.get("name") for u in movers._universe("IN")}
-    rows = [{"symbol": s, "name": names.get(s) or s, "in_index": s in names, "flags": f} for s, f in d["flags"].items()]
+    lots = enrich.fno()
+    rows = [{"symbol": s, "name": names.get(s) or s, "in_index": s in names, "fno": s in lots, "flags": f} for s, f in d["flags"].items()]
     rows.sort(key=lambda r: (not r["in_index"], -sum(x["severity"] == "high" for x in r["flags"])))
     return {"date": d["date"], "rows": rows, "source": d["source"]}
+
+
+@app.get("/api/fno")
+def fno_list():
+    lots = enrich.fno()
+    return {"count": len(lots), "lots": lots, "source": "NSE F&O market lots file"}
 
 
 @app.get("/api/indices")
@@ -294,7 +310,7 @@ def rankings(sort: str = "overall", verdict: Optional[str] = None, min_mcap: flo
              market: Optional[str] = None):
     rows = store.all_rankings()
     if market:
-        rows = [r for r in rows if r.get("market", "IN") == market.upper()]
+        rows = enrich.join_all([r for r in rows if r.get("market", "IN") == market.upper()], market.upper())
     if verdict:
         rows = [r for r in rows if r.get("verdict") == verdict]
     if min_mcap:

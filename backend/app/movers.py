@@ -243,7 +243,10 @@ def get(market: str, tf: str = "1D") -> dict:
     dmap = {x["symbol"]: x for x in (dl[1]["rows"] if dl else [])}
     sv = store.get_company("SURV::IN") if market == "IN" else None
     smap = sv[1]["flags"] if sv else {}
+    from . import enrich
+    lots = enrich.fno() if market == "IN" else {}
     for r in rows:
+        r["fno"] = r["symbol"] in lots
         dx = dmap.get(r["symbol"])
         r["deliv"] = {"dp": dx["dp"], "dq_x": dx["dq_x"], "avg_dp": dx["avg_dp"]} if dx else None
         r["surv"] = [f["label"] for f in smap.get(r["symbol"], [])] or None

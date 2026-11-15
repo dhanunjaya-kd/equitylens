@@ -420,7 +420,10 @@ def earnings(market: str, start: date, days: int = 7) -> dict:
     mv_hit = store.get_company(f"MOVERS::{market}")
     mv = {r["symbol"]: r for r in (mv_hit[1]["rows"] if mv_hit else [])}
     today = datetime.now(IST).date().isoformat()
+    from . import enrich
+    lots = enrich.fno() if market == "IN" else {}
     for r in rows:
+        r["fno"] = r["symbol"] in lots
         k = ranks.get(r["symbol"])
         r["in_index"] = r["symbol"] in idx
         r["fund"] = ({"overall": k.get("overall"), "business": k.get("business"), "verdict": k.get("verdict"), "tone": k.get("tone"),

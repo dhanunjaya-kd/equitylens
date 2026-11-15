@@ -72,6 +72,7 @@ export default function Stock({ symbol, tab }) {
             <div className="small muted" style={{ margin: '4px 0 8px' }}>
               {flag(d.symbol)} {isUS(d.symbol) ? `US: ${ticker(d.symbol)} · SEC filings` : [c.nse_symbol && `NSE: ${c.nse_symbol}`, c.bse_code && `BSE: ${c.bse_code}`].filter(Boolean).join(' · ')}
               {d.view === 'standalone' && ' · standalone numbers'}
+              {d.fno && <span className="fno-badge" title="This stock has futures & options on NSE">F&O · lot {num(d.fno.lot)}</span>}
             </div>
             <div>{(c.sector_path || []).map((s) => <span key={s} className="chip">{s}</span>)}</div>
             {nextRes && (() => {

@@ -17,7 +17,7 @@
 [data-theme="light"] .md strong { color: var(--text); }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; font-size: 15px; }
+  font-family: "Twemoji Country Flags", -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; font-size: 15px; }
 body { padding-bottom: calc(70px + env(safe-area-inset-bottom)); -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); text-decoration: none; }
 button { font: inherit; cursor: pointer; }
@@ -204,9 +204,9 @@ html, body { overflow-x: clip; }
   .sn.on { background: rgba(45, 212, 191, .12); color: var(--accent); }
   .content { min-width: 0; }
   .topbar { padding: 12px 28px; }
-  .topbar-inner { max-width: 1280px; }
+  .topbar-inner { max-width: 1720px; }
   .topbar .search-box input { padding: 11px 14px; font-size: 15px; }
-  .wrap { max-width: 1280px; padding: 20px 28px 48px; }
+  .wrap { max-width: 1720px; padding: 20px 32px 48px; }
   .tabs { top: 63px; }
   .h-name { font-size: 26px; }
   .price { font-size: 32px; }
@@ -342,3 +342,59 @@ html, body { transition: background-color .2s ease; }
 .ins-val { font-weight: 800; white-space: nowrap; font-size: 14px; text-align: right; }
 .flow-cols { display: grid; gap: 0; }
 @media (min-width: 1100px) { .flow-cols { grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; } .flow-cols > .card { margin-bottom: 0; } .flow-main { max-width: 1000px; } }
+
+/* ---------- F&O ---------- */
+.fno-tab { white-space: nowrap; }
+.fno-tab.on { background: linear-gradient(135deg, #f59e0b, #f97316); border-color: #f59e0b; color: #1a1205; }
+.fno-badge { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .04em; padding: 1px 6px; border-radius: 6px; margin-left: 6px;
+  color: #f59e0b; border: 1px solid rgba(245,158,11,.55); background: rgba(245,158,11,.1); vertical-align: 2px; }
+
+/* ---------- screener: signature scans + presets ---------- */
+.sig-grid { display: grid; gap: 10px; }
+.sig-card { border: 1px solid var(--line); border-radius: 16px; padding: 13px 14px; cursor: pointer; display: grid; gap: 6px; position: relative; overflow: hidden;
+  background: linear-gradient(135deg, var(--card2), var(--card)); transition: border-color .15s, transform .15s; }
+.sig-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--accent); }
+.sig-card.sig-good::before { background: var(--good); } .sig-card.sig-ok::before { background: var(--ok); } .sig-card.sig-warn::before { background: var(--warn); }
+.sig-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.sig-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sig-title { font-size: 15px; }
+.sig-count { font-weight: 800; font-size: 13px; padding: 2px 10px; border-radius: 99px; background: var(--accent); color: var(--on-accent); }
+.sig-why { line-height: 1.45; }
+.sig-next { padding: 7px 9px; border-radius: 10px; background: var(--card2); border: 1px dashed var(--line); }
+.preset-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.preset-row .preset { min-width: 165px; }
+@media (min-width: 1100px) {
+  .sig-grid { grid-template-columns: repeat(3, 1fr); }
+  .preset-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); overflow: visible; }
+  .preset-row .preset { min-width: 0; }
+}
+@media (max-width: 1099px) {
+  .sig-grid { grid-auto-flow: column; grid-auto-columns: 86%; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: 2px; }
+  .sig-grid::-webkit-scrollbar { display: none; }
+  .sig-card { scroll-snap-align: start; }
+}
+
+/* ---------- beginner guide ---------- */
+.guide-cta { display: flex; align-items: center; gap: 12px; cursor: pointer; margin-top: 14px; border-color: rgba(45,212,191,.45);
+  background: linear-gradient(135deg, rgba(45,212,191,.10), var(--card)); }
+.guide-hero h1 { margin: 4px 0 6px; font-size: 26px; }
+.guide-kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--accent); text-transform: uppercase; }
+.guide-video { width: 100%; border-radius: 14px; border: 1px solid var(--line); background: #000; margin: 8px 0 4px; aspect-ratio: 16 / 9; }
+.guide-h { font-size: 17px; margin: 18px 4px 10px; }
+.guide-step { padding: 0; overflow: hidden; }
+.guide-head { display: flex; align-items: center; gap: 10px; padding: 13px 14px; cursor: pointer; }
+.guide-num { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;
+  background: var(--card2); border: 1px solid var(--line); flex: 0 0 auto; }
+.guide-step.open { border-color: var(--accent); } .guide-step.open .guide-num { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.guide-body { padding: 0 14px 14px 52px; } .guide-body p { margin-top: 0; line-height: 1.55; }
+.guide-gb { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.gb { border-radius: 12px; padding: 9px 11px; border: 1px solid var(--line); display: grid; gap: 3px; line-height: 1.45; }
+.gb.good { background: rgba(34,197,94,.07); border-color: rgba(34,197,94,.35); } .gb.bad { background: rgba(239,68,68,.07); border-color: rgba(239,68,68,.35); }
+.guide-chk { display: flex; gap: 9px; align-items: flex-start; padding: 7px 0; border-bottom: 1px dashed var(--line); line-height: 1.4; cursor: pointer; }
+.guide-chk input { margin-top: 3px; accent-color: var(--accent); }
+.guide-score { font-weight: 800; font-size: 18px; margin-top: 10px; }
+.glossary { display: grid; gap: 0; padding: 4px 14px; }
+.gl-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.gl-row:last-child { border-bottom: 0; }
+@media (max-width: 600px) { .guide-body { padding-left: 14px; } .guide-gb { grid-template-columns: 1fr; } .gl-row { grid-template-columns: 1fr; gap: 1px; } }
+@media (min-width: 1100px) { .guide-cols { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; align-items: start; } .guide-hero { max-width: 1100px; } }

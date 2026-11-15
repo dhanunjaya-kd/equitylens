@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Logo, ScoreRing } from '../components/ui'
+import { FnoBadge, FnoToggle, Logo, ScoreRing, useFno } from '../components/ui'
 import { ExplainList } from './AI'
 import { api, cr, getMarket, go, num, ok, ticker } from '../util'
 
@@ -24,9 +24,36 @@ export const FIELDS = [
   ['piotroski', 'Piotroski F (0-9)', 'Forensics', ''], ['altman_z', 'Altman Z', 'Forensics', ''], ['beneish_m', 'Beneish M', 'Forensics', ''],
   ['high_flags', 'High red flags (count)', 'Forensics', ''],
   ['base_3y', 'Base-case return 3y', 'Outlook', '%'], ['base_5y', 'Base-case return 5y', 'Outlook', '%'], ['base_10y', 'Base-case return 10y', 'Outlook', '%'],
-  ['is_holdco', 'Holding / investment company', 'Type', 'bool'], ['is_financial', 'Bank / NBFC', 'Type', 'bool'],
+  ['is_holdco', 'Holding / investment company', 'Type', 'bool'], ['is_financial', 'Bank / NBFC', 'Type', 'bool'], ['fno', 'F&O stock (NSE)', 'Type', 'bool'],
+  ['ret_1w', 'Return 1 week', 'Trend & money (live)', '%'], ['ret_1m', 'Return 1 month', 'Trend & money (live)', '%'],
+  ['ret_3m', 'Return 3 months', 'Trend & money (live)', '%'], ['ret_1y', 'Return 1 year', 'Trend & money (live)', '%'],
+  ['near_high', '% from 52w high (live)', 'Trend & money (live)', '%'], ['rvol', 'Relative volume today', 'Trend & money (live)', 'x'],
+  ['above50', 'Above 50-day average', 'Trend & money (live)', 'bool'], ['above200', 'Above 200-day average', 'Trend & money (live)', 'bool'],
+  ['dp', 'Delivery % today (NSE)', 'Trend & money (live)', '%'], ['deliv_x', 'Delivery qty vs 10-day avg', 'Trend & money (live)', 'x'],
+  ['insider_net', 'Insider net buying (₹ Cr / $ M)', 'Trend & money (live)', ''], ['insider_buying', 'Insiders / promoters buying', 'Trend & money (live)', 'bool'],
+  ['surveillance', 'Under NSE surveillance', 'Trend & money (live)', 'bool'],
 ]
 const F = Object.fromEntries(FIELDS.map(([k, l, g, u]) => [k, { label: l, group: g, unit: u }]))
+
+// ⭐ EquityLens signature scans: each combines the business, the price trend and the money flow
+export const SIGNATURE = [
+  { name: 'Quality breakout', emoji: '🚀', tone: 'good',
+    what: 'Strong businesses trading near a 52-week high, above their 50- and 200-day averages, with no red flags.',
+    why: 'Good companies making new highs tend to keep leading: the business and the market agree.',
+    next: 'Open the Chart tab: buy-zones are pullbacks to the 20/50 EMA, the risk line is the last swing low.',
+    needs: 'Movers', rules: [['business', '>=', 65], ['above200', '=', 1], ['above50', '=', 1], ['near_high', '>=', -5], ['high_flags', '=', 0], ['surveillance', '=', 0]] },
+  { name: 'Smart-money accumulation', emoji: '🧭', tone: 'ok',
+    what: 'Decent businesses where real money is buying: delivery well above normal (India) or insiders buying (US).',
+    why: 'Delivery and insider buying show conviction that intraday volume and price alone cannot.',
+    next: 'Open Smart money on the stock: check who is buying, the 10-day delivery bars and any deals.',
+    needs: 'Money', rules: [['business', '>=', 60], ['deliv_x', '>=', 1.3], ['dp', '>=', 45], ['ret_1m', '>=', 0], ['surveillance', '=', 0]],
+    rulesUS: [['business', '>=', 60], ['insider_buying', '=', 1], ['high_flags', '=', 0]] },
+  { name: 'Quality on sale', emoji: '💎', tone: 'warn',
+    what: 'Great businesses (score 70+) that fell 15%+ from their high but still look undervalued, with healthy forensics.',
+    why: 'Long-term returns come from buying excellent companies when the market is temporarily pessimistic.',
+    next: 'Check the Overview red flags and the latest quarter: make sure the fall is the market, not the business.',
+    needs: null, rules: [['business', '>=', 70], ['off_high_pct', '<=', -15], ['fair_value_upside', '>=', 10], ['piotroski', '>=', 6], ['high_flags', '=', 0]] },
+]
 
 export const PRESETS = [
   { name: 'Quality compounders', desc: 'High returns, steady growth, low debt, real cash', rules: [['roce', '>=', 20], ['profit_cagr_5', '>=', 15], ['debt_to_equity', '<=', 0.5], ['cfo_to_pat', '>=', 0.8]] },
@@ -67,10 +94,16 @@ export default function Screener() {
   const [name, setName] = useState('')
   const [active, setActive] = useState(PRESETS[0].name)
   const mk = getMarket()
+  const [fno] = useFno()
   useEffect(() => { api(`/api/rankings?market=${mk}`).then((d) => setRows(d.rows || [])).catch(() => setRows([])) }, [mk])
+  const base = useMemo(() => (rows || []).filter((r) => mk === 'US' || !fno || r.fno), [rows, fno, mk])
+  const sigRules = (p) => (mk === 'US' && p.rulesUS ? p.rulesUS : p.rules)
+  const count = (rs) => base.filter((r) => rs.every((ru) => pass(r, ru))).length
+  const hasLive = (rows || []).some((r) => r.above200 !== undefined)
+  const hasMoney = (rows || []).some((r) => (mk === 'US' ? r.insider_net !== null && r.insider_net !== undefined : r.deliv_x !== undefined))
 
-  const res = useMemo(() => (rows || []).filter((r) => rules.every((ru) => pass(r, ru)))
-    .sort((a, b) => (ok(b[sort]) ? b[sort] : -1e9) - (ok(a[sort]) ? a[sort] : -1e9)), [rows, rules, sort])
+  const res = useMemo(() => base.filter((r) => rules.every((ru) => pass(r, ru)))
+    .sort((a, b) => (ok(b[sort]) ? b[sort] : -1e9) - (ok(a[sort]) ? a[sort] : -1e9)), [base, rules, sort])
   const stale = rows && rows.length > 0 && rows.filter((r) => r.piotroski === undefined).length > rows.length / 2
 
   const setRule = (i, part, val) => setRules(rules.map((r, j) => (j === i ? r.map((p, k) => (k === part ? val : p)) : r)))
@@ -87,11 +120,30 @@ export default function Screener() {
   return (
     <>
       <div className="card">
-        <h3>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Screener</h3>
-        <div className="small muted" style={{ marginTop: -4, marginBottom: 8 }}>Ready-made screens. Tap one, then tweak the rules below.</div>
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+        <div className="row between wrapflex" style={{ gap: 8 }}>
+          <h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Screener</h3>
+          <FnoToggle count={fno && rows ? base.length : undefined} />
+        </div>
+        <div className="small muted" style={{ margin: '4px 0 12px' }}>Start with an EquityLens signature scan, or pick a ready-made screen and tweak the rules below.</div>
+        <div className="sig-grid">
+          {SIGNATURE.map((p) => {
+            const rs = sigRules(p)
+            const missing = (p.needs === 'Movers' && !hasLive) || (p.needs === 'Money' && !hasMoney)
+            return (
+              <div key={p.name} className={`sig-card sig-${p.tone} ${active === p.name ? 'on' : ''}`} onClick={() => usePreset({ ...p, rules: rs })}>
+                <div className="row between"><b className="sig-title">{p.emoji} {p.name}</b>{rows && <span className="sig-count">{count(rs)}</span>}</div>
+                <div className="small">{p.what}</div>
+                <div className="small muted sig-why">💡 {p.why}</div>
+                {missing && <div className="small t-warn">Needs live data: open {p.needs === 'Movers' ? 'Market Movers' : mk === 'US' ? 'Smart Money' : 'Smart Money → Delivery'} once.</div>}
+                {active === p.name && <div className="small sig-next">👉 {p.next}</div>}
+              </div>
+            )
+          })}
+        </div>
+        <div className="small muted" style={{ margin: '14px 0 8px', fontWeight: 700 }}>More ready-made screens</div>
+        <div className="preset-row">
           {[...saved.map((s) => ({ ...s, desc: 'Saved screen', mine: true })), ...PRESETS.filter((p) => !(mk === 'US' && p.inOnly))].map((p) => (
-            <div key={p.name} className="tile" style={{ minWidth: 165, cursor: 'pointer', borderColor: active === p.name ? 'var(--accent)' : null }} onClick={() => usePreset(p)}>
+            <div key={p.name} className="tile preset" style={{ cursor: 'pointer', borderColor: active === p.name ? 'var(--accent)' : null }} onClick={() => usePreset(p)}>
               <div className="row between"><b style={{ fontSize: 13 }}>{p.mine ? '★ ' : ''}{p.name}</b>
                 {p.mine && <span className="small muted" onClick={(e) => { e.stopPropagation(); del(p.name) }}>✕</span>}</div>
               <div className="small muted" style={{ marginTop: 3 }}>{p.desc}</div>
@@ -132,7 +184,7 @@ export default function Screener() {
 
       <div className="card" style={{ padding: 0 }}>
         <div className="row between" style={{ padding: '12px 14px' }}>
-          <b>{rows ? `${res.length} match${res.length === 1 ? '' : 'es'}` : 'Loading…'} <span className="small muted">of {rows?.length || 0}</span></b>
+          <b>{rows ? `${res.length} match${res.length === 1 ? '' : 'es'}` : 'Loading…'} <span className="small muted">of {base.length}{fno && mk === 'IN' ? ' F&O stocks' : ''}</span></b>
           <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ maxWidth: 190 }}>
             {FIELDS.filter((f) => f[3] !== 'bool').map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}
           </select>
@@ -143,7 +195,7 @@ export default function Screener() {
           <div key={r.symbol} className="rank-item" onClick={() => go(`stock/${r.symbol}`)}>
             <div className="ring-sm"><ScoreRing value={r.overall} size={44} /></div>
             <div className="grow">
-              <div className="ellip"><Logo sym={r.symbol} name={r.name} size={20} /><b>{r.name}</b> <span className="small muted">{ticker(r.symbol)}</span></div>
+              <div className="ellip"><Logo sym={r.symbol} name={r.name} size={20} /><b>{r.name}</b> <span className="small muted">{ticker(r.symbol)}</span>{r.fno && <FnoBadge lot={r.lot} />}{r.surveillance && <span className="tagc bad" title={(r.surv_labels || []).join(', ')}>🚨</span>}</div>
               <div className="small muted ellip">{r.sector || '—'} · {cr(r.market_cap)}</div>
               <div className="small" style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
                 {showCols.map((k) => <span key={k}><span className="muted">{F[k].label.split(' (')[0]}:</span> <b>{fmt(k, r[k])}</b></span>)}

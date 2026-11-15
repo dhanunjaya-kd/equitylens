@@ -85,6 +85,7 @@ export function parseHash() {
   if (parts[0] === 'watch') return { page: 'watch' }
   if (parts[0] === 'screener') return { page: 'screener' }
   if (parts[0] === 'movers') return { page: 'movers' }
+  if (parts[0] === 'guide') return { page: 'guide' }
   if (parts[0] === 'money') return { page: 'money', tab: parts[1] }
   if (parts[0] === 'calendar') return { page: 'calendar', tab: parts[1] || 'results' }
   if (parts[0] === 'settings') return { page: 'settings' }
@@ -105,3 +106,7 @@ export const applyTheme = (t) => {
   if (m) m.setAttribute('content', t === 'light' ? '#f4f6f9' : '#0b1016')
 }
 export const logoUrl = (sym, name = '') => `/api/logo/${encodeURIComponent(sym)}${name ? `?name=${encodeURIComponent(name)}` : ''}`
+
+// 🎯 F&O-only switch (India): one setting shared by every list page
+export const getFno = () => readLS('eql_fno', '0') === '1'
+export const setFnoLS = (v) => { try { localStorage.setItem('eql_fno', v ? '1' : '0') } catch { /* ignore */ } ; window.dispatchEvent(new Event('eql-fno')) }

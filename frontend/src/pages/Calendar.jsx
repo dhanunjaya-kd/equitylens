@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Logo } from '../components/ui'
+import { FnoBadge, FnoToggle, Logo, useFno } from '../components/ui'
 import { api, getMarket, go, isDesktop, num, ok, signed, watchlist } from '../util'
 import { Md } from './AI'
 
@@ -79,7 +79,7 @@ function ResultRow({ r, mk, starred }) {
     <div className="mv-row cal-row" onClick={() => go(`stock/${r.symbol}`)}>
       <Logo sym={r.symbol} name={r.name} size={34} />
       <div className="grow" style={{ minWidth: 0 }}>
-        <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.ticker}</span>{starred && <span className="tagc warnc">★ watchlist</span>}</div>
+        <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.ticker}</span>{r.fno && <FnoBadge />}{starred && <span className="tagc warnc">★ watchlist</span>}</div>
         <div className="small muted ellip">
           {us ? <>{TIMING[r.timing]?.[0]} {TIMING[r.timing]?.[1]}{r.fiscal_quarter ? ` · qtr ${r.fiscal_quarter}` : ''}{ok(r.market_cap) ? ` · $${num(r.market_cap / 1000, 1)}B` : ''}</>
             : <>{TYPE_EMOJI[r.type] || '🗓️'} {r.purpose}{ok(r.market_cap) ? ` · ₹${num(r.market_cap, 0)} Cr` : ''}</>}
@@ -102,12 +102,13 @@ function Results({ mk, start, sel }) {
   const [d, setD] = useState(null), [err, setErr] = useState(null)
   const [onlyIdx, setOnlyIdx] = useState(true), [onlyWatch, setOnlyWatch] = useState(false), [onlyScanned, setOnlyScanned] = useState(false)
   const [timing, setTiming] = useState(''), [types, setTypes] = useState(['Results']), [q, setQ] = useState('')
+  const [fno] = useFno()
   useEffect(() => { setD(null); setErr(null); api(`/api/calendar/earnings?market=${mk}&start=${start}&days=7`).then(setD).catch((e) => setErr(e.message)) }, [mk, start])
   const watch = useMemo(() => new Set(watchlist.all().map((w) => w.symbol)), [])
   const rows = useMemo(() => (d?.rows || []).filter((r) => (!sel || r.date === sel)
     && (mk === 'US' || types.length === 0 || types.includes(r.type))
     && (!onlyIdx || r.in_index || watch.has(r.symbol)) && (!onlyWatch || watch.has(r.symbol)) && (!onlyScanned || r.fund)
-    && (!timing || r.timing === timing) && (!q || (r.name + ' ' + r.ticker).toLowerCase().includes(q.toLowerCase()))), [d, sel, types, onlyIdx, onlyWatch, onlyScanned, timing, q, mk])
+    && (!timing || r.timing === timing) && (!fno || r.fno) && (!q || (r.name + ' ' + r.ticker).toLowerCase().includes(q.toLowerCase()))), [d, sel, types, onlyIdx, onlyWatch, onlyScanned, timing, q, mk, fno])
   const mine = (d?.rows || []).filter((r) => watch.has(r.symbol) && (mk === 'US' || r.type === 'Results'))
   const days = useMemo(() => { const g = {}; rows.forEach((r) => { (g[r.date] = g[r.date] || []).push(r) }); Object.values(g).forEach((l) => l.sort((a, b) => (watch.has(b.symbol) - watch.has(a.symbol)))); return g }, [rows])
   // scorecard of what already reported this week
@@ -147,6 +148,7 @@ function Results({ mk, start, sel }) {
           <button className={`tab ${onlyIdx ? 'on' : ''}`} onClick={() => setOnlyIdx(!onlyIdx)}>🏛️ {mk === 'US' ? 'S&P 500' : 'NIFTY 500'} only</button>
           <button className={`tab ${onlyWatch ? 'on' : ''}`} onClick={() => setOnlyWatch(!onlyWatch)}>⭐ Watchlist</button>
           <button className={`tab ${onlyScanned ? 'on' : ''}`} onClick={() => setOnlyScanned(!onlyScanned)}>🏆 Scanned ({d?.scanned || 0})</button>
+          <FnoToggle />
           {mk === 'US' && ['BMO', 'AMC'].map((t) => <button key={t} className={`tab ${timing === t ? 'on' : ''}`} onClick={() => setTiming(timing === t ? '' : t)}>{TIMING[t][0]} {TIMING[t][1]}</button>)}
         </div>
         <input className="cal-q" placeholder="Find a company…" value={q} onChange={(e) => setQ(e.target.value)} />

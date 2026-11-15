@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Badge, Logo } from '../components/ui'
+import { Badge, FnoBadge, FnoToggle, Logo, useFno } from '../components/ui'
 import { ago, api, cr, getMarket, go, isDesktop, num, ok, pct, rs, signed, ticker, watchlist } from '../util'
 import { Md } from './AI'
 
@@ -86,6 +86,7 @@ export default function Movers() {
   }, [d?.status?.running])
 
   const watchSet = useMemo(() => new Set(watchlist.all().map((w) => w.symbol)), [])
+  const [fno] = useFno()
   const filtered = useMemo(() => {
     const rows = d?.rows || []
     return rows.filter((x) => (!sector || x.sector === sector)
@@ -93,8 +94,8 @@ export default function Movers() {
       && (f.minTurn === '' || (x.turnover?.[tf] || 0) >= +f.minTurn)
       && (f.minCap === '' || (x.fund?.market_cap || 0) >= +f.minCap)
       && (f.minScore === '' || (x.fund?.overall || 0) >= +f.minScore)
-      && (!f.watch || watchSet.has(x.symbol)) && (!f.above200 || x.above200))
-  }, [d, sector, f, tf])
+      && (!f.watch || watchSet.has(x.symbol)) && (!f.above200 || x.above200) && (!fno || x.fno))
+  }, [d, sector, f, tf, fno])
   const items = useMemo(() => build(list, filtered, tf).slice(0, 50), [list, filtered, tf])
   const counts = useMemo(() => Object.fromEntries(LISTS.map(([k]) => [k, build(k, filtered, tf).length])), [filtered, tf])
   const st = d?.status || {}
@@ -186,8 +187,8 @@ export default function Movers() {
                 ))}
               </div>
               <div className="small muted" style={{ marginTop: 6 }}>{LISTS.find((l) => l[0] === list)[3]} · {TF_WORD[tf]}.</div>
-              <div className="row between" style={{ marginTop: 10 }}>
-                <button className="btn small" onClick={() => setShowF(!showF)}>⚙️ Filters{activeF ? ` (${activeF})` : ''}</button>
+              <div className="row between wrapflex" style={{ marginTop: 10, gap: 6 }}>
+                <div className="row" style={{ gap: 6 }}><button className="btn small" onClick={() => setShowF(!showF)}>⚙️ Filters{activeF ? ` (${activeF})` : ''}</button><FnoToggle /></div>
                 {sector && <span className="chip" style={{ cursor: 'pointer', margin: 0, color: 'var(--accent)' }} onClick={() => setSector('')}>{sector} ✕</span>}
               </div>
               {showF && (
@@ -216,7 +217,7 @@ export default function Movers() {
                     <div className="rank-num">{i + 1}</div>
                     <Logo sym={x.symbol} name={x.name} size={32} />
                     <div className="grow" style={{ minWidth: 0 }}>
-                      <div className="ellip"><b>{x.name}</b> <span className="small muted">{ticker(x.symbol)}</span>{x.closed_high && tf === '1D' && <span className="tagc good">only buyers</span>}{x.closed_low && tf === '1D' && <span className="tagc bad">only sellers</span>}{x.deliv && x.deliv.dq_x >= 1.5 && x.deliv.dp >= 50 && tf === '1D' && <span className="tagc good" title="Delivery % and delivery quantity well above normal">📦 {Math.round(x.deliv.dp)}% delivery</span>}{x.surv && <span className="tagc bad" title={x.surv.join(', ')}>🚨 surveillance</span>}</div>
+                      <div className="ellip"><b>{x.name}</b> <span className="small muted">{ticker(x.symbol)}</span>{x.fno && <FnoBadge />}{x.closed_high && tf === '1D' && <span className="tagc good">only buyers</span>}{x.closed_low && tf === '1D' && <span className="tagc bad">only sellers</span>}{x.deliv && x.deliv.dq_x >= 1.5 && x.deliv.dp >= 50 && tf === '1D' && <span className="tagc good" title="Delivery % and delivery quantity well above normal">📦 {Math.round(x.deliv.dp)}% delivery</span>}{x.surv && <span className="tagc bad" title={x.surv.join(', ')}>🚨 surveillance</span>}</div>
                       <div className="small muted ellip">{x.sector} · {metric(x)}</div>
                       {x.fund && <span className={`badge sm t-${x.fund.tone} bg-${x.fund.tone}`} style={{ marginTop: 3 }}>{x.fund.overall ?? '—'} · {x.fund.verdict}</span>}
                     </div>

@@ -95,7 +95,18 @@ try:
 except Exception:
     ok = False
     traceback.print_exc()
-print("7) Logos ...", end=" ")
+print("7) F&O stock list ...", end=" ")
+try:
+    from app import enrich
+    lots = enrich.fno()
+    print(f"{len(lots)} stocks, e.g. {dict(list(lots.items())[:3])}")
+    if len(lots) < 100:
+        print("   ⚠️ expected ~200 F&O stocks — send me this output")
+except Exception:
+    ok = False
+    print("FAILED")
+    traceback.print_exc()
+print("8) Logos ...", end=" ")
 try:
     from app import logos
     got = {s: logos.get(s)[1] for s in ("RELIANCE", "TCS", "US:AAPL", "US:MSFT")}

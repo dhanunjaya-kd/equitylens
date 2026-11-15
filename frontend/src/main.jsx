@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
+import { polyfillCountryFlagEmojis } from 'country-flag-emoji-polyfill'
+import flagFont from 'country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url'
 import { BottomNav, MarketToggle, SearchBox, SideNav } from './components/ui'
 import { applyTheme, getMarket, getTheme, go, isDesktop, isUS, marketCurrency, parseHash, setCurrency, setMarketLS } from './util'
 import Home from './pages/Home'
@@ -13,7 +15,11 @@ import Movers from './pages/Movers'
 import Calendar from './pages/Calendar'
 import IndexStrip from './components/IndexStrip'
 import SmartMoney from './pages/SmartMoney'
+import Guide from './pages/Guide'
 import { Settings } from './pages/AI'
+
+// Windows has no flag emoji: load a small bundled flag font so the flags show instead of 'IN' / 'US'
+polyfillCountryFlagEmojis('Twemoji Country Flags', flagFont)
 
 function App() {
   const [route, setRoute] = useState(parseHash())
@@ -65,6 +71,7 @@ function App() {
         {route.page === 'movers' && <Movers />}
         {route.page === 'calendar' && <Calendar tab={route.tab} />}
         {route.page === 'money' && <SmartMoney tab={route.tab} />}
+        {route.page === 'guide' && <Guide />}
         {route.page === 'settings' && <Settings />}
         {route.page === 'compare' && <Compare symbols={route.symbols} />}
       </main>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, cur, getMarket, go, logoUrl, ok, scoreColor } from '../util'
+import { api, cur, getFno, getMarket, go, logoUrl, ok, scoreColor, setFnoLS } from '../util'
 
 export function ScoreRing({ value, size = 84, label }) {
   const r = 34, c = 2 * Math.PI * r
@@ -105,6 +105,7 @@ const I = {
   filter: <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />,
   compare: <path d="M8 4v16M16 4v16M4 8h8M12 16h8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
   money: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8.5" /><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8z" /></g>,
+  book: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" /><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5" /></g>,
   cal: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /><circle cx="8.5" cy="14.5" r=".6" fill="currentColor" /><circle cx="12" cy="14.5" r=".6" fill="currentColor" /></g>,
 }
 
@@ -130,6 +131,23 @@ export function BottomNav({ page }) {
   )
 }
 
+// F&O-only switch: shown for the Indian market; every list listens to the same setting
+export function useFno() {
+  const [v, setV] = useState(getFno())
+  useEffect(() => { const on = () => setV(getFno()); window.addEventListener('eql-fno', on); return () => window.removeEventListener('eql-fno', on) }, [])
+  return [v, (x) => setFnoLS(x)]
+}
+export function FnoToggle({ count }) {
+  const [fno, setFno] = useFno()
+  if (getMarket() !== 'IN') return null
+  return (
+    <button className={`tab fno-tab ${fno ? 'on' : ''}`} title="Show only stocks that have futures & options on NSE" onClick={() => setFno(!fno)}>
+      🎯 F&O stocks only{ok(count) ? ` · ${count}` : ''}
+    </button>
+  )
+}
+export const FnoBadge = ({ lot }) => <span className="fno-badge" title={lot ? `F&O stock · lot size ${lot}` : 'F&O stock'}>F&O</span>
+
 export function MarketToggle({ market, onChange }) {
   return (
     <div className="mkt">
@@ -144,7 +162,7 @@ export function MarketToggle({ market, onChange }) {
 
 export function SideNav({ page, market, onMarket, theme, onTheme }) {
   const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Market Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
-    ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare]]
+    ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare], ['guide', 'guide', 'Beginner guide', I.book]]
   return (
     <aside className="sidenav">
       <div className="brand side" onClick={() => go('')}><img src="/icon.svg" alt="" />Equity<span>Lens</span></div>

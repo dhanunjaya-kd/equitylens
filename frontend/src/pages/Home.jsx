@@ -20,6 +20,13 @@ export default function Home() {
         <SearchBox autoFocus />
       </div>
 
+      <div className="card guide-cta" onClick={() => go('guide')}>
+        <span style={{ fontSize: 30 }}>📘</span>
+        <div className="grow"><b>New to stocks? Learn to read a company in 10 minutes</b>
+          <div className="small muted">11 simple steps, a 10-question checklist, a glossary and a walkthrough video.</div></div>
+        <span className="btn small primary">Start →</span>
+      </div>
+
       {rec.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <h3>Recent</h3>

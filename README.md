@@ -13,13 +13,13 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-69_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-72_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
 **Search a company and get a complete report in seconds: a clear verdict, the reasons behind it, the risks,<br/>what the chart says next, and what has to go right over the next 3, 5 and 10 years.**
 
-[What it does](#-what-it-does) · [Screenshots](#-screenshots) · [Features](#-features) · [Getting started](#-getting-started) · [How it works](#-how-it-works) · [Data sources](#-data-sources)
+[What it does](#-what-it-does) · [Video](#-walkthrough-video) · [Screenshots](#-screenshots) · [Features](#-features) · [Getting started](#-getting-started) · [How it works](#-how-it-works) · [Data sources](#-data-sources)
 
 </div>
 
@@ -39,6 +39,16 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 | 📅 | **Calendar** | Results and economic events with official dates, countdowns and what each one means |
 | 🏆 | **Discovery** | Rank the whole NIFTY 500 / S&P 500, build your own screens, watchlist, compare |
 | ✨ | **AI analyst** | Research notes, chat, bull-vs-bear debate, guidance check, report reader — with your choice of AI |
+| 🎯 | **F&O stocks** | One switch turns every list into F&O stocks only; F&O badge and lot size on each stock |
+| 📘 | **Beginner guide** | Learn to read a company in 10 minutes: 11 steps, a checklist, a glossary and a walkthrough video |
+
+---
+
+## 🎬 Walkthrough video
+
+<a href="docs/equitylens_walkthrough.mp4"><img src="docs/screenshots/walkthrough_poster.jpg" alt="Watch the EquityLens walkthrough" width="100%"/></a>
+
+**[▶️ Watch the 3½-minute walkthrough](docs/equitylens_walkthrough.mp4)**: every step of reading a company, plus the daily market tools, with captions. The same video plays inside the app on the **📘 Beginner guide** page.
 
 ---
 
@@ -67,6 +77,9 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 | **Experience** | | |
 | 🇮🇳 India and 🇺🇸 US in one app, same analysis for both | ➖ | ✅ |
 | AI analyst with **your choice of provider** (Claude, ChatGPT, Gemini, or free local Ollama) | ➖ | ✅ |
+| **3 signature scans** joining business quality, trend and money flow | ➖ | ✅ |
+| 🎯 **F&O stocks only** switch across every list, with lot sizes | ➖ | ✅ |
+| 📘 **Beginner guide** and walkthrough video built into the app | ➖ | ✅ |
 | Phone and desktop layouts, light and dark theme, company logos | ✅ | ✅ |
 | Runs on **your** machine — your data and keys stay with you | ➖ | ✅ |
 
@@ -102,7 +115,11 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 <td align="center"><img src="docs/screenshots/desktop/rankings.png"/><br/><b>🏆 Top Picks ranking table</b></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/desktop/home.png"/><br/><b>🏠 Home with the index card</b></td>
+<td align="center"><img src="docs/screenshots/desktop/screener.png"/><br/><b>🧮 Screener with the 3 signature scans</b></td>
+<td align="center"><img src="docs/screenshots/desktop/guide.png"/><br/><b>📘 Beginner guide</b></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/desktop/movers_fno.png"/><br/><b>🎯 F&O stocks only</b></td>
 <td align="center"><img src="docs/screenshots/desktop/movers_light.png"/><br/><b>☀️ Light theme</b></td>
 </tr>
 </table>
@@ -132,8 +149,8 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/us_stock.png"/><br/><b>🇺🇸 US stock from SEC filings</b></td>
-<td align="center"><img src="docs/screenshots/screener.png"/><br/><b>Screener</b></td>
-<td align="center"><img src="docs/screenshots/light_overview.png"/><br/><b>Light theme</b></td>
+<td align="center"><img src="docs/screenshots/screener.png"/><br/><b>Signature scans</b></td>
+<td align="center"><img src="docs/screenshots/guide.png"/><br/><b>Beginner guide</b></td>
 </tr>
 </table>
 
@@ -216,10 +233,29 @@ A week view with a day strip, for each market:
 - ＋📅 **Add to your phone, Google or Outlook calendar** with a reminder
 - ✨ **Brief me on this week** — the AI explains which numbers and results matter
 
-### 🏆 Top Picks · 🧮 Screener · ⭐ Watchlist · ⚖️ Compare
+### 🧮 Screener and ⭐ signature scans
+
+Three EquityLens signature scans sit at the top. Each one joins the **business**, the **price trend** and the **money flow**, and tells you what to check next:
+
+| Scan | Finds | Why it works |
+|---|---|---|
+| 🚀 **Quality breakout** | Business score 65+, near a 52-week high, above its 50- and 200-day averages, no red flags | Good companies making new highs tend to keep leading |
+| 🧭 **Smart-money accumulation** | Business score 60+ with delivery well above normal (🇮🇳) or insiders buying (🇺🇸) | Delivery and insider buying show conviction that price alone cannot |
+| 💎 **Quality on sale** | Business score 70+, 15%+ below its high, still undervalued, Piotroski 6+ | Great businesses bought when the market is temporarily pessimistic |
+
+Below them: 9 ready-made screens and your own rules on **55+ fields** — fundamentals, forensics, valuation, plus live fields (1W–1Y returns, 50/200-day trend, distance from high, relative volume, delivery %, insider buying, surveillance, F&O). Saved screens stay on your device.
+
+### 🎯 F&O stocks
+
+One **🎯 F&O stocks only** switch (India) filters Market Movers, Calendar, Smart Money, Screener and Top Picks together, and remembers your choice. Every F&O stock carries an **F&O** badge with its lot size, from NSE's official market-lots file.
+
+### 📘 Beginner guide
+
+For someone with zero stock-market knowledge: **11 steps** to read any company (each opens the right tab, with ✅ good signs and 🚩 warning signs), a **10-question checklist** that scores the stock as you tick, a **5-minute daily routine**, a **glossary** of 24 terms and the **walkthrough video**. Open it from the Home page or the sidebar.
+
+### 🏆 Top Picks · ⭐ Watchlist · ⚖️ Compare
 
 - **Top Picks** scans the whole NIFTY 500 or S&P 500 and ranks every company by the same rules; ✨ *explain this list* with AI
-- **Screener** offers 9 ready-made screens (quality compounders, value with quality, below fair value, debt-free growers, Piotroski 8+, promoters buying, cheap vs own history…) and your own rules on 45+ fields, saved on your device
 - **Watchlist** and **Compare** up to 4 stocks side by side
 
 ### ✨ AI analyst
@@ -296,10 +332,11 @@ python run.py
 |:-:|---|---|
 | 1 | Copy `backend/.env.example` to `backend/.env` and set `EQL_SEC_USER_AGENT` to your name and email | The SEC requires it for US data (sent only to sec.gov) |
 | 2 | Run `python selftest.py` in `backend/` | Checks every live source end to end and prints exactly what was read |
-| 3 | Search any stock | Full report in about 5 seconds, cached for 24 hours (↻ Refresh fetches new data) |
-| 4 | ⚙️ Settings → choose an AI provider | Optional: Claude, ChatGPT, Gemini, or free local Ollama |
-| 5 | Top Picks → **Quick scan (30)**, later **Scan NIFTY 500 / S&P 500** | Builds the rankings used by Top Picks, the screener and the *Quality on sale* list (full scan ≈ 30–60 min; re-run weekly) |
-| 6 | Open **Movers**, **Calendar** and **Money** once | First load downloads the index's daily prices and NSE files (a few minutes); after that they refresh in the background |
+| 3 | New to stocks? Open **📘 Beginner guide** | 11 steps, a checklist and the walkthrough video |
+| 4 | Search any stock | Full report in about 5 seconds, cached for 24 hours (↻ Refresh fetches new data) |
+| 5 | ⚙️ Settings → choose an AI provider | Optional: Claude, ChatGPT, Gemini, or free local Ollama |
+| 6 | Top Picks → **Quick scan (30)**, later **Scan NIFTY 500 / S&P 500** | Builds the rankings used by Top Picks, the screener and the *Quality on sale* list (full scan ≈ 30–60 min; re-run weekly) |
+| 7 | Open **Movers**, **Calendar** and **Money** once | First load downloads the index's daily prices and NSE files (a few minutes); after that they refresh in the background |
 
 ### Use on laptop and phone
 
@@ -402,6 +439,7 @@ All free and public. No logins, no paid feeds.
 | Financials (10+ years) | screener.in public company pages | SEC EDGAR XBRL filings (10-K / 10-Q) |
 | Prices, charts, indices | Yahoo Finance public chart feed | Yahoo Finance public chart feed |
 | Index lists | NIFTY 500 (niftyindices.com) | S&P 500 constituents |
+| F&O stocks and lot sizes | NSE F&O market-lots file | — |
 | Delivery % | NSE daily bhavcopy with deliverable quantity | — |
 | Bulk & block deals | NSE bulk / block deal files | — |
 | Insider trades | NSE insider-trading (SEBI PIT) disclosures | SEC Form 4 |
@@ -422,7 +460,7 @@ cd backend
 python run_tests.py
 ```
 
-69 offline tests run against saved copies of each source's real format, so they pass without internet:
+72 offline tests run against saved copies of each source's real format, so they pass without internet:
 
 | Suite | Covers |
 |---|---|
@@ -431,6 +469,7 @@ python run_tests.py
 | `test_us.py` | SEC filings: revenue tag changes merged, year-to-date figures ignored, Q4 derived, TTM, ratios |
 | `test_movers.py` | Returns per timeframe, buying/selling pressure, turnover, relative volume, 52-week breakouts, mood, sector heatmap |
 | `test_flows.py` | NSE delivery, deals, insider and surveillance formats; SEC Form 4; cluster and net-buying maths |
+| `test_enrich.py` | NSE F&O market-lots file, live trend / delivery / insider / surveillance fields joined onto every list |
 | `test_calendar.py` | Nasdaq and NSE calendar formats, official RBI / MoSPI / WPI / FOMC dates and IST / ET times, de-duplication, logos |
 | `test_indices.py` | Index quotes, change maths, market open/closed, VIX bands |
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys |
@@ -458,14 +497,15 @@ equitylens/
 │   │   ├── indices.py        index card quotes and VIX bands
 │   │   ├── flows.py          delivery, deals, insider trades, surveillance, Form 4
 │   │   ├── calendars.py      results and economic calendars, official schedules
+│   │   ├── enrich.py         F&O list + live fields joined onto every list
 │   │   ├── logos.py          company logos with initials fallback
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents
 │   │   ├── money.py · store.py · universe.py · config.py
 │   ├── static/               prebuilt web app (no Node.js needed to run)
-│   ├── tests/                69 offline tests + sample data
+│   ├── tests/                72 offline tests + sample data
 │   └── run.py · selftest.py · run_tests.py · scan.py
 ├── frontend/                 React + Vite source (npm install && npm run build)
-└── docs/                     banner and screenshots
+└── docs/                     banner, screenshots and the walkthrough video
 ```
 
 <details>
@@ -484,6 +524,7 @@ equitylens/
 | `GET /api/calendar/earnings` · `economy` · `next/{symbol}` | Calendars and next results date |
 | `POST /api/ai/{note,chat,guidance,debate,doc,chart}/{symbol}` | AI features for a stock |
 | `POST /api/ai/{picks,movers,calendar}` | AI explanations of lists, moves and the week |
+| `GET /api/fno` | F&O stocks and lot sizes |
 | `GET /api/logo/{symbol}` | Company logo |
 
 `symbol` is the NSE symbol (e.g. `RELIANCE`) or `US:` + ticker (e.g. `US:AAPL`).

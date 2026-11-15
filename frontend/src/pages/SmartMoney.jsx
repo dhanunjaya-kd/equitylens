@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Logo } from '../components/ui'
+import { FnoBadge, FnoToggle, Logo, useFno } from '../components/ui'
 import { api, getMarket, go, num, ok, signed, watchlist } from '../util'
 
 const fmtDate = (s) => (s ? new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—')
@@ -43,7 +43,7 @@ function InsiderTable({ rows, us, showCo }) {
         <div key={i} className={`ins-row ${r.market ? '' : 'dim'}`} onClick={() => showCo && go(`stock/${r.symbol}/money`)}>
           {showCo && <Logo sym={r.symbol} name={r.name} size={28} />}
           <div className="grow" style={{ minWidth: 0 }}>
-            {showCo && <div className="ellip"><b>{r.name}</b> <span className="small muted">{String(r.symbol).replace('US:', '')}</span></div>}
+            {showCo && <div className="ellip"><b>{r.name}</b> <span className="small muted">{String(r.symbol).replace('US:', '')}</span>{r.fno && <FnoBadge />}</div>}
             <div className={showCo ? 'small ellip' : 'ellip'}><SideTag s={r.side} /> <b>{r.person || '—'}</b> <span className="muted">· {us ? r.role : r.category}{r.promoter ? ' 👑' : ''}</span></div>
             <div className="small muted">{fmtDate(r.date)} · {us ? r.type : (r.mode || r.type)}{ok(r.qty) ? ` · ${num(r.qty)} sh` : ''}{ok(r.price) ? ` @ ${us ? '$' : '₹'}${num(r.price, 2)}` : ''}{!us && ok(r.after_pct) ? ` · holds ${r.after_pct}% after` : ''}</div>
           </div>
@@ -121,7 +121,8 @@ const IN_TABS = [['delivery', '📦 Delivery'], ['deals', '🤝 Bulk & block'], 
 
 function Delivery() {
   const [d, setD] = useState(null), [err, setErr] = useState(null), [list, setList] = useState('buying'), [all, setAll] = useState(false)
-  useEffect(() => { setD(null); setErr(null); api(`/api/flows/delivery?only_index=${!all}`).then(setD).catch((e) => setErr(e.message)) }, [all])
+  const [fno] = useFno()
+  useEffect(() => { setD(null); setErr(null); api(`/api/flows/delivery?only_index=${!all}&fno=${fno}`).then(setD).catch((e) => setErr(e.message)) }, [all, fno])
   const L = [['buying', '🟢 Delivery buying', 'Price up, delivery ≥ 50% and delivery quantity ≥ 1.5× its 10-day average'],
     ['selling', '🔴 Delivery selling', 'Price down with the same heavy delivery — real holders exiting'],
     ['highest', '🏦 Highest delivery %', 'Biggest share of volume taken into demat today'],
@@ -144,7 +145,7 @@ function Delivery() {
               <div className="rank-num">{i + 1}</div>
               <Logo sym={r.symbol} name={r.name} size={30} />
               <div className="grow" style={{ minWidth: 0 }}>
-                <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol}</span></div>
+                <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol}</span>{r.fno && <FnoBadge />}</div>
                 <div className="small muted ellip">Delivery {num(r.dp, 1)}% (avg {ok(r.avg_dp) ? r.avg_dp + '%' : '—'}) · {ok(r.dq_x) ? `${r.dq_x}× usual qty` : ''} · {cr(r.deliv_value)} delivered</div>
               </div>
               <div className="cal-num"><b>₹{num(r.close, 2)}</b><div className={`small ${r.ret >= 0 ? 't-good' : 't-bad'}`}>{signed(r.ret, 2, '%')}</div></div>
@@ -160,7 +161,8 @@ function Delivery() {
 function Deals() {
   const [d, setD] = useState(null), [err, setErr] = useState(null), [side, setSide] = useState('')
   useEffect(() => { api('/api/flows/deals').then(setD).catch((e) => setErr(e.message)) }, [])
-  const rows = (d?.rows || []).filter((r) => !side || r.side === side)
+  const [fno] = useFno()
+  const rows = (d?.rows || []).filter((r) => (!side || r.side === side) && (!fno || r.fno))
   return (
     <>
       <div className="card" style={{ paddingBottom: 10 }}>
@@ -176,7 +178,7 @@ function Deals() {
             <div key={i} className="ins-row" onClick={() => go(`stock/${r.symbol}/money`)}>
               <Logo sym={r.symbol} name={r.name} size={28} />
               <div className="grow" style={{ minWidth: 0 }}>
-                <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol} · {r.kind}</span></div>
+                <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol} · {r.kind}</span>{r.fno && <FnoBadge />}</div>
                 <div className="small ellip"><SideTag s={r.side} /> {r.client}</div>
                 <div className="small muted">{num(r.qty)} sh @ ₹{num(r.price, 2)}</div>
               </div>
@@ -198,7 +200,8 @@ function Insiders({ mk }) {
     const syms = watchlist.all().map((w) => w.symbol).join(',')
     api(mk === 'US' ? `/api/flows/insiders?market=US&symbols=${encodeURIComponent(syms)}` : '/api/flows/insiders?market=IN&days=30').then(setD).catch((e) => setErr(e.message))
   }, [mk])
-  const rows = useMemo(() => (d?.rows || []).filter((r) => (!onlyMarket || r.market || r.side === 'PLEDGE') && (!onlyProm || r.promoter) && (!side || r.side === side)), [d, onlyMarket, onlyProm, side])
+  const [fno] = useFno()
+  const rows = useMemo(() => (d?.rows || []).filter((r) => (!onlyMarket || r.market || r.side === 'PLEDGE') && (!onlyProm || r.promoter) && (!side || r.side === side) && (mk === 'US' || !fno || r.fno)), [d, onlyMarket, onlyProm, side, fno])
   const byCo = useMemo(() => {
     const g = {}
     rows.filter((r) => r.side === 'BUY' && r.market).forEach((r) => { const k = r.symbol; g[k] = g[k] || { symbol: k, name: r.name, value: 0, people: new Set() }; g[k].value += r.value || 0; g[k].people.add(r.person) })
@@ -234,7 +237,8 @@ function Insiders({ mk }) {
 function Surveillance() {
   const [d, setD] = useState(null), [err, setErr] = useState(null), [all, setAll] = useState(false)
   useEffect(() => { api('/api/flows/surveillance').then(setD).catch((e) => setErr(e.message)) }, [])
-  const rows = (d?.rows || []).filter((r) => all || r.in_index)
+  const [fno] = useFno()
+  const rows = (d?.rows || []).filter((r) => (all || r.in_index) && (!fno || r.fno))
   return (
     <>
       <div className="card" style={{ paddingBottom: 10 }}>
@@ -250,7 +254,7 @@ function Surveillance() {
             <div key={r.symbol} className="ins-row" onClick={() => go(`stock/${r.symbol}`)}>
               <Logo sym={r.symbol} name={r.name} size={28} />
               <div className="grow" style={{ minWidth: 0 }}>
-                <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol}</span></div>
+                <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol}</span>{r.fno && <FnoBadge />}</div>
                 <div className="surv-tags">{r.flags.map((f) => <span key={f.measure} className={`tagc ${f.severity === 'high' ? 'bad' : 'warnc'}`}>{f.label}</span>)}</div>
               </div>
             </div>
@@ -270,7 +274,7 @@ export default function SmartMoney({ tab }) {
       <div className="card">
         <h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Smart Money</h3>
         <div className="small muted">{mk === 'US' ? 'What company insiders are doing with their own shares (SEC Form 4).' : 'Who is really buying: delivery, big-investor deals, insider trades and exchange red flags. Official NSE data.'}</div>
-        {mk === 'IN' && <div className="list-chips" style={{ marginTop: 10 }}>{IN_TABS.map(([k, l]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`money/${k}`)}>{l}</button>)}</div>}
+        {mk === 'IN' && <div className="list-chips" style={{ marginTop: 10 }}>{IN_TABS.map(([k, l]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`money/${k}`)}>{l}</button>)}<FnoToggle /></div>}
       </div>
       <div className="flow-main">
         {t === 'delivery' && <Delivery />}
