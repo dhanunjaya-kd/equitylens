@@ -189,6 +189,63 @@ def test_peers_new_layouts():
     assert p2["rows"] == [{"name": "TCS", "symbol": "TCS", "P/E": 22.1}]
 
 
+PIT_XBRL = """<?xml version="1.0" encoding="UTF-8"?>
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:in-capmkt="http://www.sebi.gov.in/xbrl/pit">
+  <xbrli:context id="MainI"><xbrli:entity><xbrli:identifier scheme="x">GRAVITA</xbrli:identifier></xbrli:entity></xbrli:context>
+  <xbrli:context id="Person1"/><xbrli:context id="Person2"/>
+  <in-capmkt:NameOfTheCompany contextRef="MainI">Gravita India Limited</in-capmkt:NameOfTheCompany>
+  <in-capmkt:Symbol contextRef="MainI">GRAVITA</in-capmkt:Symbol>
+  <in-capmkt:NameOfThePerson contextRef="Person1">Rajat Agrawal</in-capmkt:NameOfThePerson>
+  <in-capmkt:CategoryOfPerson contextRef="Person1">Promoters</in-capmkt:CategoryOfPerson>
+  <in-capmkt:TypeOfSecurityAcquiredOrDisposed contextRef="Person1">Equity Shares</in-capmkt:TypeOfSecurityAcquiredOrDisposed>
+  <in-capmkt:NumberOfSecuritiesAcquiredOrDisposed contextRef="Person1" unitRef="shares" decimals="0">25000</in-capmkt:NumberOfSecuritiesAcquiredOrDisposed>
+  <in-capmkt:ValueOfSecuritiesAcquiredOrDisposed contextRef="Person1" unitRef="INR" decimals="0">37450000</in-capmkt:ValueOfSecuritiesAcquiredOrDisposed>
+  <in-capmkt:TransactionType contextRef="Person1">Buy</in-capmkt:TransactionType>
+  <in-capmkt:ModeOfAcquisitionOrDisposal contextRef="Person1">Market Purchase</in-capmkt:ModeOfAcquisitionOrDisposal>
+  <in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesFrom contextRef="Person1">2026-11-10</in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesFrom>
+  <in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesTo contextRef="Person1">2026-11-11</in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesTo>
+  <in-capmkt:DateOfIntimationToCompany contextRef="Person1">2026-11-12</in-capmkt:DateOfIntimationToCompany>
+  <in-capmkt:PercentageOfShareholdingPreTransaction contextRef="Person1" unitRef="pure" decimals="2">31.20</in-capmkt:PercentageOfShareholdingPreTransaction>
+  <in-capmkt:PercentageOfShareholdingPostTransaction contextRef="Person1" unitRef="pure" decimals="2">31.24</in-capmkt:PercentageOfShareholdingPostTransaction>
+  <in-capmkt:NameOfThePerson contextRef="Person2">Yogesh Malhotra</in-capmkt:NameOfThePerson>
+  <in-capmkt:CategoryOfPerson contextRef="Person2">Key Managerial Personnel</in-capmkt:CategoryOfPerson>
+  <in-capmkt:NumberOfSecuritiesAcquiredOrDisposed contextRef="Person2" unitRef="shares" decimals="0">1200</in-capmkt:NumberOfSecuritiesAcquiredOrDisposed>
+  <in-capmkt:ValueOfSecuritiesAcquiredOrDisposed contextRef="Person2" unitRef="INR" decimals="0">1800000</in-capmkt:ValueOfSecuritiesAcquiredOrDisposed>
+  <in-capmkt:TransactionType contextRef="Person2">Sell</in-capmkt:TransactionType>
+  <in-capmkt:ModeOfAcquisitionOrDisposal contextRef="Person2">Market Sale</in-capmkt:ModeOfAcquisitionOrDisposal>
+  <in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesFrom contextRef="Person2">2026-11-09</in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesFrom>
+</xbrli:xbrl>"""
+
+
+def test_pit_xbrl_filing():
+    recs = flows.parse_pit_xbrl(PIT_XBRL)
+    assert [r["acqName"] for r in recs] == ["Rajat Agrawal", "Yogesh Malhotra"]
+    rows = flows.parse_pit({"data": [{"symbol": "GRAVITA", "company": "Gravita India Limited", **r} for r in recs]})
+    a, b = rows
+    assert a["side"] == "BUY" and a["promoter"] and a["market"] and a["qty"] == 25000 and a["value"] == 3.745
+    assert a["date"] == "2026-11-10" and a["before_pct"] == 31.2 and a["after_pct"] == 31.24
+    assert b["side"] == "SELL" and not b["promoter"] and b["qty"] == 1200 and b["date"] == "2026-11-09"
+
+
+def test_filing_list_expanded_from_cache_and_queued():
+    url = "https://nsearchives.nseindia.in/corporate/xbrl/IT_1_WebXMLFile_x.xml"
+    store.put_company(flows._xml_key(url), {"rows": flows.parse_pit_xbrl(PIT_XBRL)})
+    lst = [{"symbol": "GRAVITA", "companyName": "Gravita India Limited", "broadcastDateTime": "12-Nov-2026 18:42:10", "xmlFileName": url},
+           {"symbol": "XYZ", "companyName": "Xyz Ltd", "broadcastDateTime": "13-Nov-2026 10:00:00",
+            "xmlFileName": "https://nsearchives.nseindia.in/corporate/xbrl/IT_2_not_cached.xml"}]
+    old = flows._fill_queue
+    flows._fill_queue = lambda: None                      # don't touch the network in tests
+    try:
+        recs, waiting = flows.expand_filings(lst, budget=0)
+    finally:
+        flows._fill_queue = old
+        flows._xq.clear(); flows._xq_running[0] = False
+    rows = flows.parse_pit({"data": recs})
+    assert waiting == 1 and [r["person"] for r in rows if r["symbol"] == "GRAVITA"] == ["Rajat Agrawal", "Yogesh Malhotra"]
+    x = next(r for r in rows if r["symbol"] == "XYZ")
+    assert x["type"] == "Filing (details loading)" and x["side"] == "OTHER" and x["date"] == "2026-11-13"
+
+
 if __name__ == "__main__":
     bad = 0
     for n, f in list(globals().items()):

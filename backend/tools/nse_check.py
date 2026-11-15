@@ -55,10 +55,30 @@ for params in flows.pit_gg_variants(start, end):
             break
     except Exception:  # noqa: BLE001
         print(f"{label:34s} status={st} not JSON: {text[:160]!r}")
+print("\n-- two real filings, read field by field --")
+try:
+    lst = flows.pit_fetch(start, end)
+    for r in [x for x in lst.get("data", []) if flows._filing_url(x)][:2]:
+        url = flows._filing_url(r)
+        xml = flows._nse_xml(url)
+        print(f"{r.get('symbol')}: {url.rsplit('/', 1)[-1]} -> {len(xml or '')} chars")
+        if xml:
+            Path(__file__).resolve().parents[1].joinpath("data", "pit_sample.xml").write_text(xml, encoding="utf-8")
+            import re as _re
+            facts = _re.findall(r"<([\w-]+:[\w]+)[^>]*contextRef=\"([^\"]+)\"[^>]*>([^<]{0,60})<", xml)
+            for tag, ctx, val in facts[:45]:
+                print(f"   {ctx:22s} {tag:70s} {val.strip()}")
+            for row in flows.parse_pit({"data": [{"symbol": r.get("symbol"), **d} for d in flows.parse_pit_xbrl(xml)]}):
+                print("   READ AS:", {k: row[k] for k in ("person", "category", "side", "mode", "qty", "value", "date", "before_pct", "after_pct")})
+except Exception as e:  # noqa: BLE001
+    print("filing check error:", e.__class__.__name__, e)
 try:
     j = flows.pit_fetch(start, end)
+    if j.get("kind") == "gg":
+        recs, waiting = flows.expand_filings(j["data"][:5], budget=5)
+        j = {"data": recs}
     rows = flows.parse_pit(j)
-    print(f"EquityLens result: {len(j['data'])} records -> {len(rows)} trades, {sum(1 for r in rows if r['date'])} with a date")
+    print(f"EquityLens result (first 5 filings): {len(j['data'])} records -> {len(rows)} trades, {sum(1 for r in rows if r['date'])} with a date")
 except Exception as e:  # noqa: BLE001
     print("EquityLens result: error", e)
 

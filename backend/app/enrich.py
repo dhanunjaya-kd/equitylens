@@ -85,7 +85,7 @@ def live_maps(market: str) -> dict:
         out["dl"] = {r["symbol"]: r for r in dl.get("rows", [])}
         sv = _cache("SURV::IN") or {}
         out["sv"] = sv.get("flags", {})
-        pit = _cache("PIT2::IN::30") or _cache("PIT2::IN::90") or {}
+        pit = _cache("PIT3::IN::30") or _cache("PIT3::IN::90") or {}
         ins: dict = {}
         for r in pit.get("rows", []):
             if r.get("market") and r["side"] in ("BUY", "SELL"):

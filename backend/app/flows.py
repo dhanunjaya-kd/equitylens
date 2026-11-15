@@ -328,7 +328,7 @@ def pit_fetch(start, end) -> dict:
         except Exception:  # noqa: BLE001
             data = []
         if data:
-            return {"data": [pit_normalise(r) for r in data]}
+            return {"data": data, "kind": "gg"}           # list of filings; details live in each filing's XBRL
     data, d = [], end
     while d > start:                                      # last resort: 7-day windows
         a = max(start, d - timedelta(days=6))
@@ -340,19 +340,173 @@ def pit_fetch(start, end) -> dict:
     return {"data": data}
 
 
-def insiders_in(days: int = 30) -> dict:
-    key = f"PIT2::IN::{days}"   # v2: dates with a time part no longer dropped
+# ---- details of each filing (NSE's newer list only links to an XBRL file per filing)
+_xq: list = []                  # filings waiting for their XBRL
+_xq_lock = threading.Lock()
+_xq_running = [False]
+
+
+def _xml_key(url: str) -> str:
+    return "PITX::" + url.rsplit("/", 1)[-1]
+
+
+def _nse_xml(url: str) -> Optional[str]:
+    with _lock:
+        w = 1.0 - (time.time() - _last[0])
+        if w > 0:
+            time.sleep(w)
+        _last[0] = time.time()
+    r = calendars._nse_session().get(url, timeout=config.REQUEST_TIMEOUT)
+    if r.status_code == 200 and ("contextRef" in r.text or "<xbrl" in r.text[:2000]):
+        return r.text
+    return None
+
+
+def _pick_fact(g: dict, wants: list, exclude: tuple = ()) -> Optional[str]:
+    """First fact whose (lower-cased) name contains every fragment of one of the wanted groups."""
+    for frags in wants:
+        for k, v in g.items():
+            if all(f in k for f in frags) and not any(x in k for x in exclude):
+                return v
+    return None
+
+
+def parse_pit_xbrl(text: str) -> list[dict]:
+    """A SEBI PIT (Regulation 7) XBRL filing -> one classic-style record per person/transaction.
+    Facts are grouped by their XBRL context; field names are matched by meaning, not exact tags."""
+    root = ET.fromstring(text.encode("utf-8") if isinstance(text, str) else text)
+    by_ctx: dict = {}
+    for el in root.iter():
+        ctx = el.get("contextRef")
+        val = (el.text or "").strip()
+        if not ctx or not val:
+            continue
+        local = el.tag.rsplit("}", 1)[-1]
+        by_ctx.setdefault(ctx, {})[re.sub(r"[^a-z0-9]", "", local.lower())] = val
+
+    def person_of(f: dict) -> Optional[str]:
+        return _pick_fact(f, [("nameof", "person"), ("nameof", "acquirer"), ("nameof", "promoter"), ("nameof", "director"),
+                         ("acquirer", "name"), ("personname",)], exclude=("company", "entity", "compliance", "signatory"))
+
+    common: dict = {}
+    for f in by_ctx.values():
+        if not person_of(f):
+            common.update(f)
+    out = []
+    for f in by_ctx.values():
+        who = person_of(f)
+        if not who:
+            continue
+        g = {**common, **f}
+        out.append({
+            "acqName": who,
+            "personCategory": _pick_fact(g, [("categoryof", "person"), ("category",)]),
+            "secType": _pick_fact(g, [("typeof", "securit", "acqui"), ("typeof", "securit", "dispos"), ("typeof", "securit")],
+                             exclude=("prior", "post", "derivative")),
+            "secAcq": _pick_fact(g, [("number", "securit", "acqui"), ("number", "securit", "dispos"), ("number", "securit", "transact"),
+                                ("noof", "securit"), ("number", "securit")], exclude=("prior", "pre", "post", "after", "held", "derivative")),
+            "secVal": _pick_fact(g, [("value", "securit"), ("value", "transaction"), ("value",)], exclude=("prior", "post", "face", "derivative")),
+            "tdpTransactionType": _pick_fact(g, [("transaction", "type"), ("typeof", "transaction"), ("acquisitionordisposal",), ("buyorsell",)]),
+            "acqMode": _pick_fact(g, [("modeof",), ("mode",)]),
+            "acqfromDt": _pick_fact(g, [("date", "from"), ("from", "date")], exclude=("intimation",)),
+            "acqtoDt": _pick_fact(g, [("dateto",), ("todate",), ("date", "allotment", "to")], exclude=("intimation", "from")),
+            "intimDt": _pick_fact(g, [("intimation",)]),
+            "befAcqSharesPer": _pick_fact(g, [("percent", "pre"), ("percent", "prior"), ("shareholding", "pre"), ("percent", "before")]),
+            "afterAcqSharesPer": _pick_fact(g, [("percent", "post"), ("shareholding", "post"), ("percent", "after")]),
+        })
+    return out
+
+
+def _filing_url(r: dict) -> Optional[str]:
+    u = r.get("xmlFileName") or next((v for v in r.values() if isinstance(v, str) and v.lower().endswith(".xml")), None)
+    return u if u and u.startswith("http") else None
+
+
+def _fetch_filing(url: str) -> Optional[list]:
+    try:
+        text = _nse_xml(url)
+    except Exception:  # noqa: BLE001
+        return None
+    if not text:
+        return None
+    try:
+        rows = parse_pit_xbrl(text)
+    except ET.ParseError:
+        rows = []
+    store.put_company(_xml_key(url), {"rows": rows})
+    return rows
+
+
+def _fill_queue() -> None:
+    while True:
+        with _xq_lock:
+            if not _xq:
+                _xq_running[0] = False
+                return
+            url = _xq.pop(0)
+        if not store.get_company(_xml_key(url)):
+            _fetch_filing(url)
+
+
+def expand_filings(data: list, budget: int = 0) -> tuple[list, int]:
+    """Turn NSE's filing list into classic records using each filing's XBRL.
+    Up to `budget` uncached filings are read now; the rest are read in the background.
+    Returns (records, number still waiting)."""
+    out, waiting, todo = [], 0, []
+    for r in data:
+        base = {"symbol": r.get("symbol"), "company": r.get("companyName") or r.get("company"),
+                "intimDt": r.get("broadcastDateTime") or r.get("exchdisstime"), "xbrl": r.get("ixbrl")}
+        url = _filing_url(r)
+        hit = store.get_company(_xml_key(url)) if url else None
+        rows = hit[1]["rows"] if hit else None
+        if rows is None and url and budget > 0:
+            budget -= 1
+            rows = _fetch_filing(url)
+        if rows:
+            out += [{**base, **d} for d in rows]
+        else:
+            norm = pit_normalise(r)
+            out.append({**norm, **base, "tdpTransactionType": "Filing (details loading)" if url and rows is None else "Filing"})
+            if url and rows is None:
+                waiting += 1
+                todo.append(url)
+    if todo:
+        with _xq_lock:
+            for u in todo:
+                if u not in _xq:
+                    _xq.append(u)
+            start = not _xq_running[0]
+            _xq_running[0] = True
+        if start:
+            threading.Thread(target=_fill_queue, daemon=True).start()
+    return out, waiting
+
+
+def insiders_in(days: int = 30, symbol: Optional[str] = None) -> dict:
+    sym = (symbol or "").upper()
+    key = f"PIT3::IN::{days}" + (f"::{sym}" if sym else "")
     hit = store.get_company(key)
-    if hit and time.time() - hit[0] < 6 * 3600:
+    if hit and time.time() - hit[0] < (6 * 3600 if not hit[1].get("waiting") else 120):
         return hit[1]
     end, start = _today(), _today() - timedelta(days=days)
+    waiting = 0
     if config.DEMO:
         j = _demo_pit(start, end)
     else:
-        j = pit_fetch(start, end)
-    rows = [r for r in parse_pit(j) if r["date"]]
+        lk = f"PITLIST::{days}"                          # the filing list itself, shared by all stocks
+        lhit = store.get_company(lk)
+        if lhit and time.time() - lhit[0] < 3 * 3600:
+            j = lhit[1]
+        else:
+            j = pit_fetch(start, end)
+            store.put_company(lk, j)
+        if j.get("kind") == "gg":
+            data = [r for r in j["data"] if not sym or (r.get("symbol") or "").upper() == sym]
+            recs, waiting = expand_filings(data, budget=25 if sym else 15)
+            j = {"data": recs}
+    rows = [r for r in parse_pit(j) if r["date"] and (not sym or r["symbol"] == sym)]
     rows.sort(key=lambda r: (r["date"], r["value"] or 0), reverse=True)
-    out = {"rows": rows, "from": start.isoformat(), "to": end.isoformat(),
+    out = {"rows": rows, "from": start.isoformat(), "to": end.isoformat(), "waiting": waiting,
            "source": "NSE insider-trading disclosures (SEBI PIT regulations)"}
     store.put_company(key, out)
     return out
@@ -624,7 +778,7 @@ def for_stock(sym: str) -> dict:
         return out
     for k, fn in (("surveillance", lambda: surveillance()["flags"].get(sym, [])), ("delivery", lambda: delivery_for(sym)),
                   ("deals", lambda: (deals(), deals_for(sym))[1]),
-                  ("insiders", lambda: (lambda rs: {"rows": rs, "summary": summarise(rs)})([r for r in insiders_in(90)["rows"] if r["symbol"] == sym]))):
+                  ("insiders", lambda: (lambda rs: {"rows": rs, "summary": summarise(rs)})(insiders_in(90, sym)["rows"]))):
         try:
             out[k] = fn()
         except Exception as e:  # noqa: BLE001 - one source down must not hide the rest
