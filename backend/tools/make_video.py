@@ -277,7 +277,10 @@ def main() -> None:
     total = sum(d for _, d in meta)
     log(f"\nDONE: {target}  ({int(total // 60)} min {int(total % 60)} s)")
     log("The in-app video (Beginner guide) is updated too. Push it to GitHub:")
-    log("  git add docs frontend/public backend/static && git commit -m \"New walkthrough video\" && git push")
+    log("  cd ..")
+    log("  git add docs frontend/public backend/static")
+    log('  git commit -m "New walkthrough video"')
+    log("  git push")
 
 
 if __name__ == "__main__":

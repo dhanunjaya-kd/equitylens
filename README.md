@@ -93,6 +93,8 @@ To film it again with real companies and live data on your own laptop: `python t
 
 ## 📸 Screenshots
 
+All screenshots are taken with live data on a real 🇮🇳 company (**Gravita India**) and a real 🇺🇸 company (**Apple**). To take them again on your own laptop: `python tools\make_screenshots.py` in `backend/` (add `--india TCS --us US:MSFT` for other companies).
+
 ### 🖥️ Desktop
 
 <img src="docs/screenshots/desktop/overview.png" alt="EquityLens stock report on desktop" width="100%"/>
@@ -592,7 +594,7 @@ equitylens/
 │   │   ├── money.py · store.py · universe.py · config.py
 │   ├── static/               prebuilt web app (no Node.js needed to run)
 │   ├── tests/                89 offline tests + sample data
-│   ├── tools/make_video.py   films the walkthrough video on your laptop with live data
+│   ├── tools/                make_video.py · make_screenshots.py: video and screenshots with live data
 │   └── run.py · selftest.py · run_tests.py · scan.py   (logs → data/logs/)
 ├── frontend/                 React + Vite source (npm install && npm run build)
 └── docs/                     screenshots, walkthrough video, CLOUD_AND_PHONE.md guide
