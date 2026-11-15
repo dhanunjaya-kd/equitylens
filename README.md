@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-72_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-76_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -39,6 +39,7 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 | 📅 | **Calendar** | Results and economic events with official dates, countdowns and what each one means |
 | 🏆 | **Discovery** | Rank the whole NIFTY 500 / S&P 500, build your own screens, watchlist, compare |
 | ✨ | **AI analyst** | Research notes, chat, bull-vs-bear debate, guidance check, report reader — with your choice of AI |
+| 🏛️ | **Stock lists** | NIFTY 50 · NIFTY 100 · NIFTY 500 · All NSE — one choice applies to every list and to scans |
 | 🎯 | **F&O stocks** | One switch turns every list into F&O stocks only; F&O badge and lot size on each stock |
 | 📘 | **Beginner guide** | Learn to read a company in 10 minutes: 11 steps, a checklist, a glossary and a walkthrough video |
 
@@ -49,6 +50,8 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 <a href="docs/equitylens_walkthrough.mp4"><img src="docs/screenshots/walkthrough_poster.jpg" alt="Watch the EquityLens walkthrough" width="100%"/></a>
 
 **[▶️ Watch the 3½-minute walkthrough](docs/equitylens_walkthrough.mp4)**: every step of reading a company, plus the daily market tools, with captions. The same video plays inside the app on the **📘 Beginner guide** page.
+
+To film it again with real companies and live data on your own laptop: `python tools\make_video.py --india GRAVITA --us US:AAPL` (see the top of that file for the two packages it needs).
 
 ---
 
@@ -79,6 +82,7 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 | AI analyst with **your choice of provider** (Claude, ChatGPT, Gemini, or free local Ollama) | ➖ | ✅ |
 | **3 signature scans** joining business quality, trend and money flow | ➖ | ✅ |
 | 🎯 **F&O stocks only** switch across every list, with lot sizes | ➖ | ✅ |
+| 🏛️ **NIFTY 50 / 100 / 500 / All NSE** choice shared by movers, calendar, smart money, screener and scans | ➖ | ✅ |
 | 📘 **Beginner guide** and walkthrough video built into the app | ➖ | ✅ |
 | Phone and desktop layouts, light and dark theme, company logos | ✅ | ✅ |
 | Runs on **your** machine — your data and keys stay with you | ➖ | ✅ |
@@ -245,6 +249,19 @@ Three EquityLens signature scans sit at the top. Each one joins the **business**
 
 Below them: 9 ready-made screens and your own rules on **55+ fields** — fundamentals, forensics, valuation, plus live fields (1W–1Y returns, 50/200-day trend, distance from high, relative volume, delivery %, insider buying, surveillance, F&O). Saved screens stay on your device.
 
+### 🏛️ Stock lists: NIFTY 50 · NIFTY 100 · NIFTY 500 · All NSE
+
+One selector (India) decides which stocks every list shows: Market Movers (with its mood gauge and sector heatmap), Calendar, Smart Money, Screener and Top Picks. It is remembered across pages.
+
+| List | Stocks | Top Picks scan time |
+|---|---|---|
+| NIFTY 50 | 50 largest companies | ~3 min |
+| NIFTY 100 | 100 largest | ~6 min |
+| NIFTY 500 *(default)* | ~95% of the market by value | 30–60 min |
+| All NSE | every listed company (~2,000+, EQ and BE series) | 2–3 hours |
+
+Market Movers loads NIFTY 500 prices by default; pick **All NSE** and tap *Load all NSE stocks* once to cover every company (about 10–15 minutes in the background, then it refreshes on its own). Lists come from NSE Indices' constituent files and NSE's list of all listed equities, refreshed weekly.
+
 ### 🎯 F&O stocks
 
 One **🎯 F&O stocks only** switch (India) filters Market Movers, Calendar, Smart Money, Screener and Top Picks together, and remembers your choice. Every F&O stock carries an **F&O** badge with its lot size, from NSE's official market-lots file.
@@ -335,7 +352,7 @@ python run.py
 | 3 | New to stocks? Open **📘 Beginner guide** | 11 steps, a checklist and the walkthrough video |
 | 4 | Search any stock | Full report in about 5 seconds, cached for 24 hours (↻ Refresh fetches new data) |
 | 5 | ⚙️ Settings → choose an AI provider | Optional: Claude, ChatGPT, Gemini, or free local Ollama |
-| 6 | Top Picks → **Quick scan (30)**, later **Scan NIFTY 500 / S&P 500** | Builds the rankings used by Top Picks, the screener and the *Quality on sale* list (full scan ≈ 30–60 min; re-run weekly) |
+| 6 | Top Picks → pick **NIFTY 50 / 100 / 500 / All NSE** (or S&P 500) → **Start scan** | Builds the rankings used by Top Picks, the screener and the signature scans. Start with NIFTY 50 (~3 min); re-run weekly |
 | 7 | Open **Movers**, **Calendar** and **Money** once | First load downloads the index's daily prices and NSE files (a few minutes); after that they refresh in the background |
 
 ### Use on laptop and phone
@@ -438,7 +455,7 @@ All free and public. No logins, no paid feeds.
 |---|---|---|
 | Financials (10+ years) | screener.in public company pages | SEC EDGAR XBRL filings (10-K / 10-Q) |
 | Prices, charts, indices | Yahoo Finance public chart feed | Yahoo Finance public chart feed |
-| Index lists | NIFTY 500 (niftyindices.com) | S&P 500 constituents |
+| Stock lists | NIFTY 50 / 100 / 500 constituents (niftyindices.com) · all listed equities (NSE EQUITY_L) | S&P 500 constituents |
 | F&O stocks and lot sizes | NSE F&O market-lots file | — |
 | Delivery % | NSE daily bhavcopy with deliverable quantity | — |
 | Bulk & block deals | NSE bulk / block deal files | — |
@@ -460,7 +477,7 @@ cd backend
 python run_tests.py
 ```
 
-72 offline tests run against saved copies of each source's real format, so they pass without internet:
+76 offline tests run against saved copies of each source's real format, so they pass without internet:
 
 | Suite | Covers |
 |---|---|
@@ -470,6 +487,7 @@ python run_tests.py
 | `test_movers.py` | Returns per timeframe, buying/selling pressure, turnover, relative volume, 52-week breakouts, mood, sector heatmap |
 | `test_flows.py` | NSE delivery, deals, insider and surveillance formats; SEC Form 4; cluster and net-buying maths |
 | `test_enrich.py` | NSE F&O market-lots file, live trend / delivery / insider / surveillance fields joined onto every list |
+| `test_universe.py` | NIFTY 50 / 100 / 500 and All NSE lists (NSE file formats), index membership, movers filtered by list |
 | `test_calendar.py` | Nasdaq and NSE calendar formats, official RBI / MoSPI / WPI / FOMC dates and IST / ET times, de-duplication, logos |
 | `test_indices.py` | Index quotes, change maths, market open/closed, VIX bands |
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys |
@@ -502,7 +520,8 @@ equitylens/
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents
 │   │   ├── money.py · store.py · universe.py · config.py
 │   ├── static/               prebuilt web app (no Node.js needed to run)
-│   ├── tests/                72 offline tests + sample data
+│   ├── tests/                76 offline tests + sample data
+│   ├── tools/make_video.py   films the walkthrough video on your laptop with live data
 │   └── run.py · selftest.py · run_tests.py · scan.py
 ├── frontend/                 React + Vite source (npm install && npm run build)
 └── docs/                     banner, screenshots and the walkthrough video
@@ -525,6 +544,7 @@ equitylens/
 | `POST /api/ai/{note,chat,guidance,debate,doc,chart}/{symbol}` | AI features for a stock |
 | `POST /api/ai/{picks,movers,calendar}` | AI explanations of lists, moves and the week |
 | `GET /api/fno` | F&O stocks and lot sizes |
+| `GET /api/universe` | NIFTY 50 / 100 / 500 / All NSE sizes and index membership |
 | `GET /api/logo/{symbol}` | Company logo |
 
 `symbol` is the NSE symbol (e.g. `RELIANCE`) or `US:` + ticker (e.g. `US:AAPL`).

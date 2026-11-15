@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FnoBadge, FnoToggle, Logo, useFno } from '../components/ui'
-import { api, getMarket, go, num, ok, signed, watchlist } from '../util'
+import { FnoBadge, FnoToggle, Logo, UniverseChips, useFno, useUniv } from '../components/ui'
+import { api, getMarket, go, inUniv, num, ok, signed, watchlist } from '../util'
 
 const fmtDate = (s) => (s ? new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—')
 const cr = (v) => (ok(v) ? `${v < 0 ? '-' : ''}₹${num(Math.abs(v), Math.abs(v) < 10 ? 2 : 0)} Cr` : '—')
@@ -120,9 +120,10 @@ export function StockMoney({ data }) {
 const IN_TABS = [['delivery', '📦 Delivery'], ['deals', '🤝 Bulk & block'], ['insiders', '👔 Insider trades'], ['surv', '🚨 Surveillance']]
 
 function Delivery() {
-  const [d, setD] = useState(null), [err, setErr] = useState(null), [list, setList] = useState('buying'), [all, setAll] = useState(false)
+  const [d, setD] = useState(null), [err, setErr] = useState(null), [list, setList] = useState('buying')
   const [fno] = useFno()
-  useEffect(() => { setD(null); setErr(null); api(`/api/flows/delivery?only_index=${!all}&fno=${fno}`).then(setD).catch((e) => setErr(e.message)) }, [all, fno])
+  const [univ] = useUniv()
+  useEffect(() => { setD(null); setErr(null); api(`/api/flows/delivery?universe=${univ}&fno=${fno}`).then(setD).catch((e) => setErr(e.message)) }, [univ, fno])
   const L = [['buying', '🟢 Delivery buying', 'Price up, delivery ≥ 50% and delivery quantity ≥ 1.5× its 10-day average'],
     ['selling', '🔴 Delivery selling', 'Price down with the same heavy delivery — real holders exiting'],
     ['highest', '🏦 Highest delivery %', 'Biggest share of volume taken into demat today'],
@@ -133,7 +134,6 @@ function Delivery() {
       <div className="card" style={{ paddingBottom: 8 }}>
         <div className="list-chips">{L.map(([k, l]) => <button key={k} className={`tab ${list === k ? 'on' : ''}`} onClick={() => setList(k)}>{l} {d && <span className="cnt">{d.lists[k].length}</span>}</button>)}</div>
         <div className="small muted" style={{ marginTop: 6 }}>{L.find((x) => x[0] === list)[2]}{d ? ` · session ${fmtDate(d.date)}` : ''}.</div>
-        <div className="row" style={{ gap: 6, marginTop: 8 }}><button className={`tab ${!all ? 'on' : ''}`} onClick={() => setAll(!all)}>🏛️ NIFTY 500 only</button></div>
       </div>
       {err && <div className="card t-bad">⚠️ {err}</div>}
       {!d && !err && <div className="card empty">Downloading NSE delivery files (first time ~15 s)…</div>}
@@ -162,7 +162,8 @@ function Deals() {
   const [d, setD] = useState(null), [err, setErr] = useState(null), [side, setSide] = useState('')
   useEffect(() => { api('/api/flows/deals').then(setD).catch((e) => setErr(e.message)) }, [])
   const [fno] = useFno()
-  const rows = (d?.rows || []).filter((r) => (!side || r.side === side) && (!fno || r.fno))
+  const [univ] = useUniv()
+  const rows = (d?.rows || []).filter((r) => (!side || r.side === side) && (!fno || r.fno) && inUniv(r, univ))
   return (
     <>
       <div className="card" style={{ paddingBottom: 10 }}>
@@ -201,7 +202,8 @@ function Insiders({ mk }) {
     api(mk === 'US' ? `/api/flows/insiders?market=US&symbols=${encodeURIComponent(syms)}` : '/api/flows/insiders?market=IN&days=30').then(setD).catch((e) => setErr(e.message))
   }, [mk])
   const [fno] = useFno()
-  const rows = useMemo(() => (d?.rows || []).filter((r) => (!onlyMarket || r.market || r.side === 'PLEDGE') && (!onlyProm || r.promoter) && (!side || r.side === side) && (mk === 'US' || !fno || r.fno)), [d, onlyMarket, onlyProm, side, fno])
+  const [univ] = useUniv()
+  const rows = useMemo(() => (d?.rows || []).filter((r) => (!onlyMarket || r.market || r.side === 'PLEDGE') && (!onlyProm || r.promoter) && (!side || r.side === side) && (mk === 'US' || ((!fno || r.fno) && inUniv(r, univ)))), [d, onlyMarket, onlyProm, side, fno, univ])
   const byCo = useMemo(() => {
     const g = {}
     rows.filter((r) => r.side === 'BUY' && r.market).forEach((r) => { const k = r.symbol; g[k] = g[k] || { symbol: k, name: r.name, value: 0, people: new Set() }; g[k].value += r.value || 0; g[k].people.add(r.person) })
@@ -235,21 +237,21 @@ function Insiders({ mk }) {
 }
 
 function Surveillance() {
-  const [d, setD] = useState(null), [err, setErr] = useState(null), [all, setAll] = useState(false)
+  const [d, setD] = useState(null), [err, setErr] = useState(null)
   useEffect(() => { api('/api/flows/surveillance').then(setD).catch((e) => setErr(e.message)) }, [])
   const [fno] = useFno()
-  const rows = (d?.rows || []).filter((r) => (all || r.in_index) && (!fno || r.fno))
+  const [univ] = useUniv()
+  const rows = (d?.rows || []).filter((r) => inUniv(r, univ) && (!fno || r.fno))
   return (
     <>
       <div className="card" style={{ paddingBottom: 10 }}>
-        <button className={`tab ${!all ? 'on' : ''}`} onClick={() => setAll(!all)}>🏛️ NIFTY 500 only</button>
-        <div className="small muted" style={{ marginTop: 6 }}>Stocks under NSE surveillance: GSM / ASM / ESM stages, insolvency, defaults, high pledge, loss-making, BZ series… Being on this list is a reason for extra care, not automatically a sell.{d?.date ? ` File of ${fmtDate(d.date)}.` : ''}</div>
+        <div className="small muted">Stocks under NSE surveillance: GSM / ASM / ESM stages, insolvency, defaults, high pledge, loss-making, BZ series… Being on this list is a reason for extra care, not automatically a sell.{d?.date ? ` File of ${fmtDate(d.date)}.` : ''}</div>
       </div>
       {err && <div className="card t-bad">⚠️ {err}</div>}
       {!d && !err && <div className="card empty">Loading NSE surveillance file…</div>}
       {d && (
         <div className="card" style={{ padding: 0 }}>
-          {rows.length === 0 && <div className="empty">{all ? 'No stocks flagged.' : 'No NIFTY 500 stocks flagged. Tap "NIFTY 500 only" to see all.'}</div>}
+          {rows.length === 0 && <div className="empty">{univ === 'ALL' ? 'No stocks flagged.' : 'No stocks flagged in this list. Pick "All NSE" to see every flagged company.'}</div>}
           {rows.slice(0, 300).map((r) => (
             <div key={r.symbol} className="ins-row" onClick={() => go(`stock/${r.symbol}`)}>
               <Logo sym={r.symbol} name={r.name} size={28} />
@@ -274,7 +276,8 @@ export default function SmartMoney({ tab }) {
       <div className="card">
         <h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Smart Money</h3>
         <div className="small muted">{mk === 'US' ? 'What company insiders are doing with their own shares (SEC Form 4).' : 'Who is really buying: delivery, big-investor deals, insider trades and exchange red flags. Official NSE data.'}</div>
-        {mk === 'IN' && <div className="list-chips" style={{ marginTop: 10 }}>{IN_TABS.map(([k, l]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`money/${k}`)}>{l}</button>)}<FnoToggle /></div>}
+        {mk === 'IN' && <div className="list-chips" style={{ marginTop: 10 }}>{IN_TABS.map(([k, l]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`money/${k}`)}>{l}</button>)}</div>}
+        {mk === 'IN' && <div className="row wrapflex" style={{ gap: 8, marginTop: 10 }}><UniverseChips /><FnoToggle /></div>}
       </div>
       <div className="flow-main">
         {t === 'delivery' && <Delivery />}

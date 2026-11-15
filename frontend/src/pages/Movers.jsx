@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Badge, FnoBadge, FnoToggle, Logo, useFno } from '../components/ui'
+import { Badge, FnoBadge, FnoToggle, Logo, UniverseChips, useFno, useUniv } from '../components/ui'
 import { ago, api, cr, getMarket, go, isDesktop, num, ok, pct, rs, signed, ticker, watchlist } from '../util'
 import { Md } from './AI'
 
@@ -77,8 +77,9 @@ export default function Movers() {
   const [ai, setAi] = useState(null), [aiBusy, setAiBusy] = useState(false), [aiErr, setAiErr] = useState(null)
   const poll = useRef()
 
-  const load = () => api(`/api/movers?market=${mk}&tf=${tf}`).then(setD).catch(() => setD({ rows: [], status: {} }))
-  useEffect(() => { load(); setAi(null) }, [tf, mk])
+  const [univ] = useUniv()
+  const load = () => api(`/api/movers?market=${mk}&tf=${tf}${mk === 'IN' ? `&universe=${univ}` : ''}`).then(setD).catch(() => setD({ rows: [], status: {} }))
+  useEffect(() => { load(); setAi(null) }, [tf, mk, univ])
   useEffect(() => {
     clearInterval(poll.current)
     if (d?.status?.running) poll.current = setInterval(load, 4000)
@@ -122,9 +123,16 @@ export default function Movers() {
       <div className="card">
         <div className="row between wrapflex">
           <div><h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Market Movers</h3>
-            <div className="small muted">{mk === 'US' ? 'S&P 500' : 'NIFTY 500'} · {d?.rows?.length || 0} stocks · {d?.updated ? `updated ${ago(d.updated)}` : 'loading…'}</div></div>
+            <div className="small muted">{mk === 'US' ? 'S&P 500' : (univ === 'ALL' && d?.universe === 'ALL' ? 'All NSE stocks' : univ === 'ALL' ? 'NIFTY 500' : univ.replace('N', 'NIFTY '))} · {d?.rows?.length || 0} stocks · {d?.updated ? `updated ${ago(d.updated)}` : 'loading…'}</div></div>
           <button className="btn small" disabled={st.running} onClick={async () => { await api(`/api/movers/refresh?market=${mk}`, { method: 'POST' }); load() }}>{st.running ? 'Refreshing…' : '↻ Refresh'}</button>
         </div>
+        {mk === 'IN' && <div style={{ marginTop: 10 }}><UniverseChips /></div>}
+        {mk === 'IN' && univ === 'ALL' && d && d.universe !== 'ALL' && !st.running && (
+          <div className="univ-note small">
+            Prices are loaded for the NIFTY 500 only. <b>Load every NSE stock</b> (~2,000 companies, runs in the background for about 10–15 minutes; after that it refreshes on its own).
+            <button className="btn small primary" onClick={async () => { await api(`/api/movers/refresh?market=IN&universe=ALL`, { method: 'POST' }); load() }}>Load all NSE stocks</button>
+          </div>
+        )}
         {st.running && <><div className="small" style={{ marginTop: 8 }}>Loading prices {st.done}/{st.total}…</div><div className="progress"><div style={{ width: `${st.total ? (st.done / st.total) * 100 : 0}%` }} /></div></>}
         <div className="row" style={{ gap: 6, marginTop: 12 }}>
           {TFS.map((t) => <button key={t} className={`tab ${tf === t ? 'on' : ''}`} style={{ flex: 1 }} onClick={() => setTf(t)}>{t}</button>)}

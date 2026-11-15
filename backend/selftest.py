@@ -106,7 +106,15 @@ except Exception:
     ok = False
     print("FAILED")
     traceback.print_exc()
-print("8) Logos ...", end=" ")
+print("8) Stock lists ...", end=" ")
+try:
+    from app import universe
+    print(" | ".join(f"{universe.LABELS[k]}: {len(universe.index_list(k))}" for k in ("N50", "N100", "N500", "ALL")))
+except Exception:
+    ok = False
+    print("FAILED")
+    traceback.print_exc()
+print("9) Logos ...", end=" ")
 try:
     from app import logos
     got = {s: logos.get(s)[1] for s in ("RELIANCE", "TCS", "US:AAPL", "US:MSFT")}

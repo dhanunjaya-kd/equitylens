@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FnoBadge, FnoToggle, Logo, ScoreRing, useFno } from '../components/ui'
+import { FnoBadge, FnoToggle, Logo, ScoreRing, UniverseChips, useFno, useUniv } from '../components/ui'
 import { ExplainList } from './AI'
-import { api, cr, getMarket, go, num, ok, ticker } from '../util'
+import { api, cr, getMarket, go, inUniv, num, ok, ticker, univLabel } from '../util'
 
 // key, label, group, unit
 export const FIELDS = [
@@ -95,8 +95,9 @@ export default function Screener() {
   const [active, setActive] = useState(PRESETS[0].name)
   const mk = getMarket()
   const [fno] = useFno()
+  const [univ] = useUniv()
   useEffect(() => { api(`/api/rankings?market=${mk}`).then((d) => setRows(d.rows || [])).catch(() => setRows([])) }, [mk])
-  const base = useMemo(() => (rows || []).filter((r) => mk === 'US' || !fno || r.fno), [rows, fno, mk])
+  const base = useMemo(() => (rows || []).filter((r) => mk === 'US' || ((!fno || r.fno) && inUniv(r, univ))), [rows, fno, mk, univ])
   const sigRules = (p) => (mk === 'US' && p.rulesUS ? p.rulesUS : p.rules)
   const count = (rs) => base.filter((r) => rs.every((ru) => pass(r, ru))).length
   const hasLive = (rows || []).some((r) => r.above200 !== undefined)
@@ -122,7 +123,7 @@ export default function Screener() {
       <div className="card">
         <div className="row between wrapflex" style={{ gap: 8 }}>
           <h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Screener</h3>
-          <FnoToggle count={fno && rows ? base.length : undefined} />
+          <div className="row wrapflex" style={{ gap: 8 }}><UniverseChips /><FnoToggle count={fno && rows ? base.length : undefined} /></div>
         </div>
         <div className="small muted" style={{ margin: '4px 0 12px' }}>Start with an EquityLens signature scan, or pick a ready-made screen and tweak the rules below.</div>
         <div className="sig-grid">
@@ -184,7 +185,7 @@ export default function Screener() {
 
       <div className="card" style={{ padding: 0 }}>
         <div className="row between" style={{ padding: '12px 14px' }}>
-          <b>{rows ? `${res.length} match${res.length === 1 ? '' : 'es'}` : 'Loading…'} <span className="small muted">of {base.length}{fno && mk === 'IN' ? ' F&O stocks' : ''}</span></b>
+          <b>{rows ? `${res.length} match${res.length === 1 ? '' : 'es'}` : 'Loading…'} <span className="small muted">of {base.length}{mk === 'IN' ? ` scanned ${univ === 'ALL' ? '' : univLabel(univ) + ' '}${fno ? 'F&O ' : ''}stocks` : ''}</span></b>
           <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ maxWidth: 190 }}>
             {FIELDS.filter((f) => f[3] !== 'bool').map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}
           </select>

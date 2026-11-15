@@ -213,8 +213,13 @@ SCAN = {"market": "IN", "running": False, "total": 0, "done": 0, "failed": 0, "c
 _scan_lock = threading.Lock()
 
 
-def _scan_worker(limit: Optional[int], market: str = "IN") -> None:
-    rows, src = (us.sp500_universe(download=True) if market == "US" else universe.load(download=True))
+def _scan_worker(limit: Optional[int], market: str = "IN", which: str = "N500") -> None:
+    if market == "US":
+        rows, src = us.sp500_universe(download=True)
+    elif which == "N500":
+        rows, src = universe.load(download=True)
+    else:
+        rows, src = universe.index_list(which), universe.LABELS.get(which, which)
     SCAN["market"] = market
     if limit:
         rows = rows[:limit]
@@ -245,15 +250,15 @@ def _scan_worker(limit: Optional[int], market: str = "IN") -> None:
     SCAN.update(running=False, current=None, finished_at=time.time(), stop=False)
 
 
-def start_scan(limit: Optional[int] = None, block: bool = False, market: str = "IN") -> dict:
+def start_scan(limit: Optional[int] = None, block: bool = False, market: str = "IN", which: str = "N500") -> dict:
     with _scan_lock:
         if SCAN["running"]:
             return scan_status()
-        SCAN.update(running=True, stop=False)
+        SCAN.update(running=True, stop=False, universe=which)
     if block:
-        _scan_worker(limit, market)
+        _scan_worker(limit, market, which)
     else:
-        threading.Thread(target=_scan_worker, args=(limit, market), daemon=True).start()
+        threading.Thread(target=_scan_worker, args=(limit, market, which), daemon=True).start()
     return scan_status()
 
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, cur, getFno, getMarket, go, logoUrl, ok, scoreColor, setFnoLS } from '../util'
+import { UNIVERSES, api, cur, getFno, getMarket, getUniv, go, logoUrl, ok, scoreColor, setFnoLS, setUnivLS } from '../util'
 
 export function ScoreRing({ value, size = 84, label }) {
   const r = 34, c = 2 * Math.PI * r
@@ -144,6 +144,23 @@ export function FnoToggle({ count }) {
     <button className={`tab fno-tab ${fno ? 'on' : ''}`} title="Show only stocks that have futures & options on NSE" onClick={() => setFno(!fno)}>
       🎯 F&O stocks only{ok(count) ? ` · ${count}` : ''}
     </button>
+  )
+}
+export function useUniv() {
+  const [v, setV] = useState(getUniv())
+  useEffect(() => { const on = () => setV(getUniv()); window.addEventListener('eql-univ', on); return () => window.removeEventListener('eql-univ', on) }, [])
+  return [v, (x) => setUnivLS(x)]
+}
+// NIFTY 50 · NIFTY 100 · NIFTY 500 · All NSE (India only)
+export function UniverseChips({ counts }) {
+  const [u, setU] = useUniv()
+  if (getMarket() !== 'IN') return null
+  return (
+    <div className="univ">
+      {UNIVERSES.map(([k, l]) => (
+        <button key={k} className={u === k ? 'on' : ''} onClick={() => setU(k)}>{l}{counts?.[k] ? <span className="cnt">{counts[k]}</span> : null}</button>
+      ))}
+    </div>
   )
 }
 export const FnoBadge = ({ lot }) => <span className="fno-badge" title={lot ? `F&O stock · lot size ${lot}` : 'F&O stock'}>F&O</span>

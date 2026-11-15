@@ -13,6 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import universe as universe_mod
 from . import ai, calendars, config, enrich, flows, indices, logos, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -171,13 +172,13 @@ def ai_picks(body: dict = Body(...)):
 
 
 @app.get("/api/movers")
-def movers_get(market: str = "IN", tf: str = "1D"):
-    return movers.get(market, tf)
+def movers_get(market: str = "IN", tf: str = "1D", universe: str = ""):
+    return movers.get(market, tf, universe.upper())
 
 
 @app.post("/api/movers/refresh")
-def movers_refresh(market: str = "IN"):
-    return movers.refresh(market.upper())
+def movers_refresh(market: str = "IN", universe: str = ""):
+    return movers.refresh(market.upper(), which=universe.upper() if universe.upper() in ("N500", "ALL") else "")
 
 
 @app.post("/api/ai/movers")
@@ -234,16 +235,20 @@ def flows_stock(symbol: str):
 
 
 @app.get("/api/flows/delivery")
-def flows_delivery(only_index: bool = True, min_turnover: float = 5.0, fno: bool = False):
+def flows_delivery(only_index: bool = True, min_turnover: float = 5.0, fno: bool = False, universe: str = ""):
     d = _flow(flows.delivery)
-    names = {u["symbol"]: u.get("name") for u in movers._universe("IN")}
+    names = {u["symbol"]: u.get("name") for u in universe_mod.index_list("ALL")}
+    names.update({u["symbol"]: u.get("name") for u in movers._universe("IN") if u.get("name")})
     lots = enrich.fno()
-    src = {**d, "rows": [r for r in d["rows"] if r["symbol"] in lots]} if fno else d
-    lists = flows.delivery_lists(src, only_index and not fno, min_turnover)
+    member = universe_mod.membership()
+    u = universe.upper() or ("N500" if only_index else "ALL")
+    rows = [r for r in d["rows"] if (not fno or r["symbol"] in lots) and (u == "ALL" or u in member.get(r["symbol"], []))]
+    lists = flows.delivery_lists({**d, "rows": rows}, False, min_turnover)
     for rows in lists.values():
         for r in rows:
             r["name"] = names.get(r["symbol"]) or r["symbol"]
             r["fno"] = r["symbol"] in lots
+            r["idx"] = member.get(r["symbol"], [])
     return {"date": d["date"], "days": d["days"], "lists": {k: v[:80] for k, v in lists.items()}, "source": d["source"]}
 
 
@@ -251,7 +256,8 @@ def flows_delivery(only_index: bool = True, min_turnover: float = 5.0, fno: bool
 def flows_deals():
     d = _flow(flows.deals)
     lots = enrich.fno()
-    return {**d, "rows": [{**r, "fno": r["symbol"] in lots} for r in d["rows"]]}
+    member = universe_mod.membership()
+    return {**d, "rows": [{**r, "fno": r["symbol"] in lots, "idx": member.get(r["symbol"], [])} for r in d["rows"]]}
 
 
 @app.get("/api/flows/insiders")
@@ -263,7 +269,8 @@ def flows_insiders(market: str = "IN", days: int = 30, symbols: str = ""):
         return flows.insiders_us_many(syms)
     d = _flow(flows.insiders_in, max(7, min(days, 90)))
     lots = enrich.fno()
-    return {**d, "rows": [{**r, "fno": r["symbol"] in lots} for r in d["rows"]]}
+    member = universe_mod.membership()
+    return {**d, "rows": [{**r, "fno": r["symbol"] in lots, "idx": member.get(r["symbol"], [])} for r in d["rows"]]}
 
 
 @app.get("/api/flows/surveillance")
@@ -271,7 +278,9 @@ def flows_surveillance():
     d = _flow(flows.surveillance)
     names = {u["symbol"]: u.get("name") for u in movers._universe("IN")}
     lots = enrich.fno()
-    rows = [{"symbol": s, "name": names.get(s) or s, "in_index": s in names, "fno": s in lots, "flags": f} for s, f in d["flags"].items()]
+    member = universe_mod.membership()
+    rows = [{"symbol": s, "name": names.get(s) or s, "in_index": s in names, "fno": s in lots, "idx": member.get(s, []), "flags": f}
+            for s, f in d["flags"].items()]
     rows.sort(key=lambda r: (not r["in_index"], -sum(x["severity"] == "high" for x in r["flags"])))
     return {"date": d["date"], "rows": rows, "source": d["source"]}
 
@@ -324,8 +333,17 @@ def rankings(sort: str = "overall", verdict: Optional[str] = None, min_mcap: flo
 
 
 @app.post("/api/scan/start")
-def scan_start(limit: Optional[int] = None, market: str = "IN"):
-    return service.start_scan(limit, market=market.upper())
+def scan_start(limit: Optional[int] = None, market: str = "IN", universe: str = "N500"):
+    which = universe.upper() if universe.upper() in universe_mod.LABELS else "N500"
+    return service.start_scan(limit, market=market.upper(), which=which)
+
+
+@app.get("/api/universe")
+def universe_info():
+    """Sizes of NIFTY 50 / 100 / 500 / All NSE and which index each stock belongs to."""
+    lists = {k: universe_mod.index_list(k) for k in ("N50", "N100", "N500")}
+    return {"counts": {**{k: len(v) for k, v in lists.items()}, "ALL": len(universe_mod.index_list("ALL"))},
+            "labels": universe_mod.LABELS, "member": universe_mod.membership()}
 
 
 @app.post("/api/scan/stop")

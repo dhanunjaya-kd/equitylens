@@ -77,7 +77,9 @@ def _cache(key: str):
 def live_maps(market: str) -> dict:
     """Read every live cache once; reuse for a whole list."""
     mv = _cache(f"MOVERS::{market}") or {}
-    out = {"mv": {r["symbol"]: r for r in mv.get("rows", [])}, "fno": fno() if market == "IN" else {}}
+    from . import universe
+    out = {"mv": {r["symbol"]: r for r in mv.get("rows", [])}, "fno": fno() if market == "IN" else {},
+           "member": universe.membership() if market == "IN" else {}}
     if market == "IN":
         dl = _cache("DELIVERY::IN") or {}
         out["dl"] = {r["symbol"]: r for r in dl.get("rows", [])}
@@ -109,6 +111,8 @@ def join(row: dict, maps: dict) -> dict:
         row.update(ret_1w=ret.get("1W"), ret_1m=ret.get("1M"), ret_3m=ret.get("3M"), ret_1y=ret.get("1Y"),
                    above50=bool(m.get("above50")), above200=bool(m.get("above200")), near_high=m.get("from_hi"),
                    rvol=m.get("rvol"), new_high=bool(m.get("new_high")))
+    if maps.get("member") is not None and "member" in maps and maps["member"]:
+        row["idx"] = maps["member"].get(sym, [])
     if maps["fno"]:
         row["fno"] = sym in maps["fno"]
         row["lot"] = maps["fno"].get(sym)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FnoBadge, FnoToggle, Logo, useFno } from '../components/ui'
-import { api, getMarket, go, isDesktop, num, ok, signed, watchlist } from '../util'
+import { FnoBadge, FnoToggle, Logo, UniverseChips, useFno, useUniv } from '../components/ui'
+import { api, getMarket, go, inUniv, isDesktop, num, ok, signed, univLabel, watchlist } from '../util'
 import { Md } from './AI'
 
 // ---------- dates (all in the viewer's own time zone)
@@ -103,12 +103,13 @@ function Results({ mk, start, sel }) {
   const [onlyIdx, setOnlyIdx] = useState(true), [onlyWatch, setOnlyWatch] = useState(false), [onlyScanned, setOnlyScanned] = useState(false)
   const [timing, setTiming] = useState(''), [types, setTypes] = useState(['Results']), [q, setQ] = useState('')
   const [fno] = useFno()
+  const [univ] = useUniv()
   useEffect(() => { setD(null); setErr(null); api(`/api/calendar/earnings?market=${mk}&start=${start}&days=7`).then(setD).catch((e) => setErr(e.message)) }, [mk, start])
   const watch = useMemo(() => new Set(watchlist.all().map((w) => w.symbol)), [])
   const rows = useMemo(() => (d?.rows || []).filter((r) => (!sel || r.date === sel)
     && (mk === 'US' || types.length === 0 || types.includes(r.type))
-    && (!onlyIdx || r.in_index || watch.has(r.symbol)) && (!onlyWatch || watch.has(r.symbol)) && (!onlyScanned || r.fund)
-    && (!timing || r.timing === timing) && (!fno || r.fno) && (!q || (r.name + ' ' + r.ticker).toLowerCase().includes(q.toLowerCase()))), [d, sel, types, onlyIdx, onlyWatch, onlyScanned, timing, q, mk, fno])
+    && (mk === 'IN' ? (inUniv(r, univ) || watch.has(r.symbol)) : (!onlyIdx || r.in_index || watch.has(r.symbol))) && (!onlyWatch || watch.has(r.symbol)) && (!onlyScanned || r.fund)
+    && (!timing || r.timing === timing) && (!fno || r.fno) && (!q || (r.name + ' ' + r.ticker).toLowerCase().includes(q.toLowerCase()))), [d, sel, types, onlyIdx, onlyWatch, onlyScanned, timing, q, mk, fno, univ])
   const mine = (d?.rows || []).filter((r) => watch.has(r.symbol) && (mk === 'US' || r.type === 'Results'))
   const days = useMemo(() => { const g = {}; rows.forEach((r) => { (g[r.date] = g[r.date] || []).push(r) }); Object.values(g).forEach((l) => l.sort((a, b) => (watch.has(b.symbol) - watch.has(a.symbol)))); return g }, [rows])
   // scorecard of what already reported this week
@@ -145,7 +146,7 @@ function Results({ mk, start, sel }) {
           </div>
         )}
         <div className="row wrapflex" style={{ gap: 6 }}>
-          <button className={`tab ${onlyIdx ? 'on' : ''}`} onClick={() => setOnlyIdx(!onlyIdx)}>🏛️ {mk === 'US' ? 'S&P 500' : 'NIFTY 500'} only</button>
+          {mk === 'US' ? <button className={`tab ${onlyIdx ? 'on' : ''}`} onClick={() => setOnlyIdx(!onlyIdx)}>🏛️ S&P 500 only</button> : <UniverseChips />}
           <button className={`tab ${onlyWatch ? 'on' : ''}`} onClick={() => setOnlyWatch(!onlyWatch)}>⭐ Watchlist</button>
           <button className={`tab ${onlyScanned ? 'on' : ''}`} onClick={() => setOnlyScanned(!onlyScanned)}>🏆 Scanned ({d?.scanned || 0})</button>
           <FnoToggle />
@@ -156,7 +157,7 @@ function Results({ mk, start, sel }) {
       {err && <div className="card t-bad">⚠️ {err}</div>}
       {!d && !err && <div className="card empty">Loading the {mk === 'US' ? 'earnings' : 'results'} calendar…</div>}
       {d?.notes?.length > 0 && <div className="card small t-warn">⚠️ {d.notes.join(' · ')}</div>}
-      {d && rows.length === 0 && <div className="card empty">Nothing matches for {sel ? dayName(sel) : 'this week'}{onlyIdx ? ` in the ${mk === 'US' ? 'S&P 500' : 'NIFTY 500'} — turn off "${mk === 'US' ? 'S&P 500' : 'NIFTY 500'} only" to see every company` : ''}.</div>}
+      {d && rows.length === 0 && <div className="card empty">Nothing matches for {sel ? dayName(sel) : 'this week'}{mk === 'US' ? (onlyIdx ? ' in the S&P 500 — turn off "S&P 500 only" to see every company' : '') : (univ !== 'ALL' ? ` in the ${univLabel(univ)} — pick "All NSE" to see every company` : '')}.</div>}
       {Object.entries(days).map(([day, list]) => (
         <div key={day} className="card" style={{ padding: 0 }}>
           <div className={`cal-day ${day === todayIso() ? 'today' : ''}`}><b>{dayName(day, { weekday: 'long', day: 'numeric', month: 'short' })}</b><span className="small muted">{rel(day)} · {list.length}</span></div>

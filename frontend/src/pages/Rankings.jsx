@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { FnoBadge, FnoToggle, Logo, ScoreRing, useFno } from '../components/ui'
+import { FnoBadge, FnoToggle, Logo, ScoreRing, UniverseChips, useFno, useUniv } from '../components/ui'
 import { ExplainList } from './AI'
-import { ago, api, cr, getMarket, go, isDesktop, num, pct, scoreColor, signed, ticker } from '../util'
+import { UNIVERSES, ago, api, cr, getMarket, go, inUniv, isDesktop, num, pct, scoreColor, signed, ticker } from '../util'
 
 const SORTS = [
   ['overall', 'Overall score'], ['business', 'Business quality'], ['valuation', 'Cheapest (valuation)'],
@@ -39,10 +39,13 @@ export default function Rankings() {
     return () => clearInterval(poll.current)
   }, [scan?.running])
 
-  const start = async (limit) => setScan(await api(`/api/scan/start?market=${mk}${limit ? `&limit=${limit}` : ''}`, { method: 'POST' }))
+  const [scanList, setScanList] = useState('N500')
+  const start = async (limit, which) => setScan(await api(`/api/scan/start?market=${mk}${limit ? `&limit=${limit}` : ''}${which ? `&universe=${which}` : ''}`, { method: 'POST' }))
+  const SCAN_TIME = { N50: '~3 min', N100: '~6 min', N500: '30–60 min', ALL: '2–3 hours' }
   const stop = async () => setScan(await api('/api/scan/stop', { method: 'POST' }))
   const [fno] = useFno()
-  const rows = (d?.rows || []).filter((r) => !fno || r.fno)
+  const [univ] = useUniv()
+  const rows = (d?.rows || []).filter((r) => (!fno || r.fno) && (mk === 'US' || inUniv(r, univ)))
 
   return (
     <>
@@ -54,7 +57,14 @@ export default function Rankings() {
           </div>
           {scan?.running
             ? <button className="btn small" onClick={stop}>Stop scan</button>
-            : <div className="row"><button className="btn small" onClick={() => start(30)}>Quick scan (30)</button><button className="btn primary small" onClick={() => start()}>Scan {mk === 'US' ? 'S&P 500' : 'NIFTY 500'}</button></div>}
+            : mk === 'US'
+              ? <div className="row"><button className="btn small" onClick={() => start(30)}>Quick scan (30)</button><button className="btn primary small" onClick={() => start()}>Scan S&P 500</button></div>
+              : <div className="row wrapflex" style={{ gap: 6 }}>
+                  <select value={scanList} onChange={(e) => setScanList(e.target.value)} style={{ width: 'auto' }}>
+                    {UNIVERSES.map(([k, l]) => <option key={k} value={k}>Scan {l} ({SCAN_TIME[k]})</option>)}
+                  </select>
+                  <button className="btn primary small" onClick={() => start(null, scanList)}>Start scan</button>
+                </div>}
         </div>
         {scan?.running && scan.market && scan.market !== mk && <div className="small t-warn" style={{ marginTop: 8 }}>A {scan.market === 'US' ? 'US' : 'Indian'} scan is running. Switch market to watch it.</div>}
         {scan?.running && scan.market === mk && (
@@ -75,7 +85,7 @@ export default function Rankings() {
           </select>
         </div>
         <input style={{ width: '100%', marginTop: 10 }} placeholder="Filter by name, symbol or sector" value={q} onChange={(e) => setQ(e.target.value)} />
-        {mk === 'IN' && <div style={{ marginTop: 10 }}><FnoToggle count={fno ? rows.length : undefined} /></div>}
+        {mk === 'IN' && <div className="row wrapflex" style={{ marginTop: 10, gap: 8 }}><UniverseChips /><FnoToggle count={fno ? rows.length : undefined} /></div>}
         <div style={{ marginTop: 10 }}>
           <span className="chip" style={{ cursor: 'pointer', color: !verdict ? 'var(--accent)' : null }} onClick={() => setVerdict('')}>All</span>
           {VERDICTS.map((v) => <span key={v} className="chip" style={{ cursor: 'pointer', color: verdict === v ? 'var(--accent)' : null }} onClick={() => setVerdict(v)}>{v}</span>)}

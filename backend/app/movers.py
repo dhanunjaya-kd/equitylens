@@ -29,7 +29,9 @@ _lock = threading.Lock()
 
 
 # ------------------------------------------------------------------ universe
-def _universe(market: str) -> list[dict]:
+def _universe(market: str, which: str = "N500") -> list[dict]:
+    if config.DEMO and which == "ALL" and market == "IN":
+        return _universe(market) + [{"symbol": f"SMALL{i:02d}", "name": f"Small Co {i:02d}", "industry": "Textiles"} for i in range(1, 11)]
     if config.DEMO:
         sectors = ["IT", "Banks", "Pharma", "Auto", "FMCG", "Metals", "Energy", "Capital Goods"] if market == "IN" else \
                   ["Information Technology", "Financials", "Health Care", "Consumer Discretionary", "Energy", "Industrials"]
@@ -40,7 +42,7 @@ def _universe(market: str) -> list[dict]:
         return rows
     if market == "US":
         return us.sp500_universe(download=True)[0]
-    return universe.load(download=True)[0]
+    return universe.index_list(which) if which == "ALL" else universe.load(download=True)[0]
 
 
 def _yahoo_symbol(sym: str) -> str:
@@ -139,16 +141,19 @@ def _key(market: str) -> str:
     return f"MOVERS::{market}"
 
 
-def refresh(market: str, block: bool = False) -> dict:
+def refresh(market: str, block: bool = False, which: str = "") -> dict:
     with _lock:
         st = STATE[market]
         if st["running"]:
             return status(market)
-        st.update(running=True, done=0, failed=0, total=0, started=time.time())
+        if not which:
+            old = store.get_company(f"MOVERS::{market}")
+            which = (old[1].get("universe") if old else None) or "N500"
+        st.update(running=True, done=0, failed=0, total=0, started=time.time(), universe=which)
 
     def work():
         try:
-            uni = _universe(market)
+            uni = _universe(market, which if market == "IN" else "N500")
             STATE[market]["total"] = len(uni)
             rows: list[dict] = []
 
@@ -169,7 +174,8 @@ def refresh(market: str, block: bool = False) -> dict:
             with ThreadPoolExecutor(max_workers=1 if config.DEMO else 3) as ex:
                 list(ex.map(one, uni))
             if rows:
-                store.put_company(_key(market), {"rows": rows, "updated": time.time(), "count": len(rows)})
+                store.put_company(_key(market), {"rows": rows, "updated": time.time(), "count": len(rows),
+                                                 "universe": which if market == "IN" else "SP500"})
         finally:
             STATE[market]["running"] = False
 
@@ -229,7 +235,7 @@ def _sectors(rows: list[dict], tf: str) -> list[dict]:
     return out
 
 
-def get(market: str, tf: str = "1D") -> dict:
+def get(market: str, tf: str = "1D", which: str = "") -> dict:
     market = market.upper()
     tf = tf if tf in TF else "1D"
     hit = store.get_company(_key(market))
@@ -238,6 +244,13 @@ def get(market: str, tf: str = "1D") -> dict:
     if stale and not STATE[market]["running"]:
         refresh(market)
     rows = data["rows"] if data else []
+    loaded = (data or {}).get("universe") or ("N500" if market == "IN" else "SP500")
+    if market == "IN":
+        member = universe.membership()
+        for r in rows:
+            r["idx"] = member.get(r["symbol"], [])
+        if which in ("N50", "N100", "N500"):
+            rows = [r for r in rows if which in r["idx"]]
     ranks = {r["symbol"]: r for r in store.all_rankings() if r.get("market", "IN") == market}
     dl = store.get_company("DELIVERY::IN") if market == "IN" else None
     dmap = {x["symbol"]: x for x in (dl[1]["rows"] if dl else [])}
@@ -256,4 +269,4 @@ def get(market: str, tf: str = "1D") -> dict:
                       "pe": k.get("pe")} if k else None)
     return {"market": market, "tf": tf, "rows": rows, "updated": data["updated"] if data else None,
             "mood": _mood(rows, tf) if rows else None, "sectors": _sectors(rows, tf) if rows else [],
-            "status": status(market), "scanned": len(ranks)}
+            "status": status(market), "scanned": len(ranks), "universe": loaded, "count": len(rows)}

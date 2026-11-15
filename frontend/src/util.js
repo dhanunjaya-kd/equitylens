@@ -110,3 +110,10 @@ export const logoUrl = (sym, name = '') => `/api/logo/${encodeURIComponent(sym)}
 // 🎯 F&O-only switch (India): one setting shared by every list page
 export const getFno = () => readLS('eql_fno', '0') === '1'
 export const setFnoLS = (v) => { try { localStorage.setItem('eql_fno', v ? '1' : '0') } catch { /* ignore */ } ; window.dispatchEvent(new Event('eql-fno')) }
+
+// 🏛️ Stock list (India): NIFTY 50 · NIFTY 100 · NIFTY 500 · All NSE — shared by every list page
+export const UNIVERSES = [['N50', 'NIFTY 50'], ['N100', 'NIFTY 100'], ['N500', 'NIFTY 500'], ['ALL', 'All NSE']]
+export const getUniv = () => readLS('eql_univ', 'N500')
+export const setUnivLS = (v) => { try { localStorage.setItem('eql_univ', v) } catch { /* ignore */ } ; window.dispatchEvent(new Event('eql-univ')) }
+export const inUniv = (row, u) => u === 'ALL' || !row.idx || row.idx.includes(u)
+export const univLabel = (u) => (UNIVERSES.find((x) => x[0] === u) || [u, u])[1]
