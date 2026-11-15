@@ -56,7 +56,7 @@ def shots(ind: str, us: str) -> list:
         (M, "chart_outlook", "IN", f"{s}/chart", "What the chart says", {}),
         (M, "future", "IN", f"{s}/future", None, {}),
         (M, "valuation", "IN", f"{s}/valuation", None, {}),
-        (M, "peers", "IN", f"{s}/valuation", "Where it ranks among peers", {}),
+        (M, "peers", "IN", f"{s}/valuation", "Where it ranks among peers|Peers|P/E bands", {}),
         (M, "forensics", "IN", f"{s}/forensics", None, {}),
         (M, "money_stock", "IN", f"{s}/money", None, {}),
         (M, "ai", "IN", f"{s}/ai", None, {"ai": True}),
@@ -131,11 +131,15 @@ def shoot(base: str, todo: list, out: Path, ai: bool) -> int:
                     pg.wait_for_timeout(3000)
                 top = 150 if dev == D else 120              # room for the sticky top bar
                 if scroll:
-                    try:
-                        h = pg.locator(f"h3:has-text('{scroll}')").first
-                        h.wait_for(timeout=4000)
-                        h.evaluate(f"e => window.scrollTo(0, e.getBoundingClientRect().top + window.scrollY - {top})")
-                    except Exception:  # noqa: BLE001
+                    for k, head in enumerate(scroll.split("|")):        # first heading that exists wins
+                        try:
+                            h = pg.locator(f"h3:has-text('{head}')").first
+                            h.wait_for(timeout=4000 if k == 0 else 1500)
+                            h.evaluate(f"e => window.scrollTo(0, e.getBoundingClientRect().top + window.scrollY - {top})")
+                            break
+                        except Exception:  # noqa: BLE001
+                            continue
+                    else:
                         log(f"    ('{scroll}' not found, captured the top of the page)")
                 elif dev == M and route.startswith("stock/") and not route.endswith("/overview"):
                     # on a phone the company header fills the screen: start the shot at the tab bar instead
