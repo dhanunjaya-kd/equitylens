@@ -42,6 +42,19 @@ for label, params in flows.pit_variants(start, end):
             print("   first record:", json.dumps(data[0])[:700])
     except Exception:  # noqa: BLE001
         print(f"{label:34s} status={st} not JSON: {text[:120]!r}")
+for params in flows.pit_gg_variants(start, end):
+    st, text = get(flows.PIT_GG_API, params, {"Referer": flows.PIT_PAGE})
+    label = "pit-gg " + ("dates" if "from_date" in params else "latest" if params else "no params")
+    try:
+        j = json.loads(text)
+        data = j if isinstance(j, list) else j.get("data") or []
+        print(f"{label:34s} status={st} records={len(data)} keys={list(j.keys())[:8] if isinstance(j, dict) else 'list'}")
+        if data:
+            print("   first record:", json.dumps(data[0])[:900])
+            print("   read as:", flows.parse_pit({"data": [flows.pit_normalise(data[0])]}))
+            break
+    except Exception:  # noqa: BLE001
+        print(f"{label:34s} status={st} not JSON: {text[:160]!r}")
 try:
     j = flows.pit_fetch(start, end)
     rows = flows.parse_pit(j)
@@ -81,7 +94,9 @@ try:
         ph = scraper.fetch_peers_html(wid)
         print(f"peers reply: {len(ph)} chars, <table> count: {ph.count('<table')}")
         print("first 500 chars:", ph[:500].replace("\n", " "))
-        print("parsed peers:", len(parser.parse_peers(ph)["rows"]))
+        print("parsed peers:", len(parser.parse_peers(ph)["rows"]), parser.parse_peers(ph)["rows"][:2])
+        Path(__file__).resolve().parents[1].joinpath("data", "peers_debug.html").write_text(ph, encoding="utf-8")
+        print("(full reply saved to backend/data/peers_debug.html)")
     else:
         html, view = scraper.fetch_company_html("GRAVITA")
         i = html.find("warehouse")

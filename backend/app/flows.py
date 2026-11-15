@@ -250,12 +250,47 @@ def parse_pit(j) -> list[dict]:
 
 
 PIT_API = "https://www.nseindia.com/api/corporates-pit"
+PIT_GG_API = "https://www.nseindia.com/api/corporates-pit-gg"     # newer list (XBRL-era filings, since May 2026)
+
+# old-style field -> fragments of the field names a newer NSE list may use
+_PIT_FIELDS = {
+    "symbol": ("symbol",), "company": ("companyname", "company", "smname", "issuer"),
+    "acqName": ("acqname", "nameoftheperson", "nameofperson", "personname", "acquirer", "insidername"),
+    "personCategory": ("personcategory", "categoryofperson", "category"),
+    "tdpTransactionType": ("tdptransactiontype", "transactiontype", "typeoftransaction", "acqdisp", "buysell"),
+    "acqMode": ("acqmode", "modeofacq", "mode"),
+    "secAcq": ("secacq", "noofsecurities", "numberofsecurities", "quantity", "noofshares"),
+    "secVal": ("secval", "valueofsecurit", "value"),
+    "acqfromDt": ("acqfromdt", "acqfrom", "dateofallotment", "fromdate", "transactiondate", "tradedate"),
+    "acqtoDt": ("acqtodt", "acqto", "todate"),
+    "intimDt": ("intimdt", "intimation", "broadcast", "submission", "disseminat", "date"),
+    "secType": ("sectype", "typeofsecurit", "securitytype"),
+    "befAcqSharesPer": ("befacqsharesper", "beforeper", "prepercent", "preholding"),
+    "afterAcqSharesPer": ("afteracqsharesper", "afterper", "postpercent", "postholding"),
+    "xbrl": ("xbrl",),
+}
+
+
+def pit_normalise(r: dict) -> dict:
+    """Map a record from either NSE insider list onto the classic corporates-pit field names."""
+    if not isinstance(r, dict) or ("symbol" in r and "secAcq" in r):
+        return r
+    norm = {re.sub(r"[^a-z0-9]", "", k.lower()): k for k in r}
+    out, used = {}, set()
+    for field, frags in _PIT_FIELDS.items():
+        for frag in frags:
+            key = next((orig for low, orig in norm.items() if low not in used and (low == frag or frag in low)), None)
+            if key is not None:
+                out[field] = r[key]
+                used.add(re.sub(r"[^a-z0-9]", "", key.lower()))
+                break
+    return out
 PIT_PAGE = "https://www.nseindia.com/companies-listing/corporate-filings-insider-trading"
 
 
-def _pit_json(params: dict) -> list:
+def _pit_json(params: dict, api: str = PIT_API) -> list:
     import json as _json
-    text = _nse_text(PIT_API, params, headers={"Referer": PIT_PAGE})
+    text = _nse_text(api, params, headers={"Referer": PIT_PAGE})
     j = _json.loads(text) if text else {}
     return j if isinstance(j, list) else (j or {}).get("data") or []
 
@@ -265,6 +300,11 @@ def pit_variants(start, end) -> list[tuple[str, dict]]:
     return [("date range", {"index": "equities", "from_date": start.strftime(f), "to_date": end.strftime(f)}),
             ("latest (as NSE's page loads it)", {"index": "equities"}),
             ("date range, no index", {"from_date": start.strftime(f), "to_date": end.strftime(f)})]
+
+
+def pit_gg_variants(start, end) -> list[dict]:
+    f = "%d-%m-%Y"
+    return [{"index": "equities", "from_date": start.strftime(f), "to_date": end.strftime(f)}, {"index": "equities"}, {}]
 
 
 def pit_fetch(start, end) -> dict:
@@ -282,6 +322,13 @@ def pit_fetch(start, end) -> dict:
             data = []
         if data:
             return {"data": data}
+    for params in pit_gg_variants(start, end):            # NSE's newer insider list
+        try:
+            data = _pit_json(params, PIT_GG_API)
+        except Exception:  # noqa: BLE001
+            data = []
+        if data:
+            return {"data": [pit_normalise(r) for r in data]}
     data, d = [], end
     while d > start:                                      # last resort: 7-day windows
         a = max(start, d - timedelta(days=6))

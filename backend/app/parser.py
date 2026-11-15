@@ -278,38 +278,52 @@ def _parse_documents(soup: BeautifulSoup) -> list[dict]:
 
 
 def parse_peers(html: str) -> dict:
-    """Peers table -> {"columns": [...], "rows": [{col: value}], "median": {...}}"""
+    """Peers table -> {"columns": [...], "rows": [{col: value}], "median": {...}}
+
+    Works whether the header is a <thead> or the first <tr> of <tbody>, with or without an S.No. column:
+    each company row is found by its /company/ link, and numbers are matched to header cells by position."""
     soup = BeautifulSoup(html, "lxml")
     table = soup.find("table")
     if not table:
         return {"columns": [], "rows": [], "median": {}}
-    header_tr = table.find("tr")
+    trs = table.find_all("tr")
+    header_tr = next((tr for tr in trs if tr.find("th")), trs[0] if trs else None)
+    if header_tr is None:
+        return {"columns": [], "rows": [], "median": {}}
     columns = [clean_label(_text(th)) for th in header_tr.find_all(["th", "td"])]
+    skip = {"s.no.", "s.no", "#", "sno", ""}
     rows, median = [], {}
-    for tr in table.find_all("tr")[1:]:
-        tds = tr.find_all("td")
-        if not tds:
+    for tr in trs:
+        if tr is header_tr:
+            continue
+        cells = tr.find_all(["td", "th"])
+        if not cells:
+            continue
+        link = tr.find("a", href=re.compile(r"^/company/"))
+        texts = [_text(c) for c in cells]
+        is_median = any("median" in t.lower() for t in texts[:3])
+        if not link and not is_median:
             continue
         rec = {}
-        for col, td in zip(columns, tds):
-            t = _text(td)
-            if col.lower() in ("name",):
-                rec["name"] = t
-                a = td.find("a")
-                if a and a.get("href"):
-                    m = re.match(r"^/company/([^/]+)/", a["href"])
-                    if m:
-                        rec["symbol"] = m.group(1).upper()
-            elif col.lower() in ("s.no.", "s.no", "#"):
+        if link:
+            rec["name"] = _text(link)
+            m = re.match(r"^/company/([^/]+)/", link["href"])
+            if m:
+                rec["symbol"] = m.group(1).upper()
+        # align cells to columns from the right (numbers are the last columns in both layouts)
+        offset = len(cells) - len(columns)
+        for i, col in enumerate(columns):
+            j = i + offset
+            if j < 0 or j >= len(cells) or col.lower() in skip or "name" in col.lower():
                 continue
-            else:
-                rec[col] = to_number(t)
-        label = _text(tds[0]) + " " + _text(tds[1] if len(tds) > 1 else None)
-        if "median" in label.lower():
-            median = {k: v for k, v in rec.items() if k != "name"}
+            if link and cells[j].find("a", href=re.compile(r"^/company/")):
+                continue
+            rec[col] = to_number(texts[j])
+        if is_median:
+            median = {k: v for k, v in rec.items() if k not in ("name", "symbol")}
         elif rec.get("name"):
             rows.append(rec)
-    return {"columns": [c for c in columns if c.lower() not in ("s.no.", "s.no", "#")], "rows": rows, "median": median}
+    return {"columns": [c for c in columns if c.lower() not in skip], "rows": rows, "median": median}
 
 
 def parse_chart(data: dict) -> dict:

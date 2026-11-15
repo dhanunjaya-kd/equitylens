@@ -157,6 +157,38 @@ def test_insider_fetch_falls_back_to_other_request_shapes():
         flows._pit_json, flows.calendars._nse_session = old_json, old_sess
 
 
+def test_pit_gg_records_are_normalised():
+    rec = {"symbol": "GRAVITA", "companyName": "Gravita India Limited", "nameOfThePerson": "Rajat Agrawal",
+           "categoryOfPerson": "Promoters", "typeOfSecurity": "Equity Shares", "noOfSecurities": "25000",
+           "valueOfSecurity": "37450000", "transactionType": "Buy", "modeOfAcquisition": "Market Purchase",
+           "dateOfAllotmentFrom": "10-Nov-2026", "broadcastDateTime": "12-Nov-2026 18:42:10", "xbrlLink": "https://x/y.xml"}
+    n = flows.pit_normalise(rec)
+    rows = flows.parse_pit({"data": [n]})
+    r = rows[0]
+    assert r["symbol"] == "GRAVITA" and r["person"] == "Rajat Agrawal" and r["promoter"] and r["side"] == "BUY"
+    assert r["market"] and r["qty"] == 25000 and r["value"] == 3.745 and r["date"] == "2026-11-10"
+    classic = {"symbol": "ABC", "secAcq": "1"}
+    assert flows.pit_normalise(classic) is classic
+
+
+def test_peers_new_layouts():
+    from app import parser
+    # header as the first <tr> of <tbody>, an S.No. column, and a median row
+    html = """<table class="data-table"><tbody>
+      <tr><th>S.No.</th><th>Name</th><th>CMP Rs.</th><th>P/E</th><th>Mar Cap Rs.Cr.</th></tr>
+      <tr><td>1.</td><td><a href="/company/GRAVITA/consolidated/">Gravita India</a></td><td>1,498</td><td>27.8</td><td>11,056</td></tr>
+      <tr><td>2.</td><td><a href="/company/POCL/">Pondy Oxides</a></td><td>842</td><td>31.2</td><td>2,350</td></tr>
+      <tr><td></td><td>Median: 2 Co.</td><td>1,170</td><td>29.5</td><td>6,703</td></tr></tbody></table>"""
+    p = parser.parse_peers(html)
+    assert [r["symbol"] for r in p["rows"]] == ["GRAVITA", "POCL"]
+    assert p["rows"][0]["P/E"] == 27.8 and p["rows"][1]["CMP Rs."] == 842 and p["median"]["P/E"] == 29.5
+    # <thead> and no S.No. column
+    html2 = """<table><thead><tr><th>Name</th><th>P/E</th></tr></thead><tbody>
+      <tr><td><a href="/company/TCS/">TCS</a></td><td>22.1</td></tr></tbody></table>"""
+    p2 = parser.parse_peers(html2)
+    assert p2["rows"] == [{"name": "TCS", "symbol": "TCS", "P/E": 22.1}]
+
+
 if __name__ == "__main__":
     bad = 0
     for n, f in list(globals().items()):
