@@ -427,6 +427,23 @@ No predictions and no buy/sell calls. Max 350 words."""
     return {"text": complete(system, [{"role": "user", "content": prompt}], max_tokens=1300, s=s), "model": model_label(s)}
 
 
+def explain_portfolio(x: dict) -> dict:
+    s = load_settings()
+    keep = ("name", "symbol", "weight", "pnl_pct", "overall", "business", "valuation", "verdict", "sector", "high_flags", "pledged",
+            "pe", "surveillance", "fno", "next_results", "ret_1m", "above200")
+    data = {"market": x["market"], "summary": {k: v for k, v in (x["summary"] or {}).items() if k not in ("unscored",)},
+            "holdings": [{k: r.get(k) for k in keep} for r in x["rows"][:40]]}
+    system = _rules({"market": x["market"]}) + "\nYou are reviewing a retail investor's portfolio built from their broker holdings.\n<data>\n" + json.dumps(data, default=str) + "\n</data>"
+    prompt = """Review this portfolio in plain English:
+## The portfolio in one paragraph (quality, concentration, sector mix)
+## Strongest holdings (2–4, with the reason from the data)
+## Holdings to look at closely (red flags, surveillance, weak scores, very high weight — say what to check, not what to sell)
+## Balance and risk (sector / size concentration, how much is unscored)
+## 3 practical next steps for research
+No buy/sell calls, no price predictions. Max 380 words."""
+    return {"text": complete(system, [{"role": "user", "content": prompt}], max_tokens=1400, s=s), "model": model_label(s)}
+
+
 def explain_calendar(earn: dict, econ: dict, watch: set) -> dict:
     s = load_settings()
     slim_e = lambda r: {k: r.get(k) for k in ("name", "symbol", "date", "timing", "type", "eps_estimate", "eps_last_year", "eps_actual",
@@ -484,6 +501,10 @@ def _demo_answer(system: str, messages: list[dict]) -> str:
         return f"- P/E **{met.get('pe')}** needs growth to continue\n- Growth may slow from **{met.get('sales_cagr_5')}%**\n\nBest counter-argument: cash conversion is strong."
     if "ROLE: You are the neutral JUDGE" in system:
         return "The bull case is better supported by the cash-flow and return data; the bear case rests on valuation.\n\nLeaning: Bull"
+    if "holdings" in d and "summary" in d:
+        sm = d["summary"] or {}
+        top = "\n".join(f"- **{h['name']}**: {h.get('weight')}% of the portfolio, score {h.get('overall') or '—'}" for h in d["holdings"][:5])
+        return f"## The portfolio in one paragraph\n{sm.get('count')} holdings, weighted EquityLens score {sm.get('score') or '—'}, top 5 = {sm.get('top5')}% of the value.\n\n## Biggest holdings\n{top}\n\n_(demo mode)_"
     if "economic_events" in d:
         ev = "\n".join(f"- **{e['event']}** ({e['date']}): forecast {e.get('forecast') or '—'}, previous {e.get('previous') or '—'}" for e in d["economic_events"][:5])
         rs = "\n".join(f"- **{r['name']}** on {r['date']}" + (" ⭐ watchlist" if r.get("in_watchlist") else "") for r in d["results"][:6])

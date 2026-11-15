@@ -112,6 +112,21 @@ def test_flows_endpoints():
     assert C.get("/api/flows/delivery").json()["lists"]["highest"]
 
 
+
+def test_portfolio_endpoints():
+    import base64
+    assert C.get("/api/brokers").json()["brokers"]
+    assert C.post("/api/brokers/nope/connect").status_code == 404
+    assert C.post("/api/brokers/angel/connect").status_code in (200, 400)
+    csv = b"Symbol,Quantity,Average Cost\nTESTCO,5,1200\n"
+    r = C.post("/api/portfolio/upload", json={"filename": "h.csv", "market": "IN", "data": base64.b64encode(csv).decode()})
+    assert r.status_code == 200 and r.json()["holdings"] == 1
+    assert C.post("/api/portfolio/upload", json={"filename": "h.csv", "data": base64.b64encode(b"x,y").decode()}).status_code == 400
+    x = C.get("/api/portfolio?market=IN").json()
+    assert x["rows"] and x["summary"]["count"] >= 1
+    assert C.delete("/api/brokers/file").status_code == 200
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

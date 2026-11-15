@@ -409,3 +409,34 @@ html, body { transition: background-color .2s ease; }
 .univ { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .univ::-webkit-scrollbar { display: none; }
 @media (max-width: 480px) { .univ button { padding: 6px 8px; font-size: 12px; } }
+
+/* ---------- portfolio ---------- */
+.brk-list { display: grid; gap: 10px; }
+.brk { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--card2); }
+.brk.on { border-color: rgba(34,197,94,.45); }
+.brk-form { display: grid; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.brk-form label { display: grid; gap: 4px; }
+.brk-form input { width: 100%; }
+.brk-steps { margin: 0; padding-left: 18px; line-height: 1.55; }
+.copy-row { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+.copy-row code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 6px 8px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); font-size: 12px; }
+.ptiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
+@media (min-width: 1100px) { .ptiles { grid-template-columns: repeat(4, 1fr); } .pgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } .pgrid > .card { margin-bottom: 0; } .pgrid { margin-bottom: 16px; } }
+.pbars { display: grid; gap: 7px; }
+.pbar { display: grid; grid-template-columns: 130px 1fr 52px; gap: 8px; align-items: center; font-size: 13px; }
+.pbar-track { height: 9px; border-radius: 99px; background: var(--card2); overflow: hidden; }
+.pbar-track div { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--ok)); }
+.pbar b { text-align: right; }
+.ptable { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.ptable th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 700; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ptable td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.ptable tbody tr { cursor: pointer; } .ptable tbody tr:hover { background: var(--card2); }
+.wbar { width: 70px; height: 6px; border-radius: 99px; background: var(--card2); overflow: hidden; margin-bottom: 3px; }
+.wbar div { height: 100%; background: var(--accent); }
+.ptable td { white-space: nowrap; }
+.ptable td:first-child { white-space: normal; min-width: 230px; }
+.ptable td:last-child { white-space: normal; min-width: 150px; }
+.movers-side, .brk, .brk-form, .brk-form > * { min-width: 0; }
+.brk { overflow: hidden; }
+.brk .badge { white-space: nowrap; flex-shrink: 0; }
+.ptable td:nth-child(9) { white-space: normal; min-width: 120px; }

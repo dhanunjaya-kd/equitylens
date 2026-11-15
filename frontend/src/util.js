@@ -86,6 +86,7 @@ export function parseHash() {
   if (parts[0] === 'screener') return { page: 'screener' }
   if (parts[0] === 'movers') return { page: 'movers' }
   if (parts[0] === 'guide') return { page: 'guide' }
+  if (parts[0] === 'portfolio') return { page: 'portfolio' }
   if (parts[0] === 'money') return { page: 'money', tab: parts[1] }
   if (parts[0] === 'calendar') return { page: 'calendar', tab: parts[1] || 'results' }
   if (parts[0] === 'settings') return { page: 'settings' }

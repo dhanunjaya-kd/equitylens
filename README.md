@@ -123,6 +123,10 @@ To film it again with real companies and live data on your own laptop: `python t
 <td align="center"><img src="docs/screenshots/desktop/guide.png"/><br/><b>📘 Beginner guide</b></td>
 </tr>
 <tr>
+<td align="center"><img src="docs/screenshots/desktop/portfolio.png"/><br/><b>💼 Portfolio X-ray from your broker</b></td>
+<td align="center"><img src="docs/screenshots/desktop/brokers.png" width="55%"/><br/><b>🔗 Connect a broker or upload a holdings file</b></td>
+</tr>
+<tr>
 <td align="center"><img src="docs/screenshots/desktop/movers_fno.png"/><br/><b>🎯 F&O stocks only</b></td>
 <td align="center"><img src="docs/screenshots/desktop/movers_light.png"/><br/><b>☀️ Light theme</b></td>
 </tr>
@@ -269,6 +273,33 @@ One **🎯 F&O stocks only** switch (India) filters Market Movers, Calendar, Sma
 ### 📘 Beginner guide
 
 For someone with zero stock-market knowledge: **11 steps** to read any company (each opens the right tab, with ✅ good signs and 🚩 warning signs), a **10-question checklist** that scores the stock as you tick, a **5-minute daily routine**, a **glossary** of 24 terms and the **walkthrough video**. Open it from the Home page or the sidebar.
+
+### 💼 My Portfolio — connect your broker (read-only)
+
+Bring in what you actually own, then let EquityLens check it the same way it checks any stock: a **score for every holding**, a value-weighted **portfolio score**, ⚠️ **look at these closely** (surveillance, red flags, pledged shares, one stock above 25%), **sector and NIFTY 50 / 100 / 500 mix**, **results coming up** and ✨ **Review my portfolio** with AI. The ⭐ Watchlist is a tab on the same page.
+
+> [!IMPORTANT]
+> **Read-only by design.** EquityLens only calls each broker's *holdings* API. It has no code that can place, change or cancel an order. Your API keys are stored only in `backend/data/brokers.json` on your own computer (git-ignored) and are shown masked in the app.
+
+| Broker | Market | How you connect | API cost | Login lasts |
+|---|:-:|---|---|---|
+| **Zerodha** (Kite Connect) | 🇮🇳 | Create a *Personal* app at developers.kite.trade → paste API key + secret → **Connect** | Free (Personal plan) | Until 6 AM next day |
+| **Upstox** | 🇮🇳 | Create an app at account.upstox.com/developer/apps → key + secret → **Connect** | Free | Until 3:30 AM next day |
+| **Fyers** | 🇮🇳 | Create an app at myapi.fyers.in → App ID + secret → **Connect** | Free | 1 day |
+| **Angel One** (SmartAPI) | 🇮🇳 | Create an app at smartapi.angelone.in → API key, client ID, PIN and TOTP secret → **Connect** (no browser step) | Free | 1 day |
+| **Dhan** | 🇮🇳 | web.dhan.co → My Profile → *Access DhanHQ APIs* → generate a token → paste it | Free | Up to 30 days |
+| **Alpaca** | 🇺🇸 | alpaca.markets → API keys (live or paper) → paste key ID + secret | Free | Until you revoke it |
+| **Tradier** | 🇺🇸 | dash.tradier.com → API access → paste the access token | Free with an account | Until you revoke it |
+| **Charles Schwab** | 🇺🇸 | developer.schwab.com → create an app (callback `https://127.0.0.1`) → **Connect** → paste the page address you land on | Free (app approval takes a few days) | 7 days, then reconnect (Schwab rule) |
+| **📄 Any other broker** | 🇮🇳 🇺🇸 | Download your holdings as **CSV or Excel** and **Upload file** | — | — |
+
+**Groww, Kotak, ICICI Direct, HDFC Securities, Motilal, 5paisa, Robinhood, Fidelity, Interactive Brokers…** have no free personal holdings API, so use the file upload. It finds the symbol (or ISIN), quantity, average price and LTP columns automatically, in any order, and maps ISINs to NSE symbols.
+
+**Redirect URL.** For Zerodha, Upstox and Fyers the app shows the exact address to paste in the broker's app settings (for example `http://localhost:8600/api/broker/zerodha/callback`). Open EquityLens from the same address when you press **Connect**.
+
+**Why it says "Reconnect" every morning.** SEBI rules make Indian broker logins expire daily, so after the first set-up you tap **Reconnect** once a day (two clicks). Holdings already imported stay visible until then.
+
+**Funds and ETFs** (NIFTYBEES, GOLDBEES, SGBs, SPY…) have no company financials, so they count toward value and P&L but not toward the score.
 
 ### 🏆 Top Picks · ⭐ Watchlist · ⚖️ Compare
 
@@ -477,7 +508,7 @@ cd backend
 python run_tests.py
 ```
 
-76 offline tests run against saved copies of each source's real format, so they pass without internet:
+85 offline tests run against saved copies of each source's real format, so they pass without internet:
 
 | Suite | Covers |
 |---|---|
@@ -490,6 +521,7 @@ python run_tests.py
 | `test_universe.py` | NIFTY 50 / 100 / 500 and All NSE lists (NSE file formats), index membership, movers filtered by list |
 | `test_calendar.py` | Nasdaq and NSE calendar formats, official RBI / MoSPI / WPI / FOMC dates and IST / ET times, de-duplication, logos |
 | `test_indices.py` | Index quotes, change maths, market open/closed, VIX bands |
+| `test_brokers.py` | Every broker's holdings format, TOTP (RFC 6238 test vectors), CSV and Excel uploads with ISIN mapping, masked keys, merging the same stock across brokers |
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys |
 | `test_api.py` | Every endpoint, including error paths |
 
@@ -520,7 +552,7 @@ equitylens/
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents
 │   │   ├── money.py · store.py · universe.py · config.py
 │   ├── static/               prebuilt web app (no Node.js needed to run)
-│   ├── tests/                76 offline tests + sample data
+│   ├── tests/                85 offline tests + sample data
 │   ├── tools/make_video.py   films the walkthrough video on your laptop with live data
 │   └── run.py · selftest.py · run_tests.py · scan.py
 ├── frontend/                 React + Vite source (npm install && npm run build)
@@ -546,6 +578,9 @@ equitylens/
 | `GET /api/fno` | F&O stocks and lot sizes |
 | `GET /api/universe` | NIFTY 50 / 100 / 500 / All NSE sizes and index membership |
 | `GET /api/logo/{symbol}` | Company logo |
+| `GET /api/brokers` · `POST /api/brokers/{id}/config` · `connect` · `sync` · `DELETE /api/brokers/{id}` | Broker set-up and read-only holdings sync |
+| `POST /api/portfolio/upload` | Import a CSV / Excel holdings file |
+| `GET /api/portfolio?market=` · `POST /api/portfolio/score` · `POST /api/ai/portfolio` | Portfolio X-ray, score unscored holdings, AI review |
 
 `symbol` is the NSE symbol (e.g. `RELIANCE`) or `US:` + ticker (e.g. `US:AAPL`).
 </details>
@@ -556,7 +591,7 @@ equitylens/
 
 - [ ] 🔔 Telegram alerts and a morning digest: watchlist results, big economic events, 52-week breakouts, verdict changes
 - [ ] 🧾 Results-day analyser: new quarter vs estimates and vs the 3/5/10-year assumptions
-- [ ] 💼 Portfolio X-ray: import holdings, see combined score, concentration and red flags
+- [x] 💼 Portfolio X-ray: connect your broker or upload holdings, see combined score, concentration and red flags
 - [ ] ☁️ Cloud version so it works with the laptop off
 - [ ] 📈 Score track record: monthly snapshots to check whether high scores beat low scores
 

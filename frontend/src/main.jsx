@@ -16,6 +16,7 @@ import Calendar from './pages/Calendar'
 import IndexStrip from './components/IndexStrip'
 import SmartMoney from './pages/SmartMoney'
 import Guide from './pages/Guide'
+import Portfolio from './pages/Portfolio'
 import { Settings } from './pages/AI'
 
 // Windows has no flag emoji: load a small bundled flag font so the flags show instead of 'IN' / 'US'
@@ -72,6 +73,7 @@ function App() {
         {route.page === 'calendar' && <Calendar tab={route.tab} />}
         {route.page === 'money' && <SmartMoney tab={route.tab} />}
         {route.page === 'guide' && <Guide />}
+        {route.page === 'portfolio' && <Portfolio />}
         {route.page === 'settings' && <Settings />}
         {route.page === 'compare' && <Compare symbols={route.symbols} />}
       </main>

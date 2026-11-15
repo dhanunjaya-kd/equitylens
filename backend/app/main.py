@@ -7,14 +7,16 @@ from typing import Optional
 
 import requests
 
-from fastapi import Body, FastAPI, HTTPException, Query
+from urllib.parse import quote
+
+from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import universe as universe_mod
-from . import ai, calendars, config, enrich, flows, indices, logos, movers, scraper, service, store, technicals, universe, us
+from . import ai, brokers, calendars, config, enrich, flows, portfolio, indices, logos, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
@@ -289,6 +291,104 @@ def flows_surveillance():
 def fno_list():
     lots = enrich.fno()
     return {"count": len(lots), "lots": lots, "source": "NSE F&O market lots file"}
+
+
+# ---------------------------------------------------------------- brokers (read-only) + portfolio
+def _base(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
+def _brk(fn, *a):
+    try:
+        return fn(*a)
+    except brokers.BrokerError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/brokers")
+def brokers_list(request: Request):
+    return {"brokers": brokers.status(_base(request))}
+
+
+@app.post("/api/brokers/{bid}/config")
+def brokers_config(bid: str, body: dict = Body(...)):
+    _brk(brokers.configure, bid, body)
+    return {"ok": True}
+
+
+@app.post("/api/brokers/{bid}/connect")
+def brokers_connect(bid: str, request: Request):
+    b = brokers.BROKERS.get(bid)
+    if not b:
+        raise HTTPException(404, "Unknown broker")
+    if b["auth"] in ("oauth", "paste"):
+        if config.DEMO:                                   # no real login in demo mode
+            _brk(brokers.callback, bid, {}, _base(request))
+            return {**_brk(brokers.sync, bid), "connected": True}
+        return {"url": _brk(brokers.login_url, bid, _base(request))}
+    _brk(brokers.direct_login, bid)
+    return {**_brk(brokers.sync, bid), "connected": True}
+
+
+@app.get("/api/broker/{bid}/callback")
+def brokers_callback(bid: str, request: Request):
+    try:
+        brokers.callback(bid, dict(request.query_params), _base(request))
+        brokers.sync(bid)
+        return RedirectResponse(f"/#/portfolio?connected={bid}")
+    except (brokers.BrokerError, KeyError, ValueError) as e:
+        return RedirectResponse("/#/portfolio?error=" + quote(str(e)[:300]))
+
+
+@app.post("/api/brokers/schwab/paste")
+def brokers_schwab_paste(request: Request, body: dict = Body(...)):
+    _brk(brokers.schwab_paste, body.get("url", ""), _base(request))
+    return _brk(brokers.sync, "schwab")
+
+
+@app.post("/api/brokers/{bid}/sync")
+def brokers_sync(bid: str):
+    return _brk(brokers.sync, bid)
+
+
+@app.delete("/api/brokers/{bid}")
+def brokers_forget(bid: str):
+    brokers.forget(bid)
+    return {"ok": True}
+
+
+@app.post("/api/portfolio/upload")
+def portfolio_upload(body: dict = Body(...)):
+    import base64 as b64
+    try:
+        data = b64.b64decode(body.get("data", ""))
+    except ValueError:
+        raise HTTPException(400, "Could not read the file")
+    if len(data) > 5_000_000:
+        raise HTTPException(400, "File too large (max 5 MB)")
+    return _brk(brokers.import_file, data, body.get("filename", "holdings.csv"), (body.get("market") or "IN").upper())
+
+
+@app.get("/api/portfolio")
+def portfolio_get(market: str = "IN"):
+    return portfolio.xray(market)
+
+
+@app.post("/api/portfolio/score")
+def portfolio_score(market: str = "IN"):
+    x = portfolio.xray(market)
+    syms = (x["summary"] or {}).get("unscored") or []
+    if not syms:
+        return {"started": False, "message": "Every holding is already scored"}
+    return {"started": True, "count": len(syms), "scan": service.start_scan(market=market.upper(), symbols=syms)}
+
+
+@app.post("/api/ai/portfolio")
+def ai_portfolio(market: str = "IN"):
+    x = portfolio.xray(market)
+    if not x["rows"]:
+        raise HTTPException(400, "No holdings yet")
+    return _ai(ai.explain_portfolio, x)
 
 
 @app.get("/api/indices")

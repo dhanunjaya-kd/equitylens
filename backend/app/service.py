@@ -213,8 +213,10 @@ SCAN = {"market": "IN", "running": False, "total": 0, "done": 0, "failed": 0, "c
 _scan_lock = threading.Lock()
 
 
-def _scan_worker(limit: Optional[int], market: str = "IN", which: str = "N500") -> None:
-    if market == "US":
+def _scan_worker(limit: Optional[int], market: str = "IN", which: str = "N500", symbols: Optional[list] = None) -> None:
+    if symbols:
+        rows, src = [{"symbol": s, "name": "", "industry": ""} for s in symbols], "your portfolio"
+    elif market == "US":
         rows, src = us.sp500_universe(download=True)
     elif which == "N500":
         rows, src = universe.load(download=True)
@@ -245,20 +247,30 @@ def _scan_worker(limit: Optional[int], market: str = "IN", which: str = "N500") 
             SCAN["failed"] += 1
             SCAN["errors"] = (SCAN["errors"] + [f"{sym}: {e}"])[-30:]
             log.warning("scan %s failed: %s", sym, e)
+            if symbols is not None:                    # a portfolio holding with no financials (ETF, bond…)
+                _no_score_add(sym)
             time.sleep(config.SCAN_DELAY_SECONDS)
         SCAN["done"] += 1
     SCAN.update(running=False, current=None, finished_at=time.time(), stop=False)
 
 
-def start_scan(limit: Optional[int] = None, block: bool = False, market: str = "IN", which: str = "N500") -> dict:
+def _no_score_add(sym: str) -> None:
+    got = store.get_company("PORTFOLIO_NOSCORE")
+    syms = set(got[1]["symbols"]) if got else set()
+    syms.add(sym)
+    store.put_company("PORTFOLIO_NOSCORE", {"symbols": sorted(syms)})
+
+
+def start_scan(limit: Optional[int] = None, block: bool = False, market: str = "IN", which: str = "N500",
+               symbols: Optional[list] = None) -> dict:
     with _scan_lock:
         if SCAN["running"]:
             return scan_status()
         SCAN.update(running=True, stop=False, universe=which)
     if block:
-        _scan_worker(limit, market, which)
+        _scan_worker(limit, market, which, symbols)
     else:
-        threading.Thread(target=_scan_worker, args=(limit, market, which), daemon=True).start()
+        threading.Thread(target=_scan_worker, args=(limit, market, which, symbols), daemon=True).start()
     return scan_status()
 
 
