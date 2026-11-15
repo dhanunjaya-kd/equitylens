@@ -18,6 +18,7 @@ import SmartMoney from './pages/SmartMoney'
 import Guide from './pages/Guide'
 import Portfolio from './pages/Portfolio'
 import { Settings } from './pages/AI'
+import { Gate } from './components/Access'
 
 // Windows has no flag emoji: load a small bundled flag font so the flags show instead of 'IN' / 'US'
 polyfillCountryFlagEmojis('Twemoji Country Flags', flagFont)
@@ -58,7 +59,7 @@ function App() {
           {!desk && <MarketToggle market={market} onChange={changeMarket} />}
           {route.page !== 'home' || desk ? <div className="grow"><SearchBox key={market} /></div> : <div className="grow" />}
           {!desk && <button className="theme-btn" title="Light / dark theme" onClick={flipTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>}
-          {!desk && <button className="star" title="AI settings" onClick={() => go('settings')}>⚙️</button>}
+          {!desk && <button className="star" title="Settings" onClick={() => go('settings')}>⚙️</button>}
           {desk && <div className="small muted" style={{ whiteSpace: 'nowrap' }}>{market === 'US' ? '🇺🇸 US market · $' : '🇮🇳 Indian market · ₹'}</div>}
         </div>
       </header>
@@ -83,4 +84,4 @@ function App() {
   )
 }
 
-createRoot(document.getElementById('root')).render(<App />)
+createRoot(document.getElementById('root')).render(<Gate><App /></Gate>)

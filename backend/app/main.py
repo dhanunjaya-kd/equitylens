@@ -1,7 +1,10 @@
 """EquityLens API + web app (one process)."""
 from __future__ import annotations
 
+import hmac
 import logging
+import os
+import threading
 import time
 from typing import Optional
 
@@ -16,14 +19,68 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 
 from . import universe as universe_mod
-from . import ai, brokers, calendars, config, enrich, flows, portfolio, indices, logos, movers, scraper, service, store, technicals, universe, us
+from . import access, ai, brokers, calendars, config, enrich, flows, portfolio, indices, logos, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
+log = logging.getLogger("equitylens")
 
 app = FastAPI(title="EquityLens", version="1.0.0")
 app.add_middleware(GZipMiddleware, minimum_size=2000)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.middleware("http")
+async def password_gate(request: Request, call_next):
+    """With EQL_PASSWORD set (cloud), every /api call needs the login cookie."""
+    if access.password() and not access.is_open(request.url.path) and not access.check(request.cookies.get(access.COOKIE)):
+        return JSONResponse({"detail": "Please sign in", "login": True}, status_code=401)
+    return await call_next(request)
+
+
+@app.get("/api/auth")
+def auth_status(request: Request):
+    return {"required": bool(access.password()), "ok": access.check(request.cookies.get(access.COOKIE))}
+
+
+@app.post("/api/login")
+def login(request: Request, body: dict = Body(...)):
+    if not access.password():
+        return {"ok": True}
+    if not hmac.compare_digest(str(body.get("password", "")), access.password()):
+        time.sleep(1.5)                                   # slows down guessing
+        raise HTTPException(401, "Wrong password")
+    r = JSONResponse({"ok": True})
+    https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+    r.set_cookie(access.COOKIE, access.token(), max_age=90 * 86400, httponly=True, samesite="lax", secure=https)
+    return r
+
+
+@app.post("/api/logout")
+def logout():
+    r = JSONResponse({"ok": True})
+    r.delete_cookie(access.COOKIE)
+    return r
+
+
+@app.post("/api/shutdown")
+def shutdown(request: Request):
+    """Used by "Stop EquityLens.vbs". Only from this computer."""
+    if not access.is_local(request.client.host if request.client else None, request.headers):
+        raise HTTPException(403, "Only from this computer")
+    log.info("shutdown requested")
+    threading.Timer(0.4, lambda: os._exit(0)).start()
+    return {"ok": True}
+
+
+@app.get("/api/network")
+def network(request: Request):
+    return access.network_info(request.headers.get("host", ""))
+
+
+@app.get("/api/logs")
+def logs(lines: int = 300):
+    return access.tail_logs(lines)
 
 
 @app.get("/api/health")

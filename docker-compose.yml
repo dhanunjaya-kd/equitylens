@@ -1,0 +1,15 @@
+# EquityLens on a server:  cp backend/.env.example backend/.env  (set EQL_PASSWORD!)  then  docker compose up -d
+services:
+  equitylens:
+    build: .
+    container_name: equitylens
+    restart: unless-stopped
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      EQL_HOST: 0.0.0.0
+    ports:
+      - "8600:8600"
+    volumes:
+      - ./backend/data:/app/backend/data

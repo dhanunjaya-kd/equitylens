@@ -352,22 +352,37 @@ Tap **🇮🇳 IND** or **🇺🇸 US** at the top. Search, movers, calendar, sm
 
 ### Install and run
 
-> [!TIP]
-> **One click:** double-click **`start.bat`**. The first run creates a virtual environment, installs 6 small packages and opens **http://localhost:8600**.
-
 ```bat
 git clone https://github.com/dhanunjaya-kd/equitylens
 cd equitylens
-start.bat
 ```
 
-<details>
-<summary><b>Manual setup</b></summary>
+Then pick how you like to start it:
 
-```bat
+| | How | What you get |
+|---|---|---|
+| 🖱️ **Like an app** *(recommended)* | Double-click **`EquityLens.vbs`** | No black window. Starts quietly and opens EquityLens in its own app window. The first run sets everything up (1–3 minutes). |
+| 🖥️ **With a console** | Double-click **`start.bat`** | Same app, plus a console window showing the live log. Good for troubleshooting. |
+
+> [!TIP]
+> Double-click **`Create Desktop Shortcut.vbs`** once. It adds an **EquityLens** icon to the Desktop and the Start menu (plus **Stop EquityLens**), and can start EquityLens in the background whenever Windows starts, so your phone can always reach it.
+
+| File | What it does |
+|---|---|
+| `EquityLens.vbs` | Starts the server with no window (`pythonw`), waits until it's ready, opens the app. Already running? Just opens it. After `git pull` it installs any new packages by itself. |
+| `Stop EquityLens.vbs` | Stops the background server. |
+| `Create Desktop Shortcut.vbs` | Desktop + Start-menu shortcuts with the EquityLens icon; optional start with Windows. |
+| `start.bat` | Console version; `start.bat setup` only installs. |
+
+With no window there is nowhere for messages to appear, so everything goes to **`backend/data/logs/equitylens.log`** (kept to 4 × 2 MB). Open **⚙️ Settings → 🧾 Logs** to read it in the app. Set `EQL_OPEN=browser` in `backend/.env` to open a normal browser tab instead of an app window.
+
+<details>
+<summary><b>Manual setup (macOS / Linux, or step by step)</b></summary>
+
+```bash
 cd backend
-py -3.11 -m venv venv
-venv\Scripts\activate
+python3 -m venv venv
+source venv/bin/activate            # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python selftest.py
 python run.py
@@ -386,10 +401,22 @@ python run.py
 | 6 | Top Picks → pick **NIFTY 50 / 100 / 500 / All NSE** (or S&P 500) → **Start scan** | Builds the rankings used by Top Picks, the screener and the signature scans. Start with NIFTY 50 (~3 min); re-run weekly |
 | 7 | Open **Movers**, **Calendar** and **Money** once | First load downloads the index's daily prices and NSE files (a few minutes); after that they refresh in the background |
 
-### Use on laptop and phone
+### 📱 Phone and ☁️ cloud
 
-- **Laptop:** open **http://localhost:8600**. Screens wider than ~1100 px get the desktop layout with a sidebar and multi-column pages.
-- **Phone:** keep the laptop on with Tailscale running, open `http://<laptop-tailscale-ip>:8600`, then **Share → Add to Home Screen** to use it like an app. On the phone, search is in the top bar and the logo takes you home.
+| Where | How |
+|---|---|
+| **Laptop** | http://localhost:8600. Wider than ~1100 px gets the desktop layout with a sidebar. |
+| **Phone, same Wi-Fi** | **⚙️ Settings → 📱 Use on your phone** → scan the QR code. |
+| **Phone, anywhere** | Free **Tailscale** app on laptop and phone → scan the 🌐 Tailscale QR code. |
+| **Laptop off (24×7)** | Host it on a cloud server: free Oracle Cloud VM, `docker compose up -d` or a systemd service, password-protected. |
+| **Like an app** | iPhone: *Share → Add to Home Screen* · Android: *⋮ → Add to Home screen*. |
+
+👉 **Step-by-step guide with every command: [docs/CLOUD_AND_PHONE.md](docs/CLOUD_AND_PHONE.md)**
+
+<img src="docs/screenshots/desktop/phone_logs.png" alt="Settings: phone QR code and log viewer" width="80%"/>
+
+> [!IMPORTANT]
+> Reachable from the internet or on shared Wi-Fi? Set **`EQL_PASSWORD`** in `backend/.env`. EquityLens then shows a sign-in page and every API call needs it. Settings holds your AI and broker keys.
 
 <details>
 <summary><b>⚙️ Configuration (<code>backend/.env</code>)</b></summary>
@@ -403,6 +430,9 @@ python run.py
 | `EQL_CACHE_TTL_HOURS` | `24` | How long a fetched stock is reused |
 | `EQL_SCAN_DELAY` | `3` | Seconds between companies in a scan (keeps requests polite) |
 | `EQL_PORT` | `8600` | Web port |
+| `EQL_PASSWORD` | — | Sign-in password. **Required** on a cloud server or shared Wi-Fi |
+| `EQL_HOST` | `0.0.0.0` | `127.0.0.1` = only this computer (use behind Caddy on a server) |
+| `EQL_OPEN` | `app` | `EquityLens.vbs` opens an app window (`app`) or a browser tab (`browser`) |
 | `EQL_DEMO` | `0` | `1` = offline demo with sample companies **TESTCO**, **TESTBANK** and 🇺🇸 **TSTUS** |
 
 AI keys and model names: see `backend/.env.example`, or set them in ⚙️ Settings.
@@ -508,7 +538,7 @@ cd backend
 python run_tests.py
 ```
 
-85 offline tests run against saved copies of each source's real format, so they pass without internet:
+89 offline tests run against saved copies of each source's real format, so they pass without internet:
 
 | Suite | Covers |
 |---|---|
@@ -522,6 +552,7 @@ python run_tests.py
 | `test_calendar.py` | Nasdaq and NSE calendar formats, official RBI / MoSPI / WPI / FOMC dates and IST / ET times, de-duplication, logos |
 | `test_indices.py` | Index quotes, change maths, market open/closed, VIX bands |
 | `test_brokers.py` | Every broker's holdings format, TOTP (RFC 6238 test vectors), CSV and Excel uploads with ISIN mapping, masked keys, merging the same stock across brokers |
+| `test_access.py` | Password sign-in, protected keys, shutdown only from this computer, phone addresses, log viewer |
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys |
 | `test_api.py` | Every endpoint, including error paths |
 
@@ -531,7 +562,12 @@ python run_tests.py
 
 ```
 equitylens/
-├── start.bat                 one-click start (Windows)
+├── EquityLens.vbs            start with no window, open as an app (Windows)
+├── Stop EquityLens.vbs       stop the background server
+├── Create Desktop Shortcut.vbs  Desktop / Start-menu icon, optional start with Windows
+├── start.bat                 start with a console window
+├── Dockerfile · docker-compose.yml   run on a server
+├── deploy/                   systemd service and Caddy (HTTPS) examples
 ├── backend/
 │   ├── app/
 │   │   ├── main.py           API + serves the web app
@@ -550,13 +586,16 @@ equitylens/
 │   │   ├── enrich.py         F&O list + live fields joined onto every list
 │   │   ├── logos.py          company logos with initials fallback
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents
+│   │   ├── brokers.py        read-only holdings from 8 brokers + CSV / Excel import
+│   │   ├── portfolio.py      portfolio X-ray: merge, score, warnings, mix
+│   │   ├── access.py         password sign-in, phone addresses, log viewer
 │   │   ├── money.py · store.py · universe.py · config.py
 │   ├── static/               prebuilt web app (no Node.js needed to run)
-│   ├── tests/                85 offline tests + sample data
+│   ├── tests/                89 offline tests + sample data
 │   ├── tools/make_video.py   films the walkthrough video on your laptop with live data
-│   └── run.py · selftest.py · run_tests.py · scan.py
+│   └── run.py · selftest.py · run_tests.py · scan.py   (logs → data/logs/)
 ├── frontend/                 React + Vite source (npm install && npm run build)
-└── docs/                     banner, screenshots and the walkthrough video
+└── docs/                     screenshots, walkthrough video, CLOUD_AND_PHONE.md guide
 ```
 
 <details>
@@ -579,6 +618,8 @@ equitylens/
 | `GET /api/universe` | NIFTY 50 / 100 / 500 / All NSE sizes and index membership |
 | `GET /api/logo/{symbol}` | Company logo |
 | `GET /api/brokers` · `POST /api/brokers/{id}/config` · `connect` · `sync` · `DELETE /api/brokers/{id}` | Broker set-up and read-only holdings sync |
+| `GET /api/auth` · `POST /api/login` · `logout` | Password sign-in (when `EQL_PASSWORD` is set) |
+| `GET /api/network` · `GET /api/logs` · `POST /api/shutdown` | Phone addresses, log viewer, stop (this computer only) |
 | `POST /api/portfolio/upload` | Import a CSV / Excel holdings file |
 | `GET /api/portfolio?market=` · `POST /api/portfolio/score` · `POST /api/ai/portfolio` | Portfolio X-ray, score unscored holdings, AI review |
 
@@ -592,13 +633,14 @@ equitylens/
 - [ ] 🔔 Telegram alerts and a morning digest: watchlist results, big economic events, 52-week breakouts, verdict changes
 - [ ] 🧾 Results-day analyser: new quarter vs estimates and vs the 3/5/10-year assumptions
 - [x] 💼 Portfolio X-ray: connect your broker or upload holdings, see combined score, concentration and red flags
-- [ ] ☁️ Cloud version so it works with the laptop off
+- [x] ☁️ Cloud hosting guide, Docker and password protection so it works with the laptop off
+- [x] 🖱️ Windowless Windows launcher with desktop shortcut and log file
 - [ ] 📈 Score track record: monthly snapshots to check whether high scores beat low scores
 
 ---
 
 > [!NOTE]
-> Keep EquityLens on your own network (for example with Tailscale) rather than exposing port 8600 to the internet, because Settings can change AI keys.
+> Prefer reaching EquityLens through Tailscale. If it must be public, put it behind HTTPS (Caddy) with `EQL_PASSWORD` set. See [docs/CLOUD_AND_PHONE.md](docs/CLOUD_AND_PHONE.md).
 
 > [!WARNING]
 > Everything is built from **past numbers and stated assumptions**. EquityLens is a research aid, **not investment advice**. Read the red flags and the company's own reports before investing.

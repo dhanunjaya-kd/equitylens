@@ -143,7 +143,12 @@ export default function Guide() {
         <h1>How to read a company in 10 minutes</h1>
         <p className="muted">No finance background needed. Follow these steps on any stock — each one opens the right tab of the app. Example used: <b>{ex.replace('US:', '')}</b> (your last viewed stock).</p>
         <video className="guide-video" src="/guide.mp4" controls preload="metadata" playsInline poster="/guide_poster.jpg" />
-        <div className="small muted">▶️ 3½-minute walkthrough of the whole app (no sound, with captions).</div>
+        <div className="small muted">▶️ About 4-minute walkthrough of the whole app (no sound, with captions).</div>
+      </div>
+
+      <div className="guide-tips">
+        <div className="card guide-tip" onClick={() => go('settings')}><b>📱 Use it on your phone</b><div className="small muted">Settings → Use on your phone → scan the QR code. Add to Home Screen to open it like an app.</div></div>
+        <div className="card guide-tip" onClick={() => go('portfolio')}><b>💼 Check what you own</b><div className="small muted">Connect Zerodha, Upstox, Fyers, Angel One or Dhan (read-only), or upload your holdings file.</div></div>
       </div>
 
       <div className="guide-cols">

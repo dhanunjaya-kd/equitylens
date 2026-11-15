@@ -190,7 +190,7 @@ export function SideNav({ page, market, onMarket, theme, onTheme }) {
       ))}
       <div className="grow" />
       <button className="sn" onClick={onTheme}><span style={{ width: 22, textAlign: 'center' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
-      <button className={`sn ${page === 'settings' ? 'on' : ''}`} onClick={() => go('settings')}><span style={{ width: 22, textAlign: 'center' }}>⚙️</span>AI settings</button>
+      <button className={`sn ${page === 'settings' ? 'on' : ''}`} onClick={() => go('settings')}><span style={{ width: 22, textAlign: 'center' }}>⚙️</span>Settings</button>
       <div className="small muted" style={{ padding: '10px 12px 0', lineHeight: 1.5 }}>Research aid, not investment advice.</div>
     </aside>
   )

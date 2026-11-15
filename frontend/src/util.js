@@ -2,6 +2,7 @@ export async function api(path, opts = {}) {
   const r = await fetch(path, opts)
   let body = null
   try { body = await r.json() } catch { /* not json */ }
+  if (r.status === 401 && body && body.login) window.dispatchEvent(new Event('eql-login'))
   if (!r.ok) throw new Error((body && body.detail) || `Request failed (${r.status})`)
   return body
 }

@@ -1,0 +1,8 @@
+# Public HTTPS address for EquityLens (free certificate from Let's Encrypt).
+# 1. Point a domain (e.g. yourname.duckdns.org) at the server's public IP
+# 2. Set EQL_PASSWORD and EQL_HOST=127.0.0.1 in backend/.env
+# 3. sudo cp deploy/Caddyfile /etc/caddy/Caddyfile  &&  sudo systemctl reload caddy
+yourname.duckdns.org {
+	encode gzip
+	reverse_proxy 127.0.0.1:8600
+}

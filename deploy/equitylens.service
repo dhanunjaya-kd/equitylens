@@ -1,0 +1,20 @@
+# Keeps EquityLens running on a Linux server and restarts it after a crash or reboot.
+#   sudo cp deploy/equitylens.service /etc/systemd/system/
+#   sudo systemctl enable --now equitylens
+#   journalctl -u equitylens -f        (or backend/data/logs/equitylens.log)
+# Change "ubuntu" and the paths if your user or folder differ.
+[Unit]
+Description=EquityLens stock research
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/equitylens/backend
+ExecStart=/home/ubuntu/equitylens/backend/venv/bin/python run.py
+Restart=always
+RestartSec=5
+Environment=TZ=Asia/Kolkata
+
+[Install]
+WantedBy=multi-user.target
