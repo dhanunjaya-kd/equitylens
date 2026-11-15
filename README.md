@@ -444,32 +444,7 @@ AI keys and model names: see `backend/.env.example`, or set them in ⚙️ Setti
 
 ## 🧭 How it works
 
-```mermaid
-flowchart LR
-    S[🔎 Search · 🇮🇳 / 🇺🇸]:::blue --> F[🌐 Fundamentals<br/>screener.in · SEC EDGAR]:::teal
-    S --> P[📈 Prices<br/>Yahoo Finance]:::teal
-    M[🏛️ Market data<br/>NSE files · Nasdaq · SEC Form 4<br/>RBI · MoSPI · Fed]:::teal
-    F --> E[🧠 Research engine<br/>scores · flags · forensics<br/>valuation · scenarios]:::amber
-    P --> T[📐 Technicals<br/>indicators · outlook]:::amber
-    P --> V[🔥 Movers · 📊 Indices]:::amber
-    M --> W[🧭 Smart money · 📅 Calendar]:::amber
-    E --> UI[📱🖥️ EquityLens app]:::green
-    T --> UI
-    V --> UI
-    W --> UI
-    E --> AI[✨ AI analyst<br/>Claude · GPT · Gemini · Ollama]:::pink
-    T --> AI
-    V --> AI
-    W --> AI
-    AI --> UI
-    E --> DB[(💾 Local SQLite cache<br/>+ rankings)]:::grey
-    classDef blue fill:#38bdf8,stroke:#0369a1,color:#0b1016
-    classDef teal fill:#2dd4bf,stroke:#0f766e,color:#0b1016
-    classDef amber fill:#f59e0b,stroke:#b45309,color:#0b1016
-    classDef green fill:#22c55e,stroke:#15803d,color:#0b1016
-    classDef pink fill:#f472b6,stroke:#be185d,color:#0b1016
-    classDef grey fill:#334155,stroke:#64748b,color:#e6edf3
-```
+<img src="docs/pipeline.svg" alt="How EquityLens works: fetch, analyse, store and explain, your screen (animated)" width="100%"/>
 
 A single Python process (FastAPI) fetches the data, analyses it, caches it in a local SQLite file and serves the prebuilt React app. Every source is fetched politely (paced, retried, cached), and one failing source never breaks the rest of the page.
 

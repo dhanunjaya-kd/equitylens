@@ -129,16 +129,21 @@ def shoot(base: str, todo: list, out: Path, ai: bool) -> int:
                     box.click()
                     box.fill(o["type"])
                     pg.wait_for_timeout(3000)
+                top = 150 if dev == D else 120              # room for the sticky top bar
                 if scroll:
                     try:
-                        pg.locator(f"h3:has-text('{scroll}')").first.scroll_into_view_if_needed(timeout=4000)
-                        pg.evaluate(f"window.scrollBy(0, {-150 if dev == D else -120})")
-                        pg.wait_for_timeout(600)
+                        h = pg.locator(f"h3:has-text('{scroll}')").first
+                        h.wait_for(timeout=4000)
+                        h.evaluate(f"e => window.scrollTo(0, e.getBoundingClientRect().top + window.scrollY - {top})")
                     except Exception:  # noqa: BLE001
                         log(f"    ('{scroll}' not found, captured the top of the page)")
+                elif dev == M and route.startswith("stock/") and not route.endswith("/overview"):
+                    # on a phone the company header fills the screen: start the shot at the tab bar instead
+                    pg.evaluate("""() => { const t = document.querySelector('.tabs');
+                        if (t) window.scrollTo(0, t.getBoundingClientRect().top + window.scrollY - 64) }""")
                 else:
                     pg.evaluate("window.scrollTo(0, 0)")
-                    pg.wait_for_timeout(300)
+                pg.wait_for_timeout(700)
                 folder = out / "desktop" if dev == D else out
                 folder.mkdir(parents=True, exist_ok=True)
                 pg.screenshot(path=str(folder / f"{name}.png"))
