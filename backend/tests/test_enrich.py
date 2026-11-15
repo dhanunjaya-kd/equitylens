@@ -31,7 +31,7 @@ def test_join_fields():
                                                "above50": True, "above200": False, "from_hi": -3.2, "rvol": 1.8, "new_high": False}]})
     store.put_company("DELIVERY::IN", {"rows": [{"symbol": "AARTIIND", "dp": 62.0, "dq_x": 1.7}]})
     store.put_company("SURV::IN", {"flags": {"BADCO": [{"label": "GSM stage 2", "severity": "high"}]}})
-    store.put_company("PIT::IN::30", {"rows": [
+    store.put_company("PIT2::IN::30", {"rows": [
         {"symbol": "AARTIIND", "market": True, "side": "BUY", "value": 2.0, "promoter": True},
         {"symbol": "AARTIIND", "market": True, "side": "SELL", "value": 0.5, "promoter": False},
         {"symbol": "AARTIIND", "market": False, "side": "BUY", "value": 9.0, "promoter": True}]})
