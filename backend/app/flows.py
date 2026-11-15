@@ -347,7 +347,7 @@ _xq_running = [False]
 
 
 def _xml_key(url: str) -> str:
-    return "PITX::" + url.rsplit("/", 1)[-1]
+    return "PITX2::" + url.rsplit("/", 1)[-1]
 
 
 def _nse_xml(url: str) -> Optional[str]:
@@ -369,6 +369,12 @@ def _pick_fact(g: dict, wants: list, exclude: tuple = ()) -> Optional[str]:
             if all(f in k for f in frags) and not any(x in k for x in exclude):
                 return v
     return None
+
+
+def _pct(v) -> Optional[float]:
+    """XBRL stores percentages as fractions (0.0006 = 0.06 %)."""
+    x = _f(v)
+    return round(x * 100, 4) if x is not None else None
 
 
 def parse_pit_xbrl(text: str) -> list[dict]:
@@ -411,8 +417,9 @@ def parse_pit_xbrl(text: str) -> list[dict]:
             "acqfromDt": _pick_fact(g, [("date", "from"), ("from", "date")], exclude=("intimation",)),
             "acqtoDt": _pick_fact(g, [("dateto",), ("todate",), ("date", "allotment", "to")], exclude=("intimation", "from")),
             "intimDt": _pick_fact(g, [("intimation",)]),
-            "befAcqSharesPer": _pick_fact(g, [("percent", "pre"), ("percent", "prior"), ("shareholding", "pre"), ("percent", "before")]),
-            "afterAcqSharesPer": _pick_fact(g, [("percent", "post"), ("shareholding", "post"), ("percent", "after")]),
+            "befAcqSharesPer": _pct(_pick_fact(g, [("prior", "percent"), ("percent", "pre"), ("percent", "prior"), ("shareholding", "pre"),
+                                                    ("percent", "before")])),
+            "afterAcqSharesPer": _pct(_pick_fact(g, [("post", "percent"), ("percent", "post"), ("shareholding", "post"), ("percent", "after")])),
         })
     return out
 
@@ -484,7 +491,7 @@ def expand_filings(data: list, budget: int = 0) -> tuple[list, int]:
 
 def insiders_in(days: int = 30, symbol: Optional[str] = None) -> dict:
     sym = (symbol or "").upper()
-    key = f"PIT3::IN::{days}" + (f"::{sym}" if sym else "")
+    key = f"PIT4::IN::{days}" + (f"::{sym}" if sym else "")
     hit = store.get_company(key)
     if hit and time.time() - hit[0] < (6 * 3600 if not hit[1].get("waiting") else 120):
         return hit[1]

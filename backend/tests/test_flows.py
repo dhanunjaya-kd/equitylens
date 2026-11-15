@@ -205,8 +205,8 @@ PIT_XBRL = """<?xml version="1.0" encoding="UTF-8"?>
   <in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesFrom contextRef="Person1">2026-11-10</in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesFrom>
   <in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesTo contextRef="Person1">2026-11-11</in-capmkt:DateOfAllotmentAdviceAcquisitionOfSharesSaleOfSharesTo>
   <in-capmkt:DateOfIntimationToCompany contextRef="Person1">2026-11-12</in-capmkt:DateOfIntimationToCompany>
-  <in-capmkt:PercentageOfShareholdingPreTransaction contextRef="Person1" unitRef="pure" decimals="2">31.20</in-capmkt:PercentageOfShareholdingPreTransaction>
-  <in-capmkt:PercentageOfShareholdingPostTransaction contextRef="Person1" unitRef="pure" decimals="2">31.24</in-capmkt:PercentageOfShareholdingPostTransaction>
+  <in-capmkt:PercentageOfShareholdingPreTransaction contextRef="Person1" unitRef="pure" decimals="4">0.3120</in-capmkt:PercentageOfShareholdingPreTransaction>
+  <in-capmkt:PercentageOfShareholdingPostTransaction contextRef="Person1" unitRef="pure" decimals="4">0.3124</in-capmkt:PercentageOfShareholdingPostTransaction>
   <in-capmkt:NameOfThePerson contextRef="Person2">Yogesh Malhotra</in-capmkt:NameOfThePerson>
   <in-capmkt:CategoryOfPerson contextRef="Person2">Key Managerial Personnel</in-capmkt:CategoryOfPerson>
   <in-capmkt:NumberOfSecuritiesAcquiredOrDisposed contextRef="Person2" unitRef="shares" decimals="0">1200</in-capmkt:NumberOfSecuritiesAcquiredOrDisposed>
@@ -244,6 +244,37 @@ def test_filing_list_expanded_from_cache_and_queued():
     assert waiting == 1 and [r["person"] for r in rows if r["symbol"] == "GRAVITA"] == ["Rajat Agrawal", "Yogesh Malhotra"]
     x = next(r for r in rows if r["symbol"] == "XYZ")
     assert x["type"] == "Filing (details loading)" and x["side"] == "OTHER" and x["date"] == "2026-11-13"
+
+
+REAL_PIT = """<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:in-bse-co="http://www.bseindia.com/xbrl/co">
+<in-bse-co:Symbol contextRef="MainI">RELTD</in-bse-co:Symbol>
+<in-bse-co:NameOfTheCompany contextRef="MainI">Ravindra Energy Limited</in-bse-co:NameOfTheCompany>
+<in-bse-co:NameOfTheSignatory contextRef="MainI">Madhukar Rajendra Shipurkar</in-bse-co:NameOfTheSignatory>
+<in-bse-co:DateOfFiling contextRef="MainI">2026-11-14</in-bse-co:DateOfFiling>
+<in-bse-co:TypeOfInstrument contextRef="Disclosure1">Equity</in-bse-co:TypeOfInstrument>
+<in-bse-co:CategoryOfPerson contextRef="Disclosure1">Promoter Group</in-bse-co:CategoryOfPerson>
+<in-bse-co:NameOfThePerson contextRef="Disclosure1">Anuradha Ravindra Kulkarni</in-bse-co:NameOfThePerson>
+<in-bse-co:SecuritiesHeldPriorToAcquisitionOrDisposalNumberOfSecurity contextRef="Disclosure1">127777</in-bse-co:SecuritiesHeldPriorToAcquisitionOrDisposalNumberOfSecurity>
+<in-bse-co:SecuritiesHeldPriorToAcquisitionOrDisposalPercentageOfShareholding contextRef="Disclosure1">0.0006</in-bse-co:SecuritiesHeldPriorToAcquisitionOrDisposalPercentageOfShareholding>
+<in-bse-co:SecuritiesAcquiredOrDisposedNumberOfSecurity contextRef="Disclosure1">5523</in-bse-co:SecuritiesAcquiredOrDisposedNumberOfSecurity>
+<in-bse-co:SecuritiesAcquiredOrDisposedValueOfSecurity contextRef="Disclosure1">801382</in-bse-co:SecuritiesAcquiredOrDisposedValueOfSecurity>
+<in-bse-co:SecuritiesAcquiredOrDisposedTransactionType contextRef="Disclosure1">Buy</in-bse-co:SecuritiesAcquiredOrDisposedTransactionType>
+<in-bse-co:SecuritiesHeldPostAcquistionOrDisposalNumberOfSecurity contextRef="Disclosure1">133300</in-bse-co:SecuritiesHeldPostAcquistionOrDisposalNumberOfSecurity>
+<in-bse-co:SecuritiesHeldPostAcquistionOrDisposalPercentageOfShareholding contextRef="Disclosure1">0.0007</in-bse-co:SecuritiesHeldPostAcquistionOrDisposalPercentageOfShareholding>
+<in-bse-co:DateOfAllotmentAdviceOrAcquisitionOfSharesOrSaleOfSharesSpecifyFromDate contextRef="Disclosure1">2026-11-11</in-bse-co:DateOfAllotmentAdviceOrAcquisitionOfSharesOrSaleOfSharesSpecifyFromDate>
+<in-bse-co:DateOfAllotmentAdviceOrAcquisitionOfSharesOrSaleOfSharesSpecifyToDate contextRef="Disclosure1">2026-11-11</in-bse-co:DateOfAllotmentAdviceOrAcquisitionOfSharesOrSaleOfSharesSpecifyToDate>
+<in-bse-co:ModeOfAcquisitionOrDisposal contextRef="Disclosure1">Market Purchase</in-bse-co:ModeOfAcquisitionOrDisposal>
+<in-bse-co:DateOfIntimationToCompany contextRef="Disclosure1">2026-11-13</in-bse-co:DateOfIntimationToCompany>
+</xbrli:xbrl>"""
+
+
+def test_real_nse_pit_filing():
+    recs = flows.parse_pit_xbrl(REAL_PIT)
+    assert len(recs) == 1                                   # the signatory is not a trade
+    r = flows.parse_pit({"data": [{"symbol": "RELTD", **recs[0]}]})[0]
+    assert r["person"] == "Anuradha Ravindra Kulkarni" and r["promoter"] and r["side"] == "BUY" and r["market"]
+    assert r["qty"] == 5523 and r["value"] == 0.08 and r["date"] == "2026-11-11"
+    assert r["before_pct"] == 0.06 and r["after_pct"] == 0.07
 
 
 if __name__ == "__main__":
