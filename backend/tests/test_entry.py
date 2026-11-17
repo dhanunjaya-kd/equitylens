@@ -82,20 +82,21 @@ def test_backtest_tool_runs_end_to_end(monkeypatch, tmp_path):
     from pathlib import Path
     from app import config, service, store, technicals, universe
 
-    def dated(seed, drift):
+    def dated(seed, drift, vol_shares=1e6):
         rnd, c, out, d = random.Random(seed), 100.0, [], dt.date(2013, 1, 1)
         while d < dt.date(2026, 11, 1):
             if d.weekday() < 5:
                 o = c
                 c = c * math.exp(drift + rnd.gauss(0, 0.015))
-                out.append({"t": d.isoformat(), "o": o, "h": max(o, c) * 1.005, "l": min(o, c) * 0.995, "c": c, "v": 1})
+                out.append({"t": d.isoformat(), "o": o, "h": max(o, c) * 1.005, "l": min(o, c) * 0.995, "c": c, "v": vol_shares})
             d += dt.timedelta(days=1)
         return out
-    stocks = {f"S{k}": dated(k, 0.0004 * (k % 3)) for k in range(6)}
+    stocks = {f"S{k}": dated(k, 0.0004 * (k % 3)) for k in range(12)}
+    stocks["THIN"] = dated(7, 0.0004, vol_shares=10)          # ~Rs 1,000 a day: every call skipped as illiquid
     pe = [((dt.date(2013, 1, 1) + dt.timedelta(days=9 * k)).isoformat(), 20 + 8 * math.sin(k / 9)) for k in range(560)]
     monkeypatch.setattr(config, "DEMO", False)
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(universe, "load", lambda download=True: ([{"symbol": s} for s in stocks], "x"))
+    monkeypatch.setattr(universe, "index_list", lambda code: [{"symbol": s} for s in (list(stocks) if code == "ALL" else [f"S{k}" for k in range(6)])])
     monkeypatch.setattr(technicals, "_latest_daily", lambda sym: dated(99, 0.0003))
     monkeypatch.setattr(technicals, "get_bars", lambda sym, refresh=False, with_time=False: (stocks[sym], "x", True))
     monkeypatch.setattr(service, "get_payload", lambda sym, full=False, max_age_h=None: ({"extras": {"pe_chart": {"Price to Earning": pe}}}, 0))
@@ -108,6 +109,10 @@ def test_backtest_tool_runs_end_to_end(monkeypatch, tmp_path):
     mod.main()
     res = saved["ENTRY_TRACK::IN"]
     assert res["verdicts"] > 300 and (tmp_path / "entry_track.json").exists()
+    assert res["universe"] == "ALL" and res["illiquid_calls_skipped"] > 50
+    for g in ("N500", "OTHER"):
+        gb = res["by_rule"]["enter"]["groups"][g]
+        assert gb["n"] and gb["p12"]["n"] and gb["claim_held"] in (True, False, None)
     assert res["rules_version"] == entry.RULES_VERSION and set(res["by_verdict"]) == {"ENTER", "WAIT"}
     assert set(res["by_rule"]) == set(entry.EXPECT)
     for b in res["by_rule"].values():

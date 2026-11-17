@@ -178,6 +178,10 @@ def entry_decision(symbol: str, a: dict, extras: dict) -> Optional[dict]:
             fair_value=(a.get("valuation") or {}).get("fair_value"), results_in_days=days, surveillance=surv)
         track = store.get_company("ENTRY_TRACK::IN")
         out["track"] = track[1] if track else None
+        try:
+            out["group"] = "N500" if symbol in universe.membership() else "OTHER"
+        except Exception:  # noqa: BLE001
+            out["group"] = None
         return out
     except Exception:  # noqa: BLE001 - the rest of the report still works
         return None

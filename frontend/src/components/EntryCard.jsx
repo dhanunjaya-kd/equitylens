@@ -43,13 +43,16 @@ function Track({ t, e }) {
   const st = e.checks?.value?.state && t.by_state?.[e.checks.value.state]
   const rules = Object.values(t.by_rule || {})
   const passed = rules.filter((r) => r.passed === true).length
+  const where = t.universe_label || 'NIFTY 500 stocks'
+  const g = e.group && b?.groups?.[e.group]
+  const gName = t.groups?.[e.group]
   return (
     <div className="small muted" style={{ lineHeight: 1.6 }}>
       {e.rule === 'avoid_business'
         ? <div>The business check is <b>not backtested</b>: past business scores aren't available without hindsight.</div>
         : b?.p12 && (
           <div>
-            <b style={{ color: 'var(--text)' }}>Track record of this rule — {RULE_NAME[e.rule]}</b>, NIFTY 500 since 2016
+            <b style={{ color: 'var(--text)' }}>Track record of this rule — {RULE_NAME[e.rule]}</b>, {where} since 2016
             {' '}({b.n.toLocaleString('en-IN')} monthly calls): 12 months {pctTxt(avg(b))} vs peers
             {' '}(2016–20 {pctTxt(avg(b.first_half))}, 2021 on {pctTxt(avg(b.second_half))})
             {b.months_beat_pct != null && `, beat peers in ${b.months_beat_pct}% of months`};
@@ -57,12 +60,17 @@ function Track({ t, e }) {
             {e.rule === 'wait_falling' && b.wait_test && ` Waiting for the close above the 200-day average, measured to the same end date: ${pctTxt(b.wait_test.r12_waited)} vs ${pctTxt(b.wait_test.r12_bought_now)} buying now (the trend turned within 12 months ${b.wait_test.turned_pct}% of the time).`}
           </div>
         )}
+      {g?.p12 && gName && t.universe === 'ALL' && (
+        <div>This stock is {e.group === 'N500' ? 'in the NIFTY 500' : 'outside the NIFTY 500'}. Among those stocks ({g.n.toLocaleString('en-IN')} calls),
+          {' '}this rule did {pctTxt(avg(g))} vs peers in the same group over 12 months (2016–20 {pctTxt(avg(g.first_half))}, 2021 on {pctTxt(avg(g.second_half))}).
+          {g.claim_held === false && ' The claim did not hold for this group.'}</div>
+      )}
       {st?.p12 && (
         <div>Stocks in the "{e.checks.value.state}" value state: {pctTxt(avg(st))} vs peers over 12 months, {pctTxt(avg(st, 'p24'))} over 24 months
           {t.value_test?.passed === false ? ' — value did not pass its test, so it does not change the verdict.' : '.'}</div>
       )}
       <div>Engine: {passed} of {rules.length} tested rules passed the test set before the run (same result in both halves and in most months).
-        {' '}"vs peers" = return minus the average of all tested stocks in the same month. Results warning not tested. Past results, not a promise. Tested {t.built}.</div>
+        {' '}"vs peers" = return minus the average of all tested stocks in the same month. Calls on illiquid stocks (under ₹1 crore a day) left out. Stocks delisted since 2016 are missing. Results warning not tested. Past results, not a promise. Tested {t.built}.</div>
     </div>
   )
 }
