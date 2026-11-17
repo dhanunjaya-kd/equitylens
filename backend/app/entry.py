@@ -104,7 +104,7 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
     px = c[i]
     s50, s200, s200_prev = _sma(c, 50, i), _sma(c, 200, i), _sma(c, 200, i - 20) if i >= 220 else None
     atr, rsi = _atr(h, l, c, i), _rsi(c, i)
-    if s200 is None or atr is None:
+    if s200 is None or atr is None or atr <= 0 or px <= 0:     # flat/suspended prices: no call
         return {"verdict": "NA", "label": "Not enough price history", "reasons": ["Needs about 1 year of prices."]}
 
     reasons, checks = [], {}

@@ -104,7 +104,11 @@ def main():
             if k < entry.MIN_PE_POINTS:
                 continue
             hist = [v for _, v in pes[:k]]
-            v = entry.decide(bars, i, pe_hist=hist, pe_now=hist[-1])
+            try:
+                v = entry.decide(bars, i, pe_hist=hist, pe_now=hist[-1])
+            except Exception:  # noqa: BLE001 - one bad bar must not stop a 500-stock run
+                skipped["bad price data on a date"] += 1
+                continue
             if v["verdict"] == "NA":
                 continue
             r12, b12 = fwd(bars, i, 252), bench_ret(nifty, d, 252)

@@ -118,3 +118,8 @@ def test_plan_levels_are_always_below_todays_price():
                     assert p[0] >= p[1] + v["levels"]["atr"] - 0.02 and p[1] >= p[2] + v["levels"]["atr"] - 0.02, (seed, p)
                 if v["zone"]:
                     assert v["zone"][1] < v["price"]
+
+
+def test_flat_suspended_prices_give_no_call():
+    bars = [{"t": f"d{k:04d}", "o": 50.0, "h": 50.0, "l": 50.0, "c": 50.0, "v": 0} for k in range(400)]
+    assert entry.decide(bars, pe_hist=PE, pe_now=20)["verdict"] == "NA"
