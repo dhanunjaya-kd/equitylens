@@ -34,11 +34,12 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 | | Area | In one line |
 |:-:|---|---|
 | 🔎 | **Stock report** | Verdict, 6 scores, red flags, forensics, valuation, 10-year story, 3/5/10-year scenarios, chart outlook |
+| 🚦 | **Entry decision** | *Enter now* or *Avoid for now* for a 1–3 year holding, from fixed rules tested on 10 years of NSE data, with the rule's real track record and AI research on every stock |
 | 📊 | **Market dashboard** | NIFTY · BANK NIFTY · SENSEX · VIX (or S&P 500 · NASDAQ · DOW · RUSSELL · VIX) on every page, plus market movers, mood and sector heatmap |
 | 🧭 | **Smart money** | Delivery %, bulk & block deals, promoter / insider trades and exchange surveillance flags |
 | 📅 | **Calendar** | Results and economic events with official dates, countdowns and what each one means |
 | 🏆 | **Discovery** | Rank the whole NIFTY 500 / S&P 500, build your own screens, watchlist, compare |
-| ✨ | **AI analyst** | Research notes, chat, bull-vs-bear debate, guidance check, report reader — with your choice of AI |
+| ✨ | **AI analyst** | Entry research, research notes, chat, bull-vs-bear debate, guidance check, report reader — with your choice of AI |
 | 🏛️ | **Stock lists** | NIFTY 50 · NIFTY 100 · NIFTY 500 · All NSE — one choice applies to every list and to scans |
 | 🎯 | **F&O stocks** | One switch turns every list into F&O stocks only; F&O badge and lot size on each stock |
 | 📘 | **Beginner guide** | Learn to read a company in 10 minutes: 11 steps, a checklist, a glossary and a walkthrough video |
@@ -176,7 +177,7 @@ Search any company by name or symbol. Each stock page has these tabs:
 
 | | Tab | What you get |
 |:-:|---|---|
-| 🟢 | **Overview** | Verdict and overall score · key ratios · latest quarter (YoY / QoQ) · strengths ✅ and red flags 🚩 · fair value and forensic quick checks · company key points · next results date |
+| 🟢 | **Overview** | Verdict and overall score · 🚦 **entry decision** with ✨ AI research · key ratios · latest quarter (YoY / QoQ) · strengths ✅ and red flags 🚩 · fair value and forensic quick checks · company key points · next results date |
 | ✨ | **AI** | Research note · ask-anything chat · management guidance check · bull vs bear debate with a judge · annual report and concall reader |
 | 📈 | **Chart** | Daily/weekly candles (3M–10Y) · EMA 20/50/200 · Bollinger · Supertrend · support/resistance · volume · RSI · MACD · ADX · signal checklist |
 | 🔭 | **Chart outlook** | The chart's story in plain English · if/then price levels · likely price range drawn on the chart · what happened after the same setup in the past |
@@ -191,6 +192,50 @@ Search any company by name or symbol. Each stock page has these tabs:
 | 📄 | **Reports** | Annual reports, concall transcripts, presentations, announcements, credit ratings (10-K / 10-Q / 8-K for US) |
 
 A **🚨 surveillance banner** appears at the top when the exchange is watching the stock, and a **📅 results badge** shows when the next results are due.
+
+### 🚦 Entry decision — is now a good time to buy?
+
+On the Overview tab of every Indian stock, a card answers one question for a **1–3 year holding**: *enter now, or avoid for now?* It is worked out live each time you open the stock, from that day's prices, and it is not a promise. The card always shows how its rule has really done.
+
+**The rules** (fixed in advance, the same live and in the backtest; no numbers were tuned on results):
+
+| Verdict | Rule | When | What changes it |
+|:-:|---|---|---|
+| 🔴 **Avoid** | Business check | Loss-making, a serious forensic red flag, exchange surveillance, or business score under 55 | The business data changing (not backtested: past business scores don't exist) |
+| 🔴 **Avoid** | Falling | Price below its 200-day average **and** that average is falling | No longer below a falling 200-day average: the card turns to *Enter* by itself. There is no "buy at ₹X" level |
+| 🟢 **Enter** | Strong trend | Not falling, and stretched more than 3 ATRs above its 50-day average (or RSI above 75) | — expect swings |
+| 🟢 **Enter** | Not falling | Everything else | Falling below a falling 200-day average |
+
+Shown alongside, but **never changing the verdict**: the P/E vs the stock's own history (Cheap · Fair · Full · Expensive, with an ⚠️ caution when *Expensive*), the fair-value range, and a ⚠️ warning when results are due within 7 days.
+
+**The backtest** — `backend/tools/entry_backtest.py` replays the rules at every month-end since 2016 on **all NSE stocks**, using only what was known on that day, and measures what happened over the next 12, 24 and 36 months. Results are compared **vs peers** (the average of every tested stock in the same month), which is fair between rules even though stocks that were delisted are missing. Calls on illiquid stocks (median traded value under ₹1 crore a day) are left out. A rule passes only if its claim holds in **both halves** (2016–20 and 2021 on) **and** in more than half of the months; this test was fixed before the run.
+
+<details>
+<summary><b>📊 What the all-NSE run showed</b> (17 Nov 2026: 1,541 stocks, 66,860 monthly calls)</summary>
+
+<br/>
+
+| Rule | 12 months vs peers | 2016–20 / 2021 on | Months it held | Test |
+|---|---|---|---|---|
+| Enter — strong trend | **+5.7%** | +9.2% / +5.2% | 70% | ✅ passed (also in and outside the NIFTY 500) |
+| Enter — not falling | +0.7% | −1.2% / +0.9% | 62% | ❌ about the same as peers |
+| Avoid — falling | **−4.0%** | −1.1% / −4.8% | trailed in 80% | ✅ passed (also in and outside the NIFTY 500) |
+
+- Waiting for a falling stock to close back above its 200-day average and buying then returned **17.5% vs 25.2%** buying at once (same end date). That is why falling stocks are *Avoid*, not *wait for ₹X*.
+- *Expensive* vs its own P/E history trailed peers by **7.8%** over 2 years and **17.8%** over 3 years, and trailed both *Cheap* and *Fair* in both halves; hence the caution. *Full* was not reliably worse.
+- Earlier versions of the rules were dropped because the backtest showed them to be harmful: "wait, it's stretched" (stretched stocks did best), price buy zones (reached only ~24% of the time) and a 3-part buying plan (about 8 points a year worse than buying at once).
+- Absolute returns are flattered by survivorship; only the "vs peers" numbers are shown on the card. The card always shows the **latest** run, not these numbers.
+</details>
+
+Run it once after installing, and again about once a month (each new month adds data):
+
+```bat
+cd backend
+REM all NSE stocks (first run 2-3 hours, later runs much faster)
+venv\Scripts\python tools\entry_backtest.py
+REM or NIFTY 500 only
+venv\Scripts\python tools\entry_backtest.py --universe N500
+```
 
 ### 📊 Market dashboard
 
@@ -312,6 +357,7 @@ Bring in what you actually own, then let EquityLens check it the same way it che
 
 | Agent | What it does |
 |---|---|
+| 🚦 Entry research | Opens by itself on the entry card: tests the engine's call against everything else in the data and shows sources and a number check (below) |
 | 🧠 Research note | Full write-up: quality, growth, balance sheet, forensics, valuation, 3/5/10-year view, risks, what to watch |
 | 💬 Ask about this stock | Chat grounded in that stock's own data — *"Is the debt a worry?"*, *"Why did margins fall?"* |
 | 🎯 Guidance check | Grades each management target against the company's track record: achievable · stretch · unlikely |
@@ -329,6 +375,30 @@ Bring in what you actually own, then let EquityLens check it the same way it che
 
 > [!IMPORTANT]
 > The AI sees only EquityLens's data for that stock and is instructed never to invent numbers. API keys are stored on your laptop only (`backend/data/ai_settings.json` or `backend/.env`, both git-ignored).
+
+#### 🔌 Connect an AI (2 minutes)
+
+| # | Step |
+|:-:|---|
+| 1 | Get a key: **Claude** at console.anthropic.com → API keys · **ChatGPT** at platform.openai.com → API keys · **Gemini** (free tier) at aistudio.google.com → Get API key · or install **Ollama** from ollama.com and run `ollama pull llama3.1:8b` (free, no key) |
+| 2 | In EquityLens open **⚙️ Settings → AI**, pick the provider and paste the key (Gemini: tap **Load my models** and pick one) |
+| 3 | Tap **Save & test connection**. A green reply means it works |
+| 4 | Open any stock. The ✨ AI research appears on the entry card within 20–60 seconds the first time |
+
+Prefer a file? Put the same values in `backend/.env` (`EQL_AI_PROVIDER`, `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`, and the model names; see `backend/.env.example`).
+
+#### 🔍 What the AI does when you open a stock
+
+1. **Builds an evidence pack** from EquityLens's own data: the entry decision and how its rule did in the backtest (including for stocks in the same group, NIFTY 500 or not), the last 8 quarters, 10+ years of P&L, balance sheet and cash flow, forensic scores and red flags, P/E vs its own history, fair value and scenarios, peers, promoter / FII / DII changes, trend levels and the results date.
+2. **Researches in a fixed order** — the rule's track record → the business now → price vs value → ownership → timing — and answers in a fixed format:
+   - a one-line **headline** and whether it **agrees / partly agrees / disagrees** with the engine (the verdict itself never changes)
+   - **Why it could work** and **What could go wrong**, each point with its exact figures and a source tag (Quarters, Valuation, Track record…)
+   - **What would change the call** as measurable conditions, and **Watch next** with today's value of each item
+   - **Confidence** (low / medium / high) and what is missing from the data
+3. **Checks every number.** Each figure the AI quotes is matched against the data it was given. The card shows *"Numbers checked: 14 of 15 found in EquityLens data"*, and any figure that isn't in the data is flagged in orange next to the point it came from.
+4. **Ask about this entry** — a chat box under the research (*"What would make this an Enter?"*, *"What do the results need to show?"*), answered from the same data.
+
+The research is saved per stock for the day, so opening the stock again is instant and doesn't use another AI call; **↻ Redo** asks again. The entry decision is also part of every other AI feature (note, chat, debate), so the AI never contradicts the card.
 
 ### 🇮🇳 / 🇺🇸 Two markets, one app
 
@@ -401,7 +471,8 @@ python run.py
 | 4 | Search any stock | Full report in about 5 seconds, cached for 24 hours (↻ Refresh fetches new data) |
 | 5 | ⚙️ Settings → choose an AI provider | Optional: Claude, ChatGPT, Gemini, or free local Ollama |
 | 6 | Top Picks → pick **NIFTY 50 / 100 / 500 / All NSE** (or S&P 500) → **Start scan** | Builds the rankings used by Top Picks, the screener and the signature scans. Start with NIFTY 50 (~3 min); re-run weekly |
-| 7 | Open **Movers**, **Calendar** and **Money** once | First load downloads the index's daily prices and NSE files (a few minutes); after that they refresh in the background |
+| 7 | Run the entry backtest once: `venv\Scripts\python tools\entry_backtest.py` in `backend/` | Fills the track record shown on every entry card (first run 2–3 hours; see 🚦 Entry decision) |
+| 8 | Open **Movers**, **Calendar** and **Money** once | First load downloads the index's daily prices and NSE files (a few minutes); after that they refresh in the background |
 
 ### 📱 Phone and ☁️ cloud
 
@@ -515,7 +586,7 @@ cd backend
 python run_tests.py
 ```
 
-89 offline tests run against saved copies of each source's real format, so they pass without internet:
+101 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -530,7 +601,8 @@ python run_tests.py
 | `test_indices.py` | Index quotes, change maths, market open/closed, VIX bands |
 | `test_brokers.py` | Every broker's holdings format, TOTP (RFC 6238 test vectors), CSV and Excel uploads with ISIN mapping, masked keys, merging the same stock across brokers |
 | `test_access.py` | Password sign-in, protected keys, shutdown only from this computer, phone addresses, log viewer |
-| `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys |
+| `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys; entry research parsing, retry, caching and flagging of invented numbers |
+| `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |
 
 ---
@@ -562,14 +634,15 @@ equitylens/
 │   │   ├── calendars.py      results and economic calendars, official schedules
 │   │   ├── enrich.py         F&O list + live fields joined onto every list
 │   │   ├── logos.py          company logos with initials fallback
-│   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents
+│   │   ├── entry.py          entry decision rules (Enter / Avoid), live and in the backtest
+│   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
 │   │   ├── brokers.py        read-only holdings from 8 brokers + CSV / Excel import
 │   │   ├── portfolio.py      portfolio X-ray: merge, score, warnings, mix
 │   │   ├── access.py         password sign-in, phone addresses, log viewer
 │   │   ├── money.py · store.py · universe.py · config.py
 │   ├── static/               prebuilt web app (no Node.js needed to run)
-│   ├── tests/                89 offline tests + sample data
-│   ├── tools/                make_video.py · make_screenshots.py: video and screenshots with live data
+│   ├── tests/                offline tests + sample data
+│   ├── tools/                entry_backtest.py: track record of the entry rules · make_video.py · make_screenshots.py
 │   └── run.py · selftest.py · run_tests.py · scan.py   (logs → data/logs/)
 ├── frontend/                 React + Vite source (npm install && npm run build)
 └── docs/                     screenshots, walkthrough video, CLOUD_AND_PHONE.md guide
@@ -589,7 +662,8 @@ equitylens/
 | `GET /api/flows/stock/{symbol}` | Delivery, deals, insiders and surveillance for one stock |
 | `GET /api/flows/delivery` · `deals` · `insiders` · `surveillance` | Market-wide smart-money lists |
 | `GET /api/calendar/earnings` · `economy` · `next/{symbol}` | Calendars and next results date |
-| `POST /api/ai/{note,chat,guidance,debate,doc,chart}/{symbol}` | AI features for a stock |
+| `POST /api/ai/{note,chat,guidance,debate,doc,chart}/{symbol}` | AI features for a stock (`chat` takes `focus: "entry"` for questions about the entry card) |
+| `POST /api/ai/entry/{symbol}?refresh=` | AI research on the entry decision: structured, sourced, numbers checked |
 | `POST /api/ai/{picks,movers,calendar}` | AI explanations of lists, moves and the week |
 | `GET /api/fno` | F&O stocks and lot sizes |
 | `GET /api/universe` | NIFTY 50 / 100 / 500 / All NSE sizes and index membership |
@@ -612,6 +686,7 @@ equitylens/
 - [x] 💼 Portfolio X-ray: connect your broker or upload holdings, see combined score, concentration and red flags
 - [x] ☁️ Cloud hosting guide, Docker and password protection so it works with the laptop off
 - [x] 🖱️ Windowless Windows launcher with desktop shortcut and log file
+- [x] 🚦 Entry decision with a backtested track record on all NSE stocks, and AI research on every entry
 - [ ] 📈 Score track record: monthly snapshots to check whether high scores beat low scores
 
 ---
