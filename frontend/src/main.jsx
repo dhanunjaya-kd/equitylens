@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+
+// If the app was updated while this window stayed open, load the new version.
+const LOADED = (new URL(import.meta.url).pathname.split('/').pop() || '')
+if (/^index-[\w-]+\.js$/.test(LOADED)) {
+  const check = () => fetch('/api/health', { cache: 'no-store' }).then((r) => r.json())
+    .then((h) => { if (h.ui && h.ui !== LOADED) window.location.reload() }).catch(() => {})
+  setInterval(check, 60000)
+  window.addEventListener('focus', check)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check() })
+}
 import './styles.css'
 import { polyfillCountryFlagEmojis } from 'country-flag-emoji-polyfill'
 import flagFont from 'country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url'

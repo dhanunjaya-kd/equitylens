@@ -4,8 +4,13 @@ Logs always go to backend/data/logs/equitylens.log (2 MB x 4 files).
 Started from EquityLens.vbs (pythonw, no window) there is no console at all,
 so anything printed or any crash also lands in data/logs/console.log.
 """
+import glob
 import logging
 import logging.config
+import socket
+import subprocess
+import threading
+import time
 import logging.handlers  # noqa: F401
 import os
 import sys
@@ -53,7 +58,66 @@ def log_config(console: bool) -> dict:
     }
 
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+WATCH = [os.path.join(HERE, "app", "*.py"), os.path.join(HERE, "static", "index.html")]
+
+
+def _stamp() -> dict:
+    out = {}
+    for pat in WATCH:
+        for f in glob.glob(pat):
+            try:
+                out[f] = os.path.getmtime(f)
+            except OSError:
+                pass
+    return out
+
+
+def _requirements_changed() -> bool:
+    """New packages need the launcher's install step, so don't restart into a crash."""
+    try:
+        with open(os.path.join(HERE, "requirements.txt"), encoding="utf-8") as a, \
+             open(os.path.join(HERE, "venv", "eql_req.txt"), encoding="utf-8") as b:
+            return a.read() != b.read()
+    except OSError:
+        return False
+
+
+def watch_for_updates(log: logging.Logger, every: int = 15) -> None:
+    """After a `git pull`, start a fresh server with the new code and exit this one,
+    so the app never keeps running old code."""
+    before = _stamp()
+    while True:
+        time.sleep(every)
+        now = _stamp()
+        if now != before:
+            time.sleep(5)              # let git finish writing every file
+            if _requirements_changed():
+                log.warning("code changed but new packages are needed; restart with EquityLens.vbs")
+                before = _stamp()
+                continue
+            log.info("code changed on disk - restarting with the new version")
+            flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            subprocess.Popen([sys.executable, os.path.abspath(__file__), "--wait-port"], cwd=HERE,
+                             creationflags=flags, close_fds=True)
+            os._exit(0)
+
+
+def wait_for_port(port: int, seconds: int = 30) -> None:
+    """The previous server may still be letting go of the port."""
+    end = time.time() + seconds
+    while time.time() < end:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", port))
+                return
+            except OSError:
+                time.sleep(0.5)
+
+
 if __name__ == "__main__":
+    if "--wait-port" in sys.argv:
+        wait_for_port(config.PORT)
     if WINDOWLESS:
         out = open(LOG_DIR / "console.log", "a", encoding="utf-8", buffering=1)  # noqa: SIM115
         sys.stdout = sys.stderr = out
@@ -62,4 +126,6 @@ if __name__ == "__main__":
     (config.DATA_DIR / "equitylens.pid").write_text(str(os.getpid()))     # used by "Stop EquityLens.vbs"
     logging.config.dictConfig(log_config(not WINDOWLESS))
     logging.getLogger("equitylens").info("starting on %s:%s (windowless=%s)", config.HOST, config.PORT, WINDOWLESS)
+    if os.environ.get("EQL_AUTO_RESTART", "1") != "0":
+        threading.Thread(target=watch_for_updates, args=(logging.getLogger("equitylens"),), daemon=True).start()
     uvicorn.run("app.main:app", host=config.HOST, port=config.PORT, reload=False, log_config=None)

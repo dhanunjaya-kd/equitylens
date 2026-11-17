@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import re
 import logging
 import os
 import threading
@@ -83,9 +84,18 @@ def logs(lines: int = 300):
     return access.tail_logs(lines)
 
 
+def ui_build() -> str | None:
+    """Name of the JavaScript bundle the current index.html points to (changes with every build)."""
+    try:
+        m = re.search(r"assets/(index-[\w-]+\.js)", (config.STATIC_DIR / "index.html").read_text(encoding="utf-8"))
+        return m.group(1) if m else None
+    except OSError:
+        return None
+
+
 @app.get("/api/health")
 def health():
-    return {"ok": True, "cached_companies": store.count_companies(), "scan": service.scan_status()}
+    return {"ok": True, "ui": ui_build(), "cached_companies": store.count_companies(), "scan": service.scan_status()}
 
 
 @app.get("/api/search")
@@ -522,7 +532,8 @@ if (config.STATIC_DIR / "index.html").exists():
         f = config.STATIC_DIR / path
         if path and f.is_file():
             return FileResponse(f)
-        return FileResponse(config.STATIC_DIR / "index.html")
+        # never let the app window keep an old index.html: it would keep loading an old build
+        return FileResponse(config.STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 else:
     @app.get("/")
     def no_ui():
