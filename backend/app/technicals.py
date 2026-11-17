@@ -26,10 +26,42 @@ Num = Optional[float]
 YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
 _UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"}
 CHART_TTL = 6 * 3600
+LIVE_TTL = 5 * 60          # while the market is open, the last candle is still forming
+IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
+CLOSE_SETTLED = dt.time(15, 50)   # NSE closes 15:30; give the data provider ~20 minutes to post the final candle
+
+
+def _last_close_after(fetched_at: float, now: float, us: bool = False) -> bool:
+    """True if a trading session finished after the cache was written (so a newer candle exists)."""
+    f = dt.datetime.fromtimestamp(fetched_at, IST)
+    n = dt.datetime.fromtimestamp(now, IST)
+    # US sessions end around 01:30-02:30 IST the next morning; 03:00 IST covers both DST states
+    settle = dt.time(3, 0) if us else CLOSE_SETTLED
+    day = n.date()
+    for _ in range(8):   # walk back to the most recent weekday settle time at or before now
+        cand = dt.datetime.combine(day, settle, IST)
+        trading_day = (day - dt.timedelta(days=1)) if us else day
+        if cand <= n and trading_day.weekday() < 5:
+            return f < cand
+        day -= dt.timedelta(days=1)
+    return False
+
+
+def _market_open(now: float) -> bool:
+    n = dt.datetime.fromtimestamp(now, IST)
+    return n.weekday() < 5 and dt.time(9, 15) <= n.time() <= dt.time(15, 35)
+
+
+def is_stale(fetched_at: float, now: float, us: bool = False) -> bool:
+    age = now - fetched_at
+    max_age = CHART_TTL if us else 20 * 3600   # safety net; normally a session close is what triggers a refresh
+    if age > max_age or _last_close_after(fetched_at, now, us):
+        return True
+    return (not us) and _market_open(now) and age > LIVE_TTL
 
 
 # ------------------------------------------------------------------ data
-def _yahoo(sym: str, rng: str = "10y") -> list[dict]:
+def _yahoo(sym: str, rng: str = "10y", with_meta: bool = False):
     r = requests.get(YAHOO.format(sym=quote(sym)), params={"range": rng, "interval": "1d", "includePrePost": "false"},
                      headers=_UA, timeout=config.REQUEST_TIMEOUT)
     if r.status_code != 200:
@@ -50,6 +82,31 @@ def _yahoo(sym: str, rng: str = "10y") -> list[dict]:
             out[-1] = {"t": day, "o": o, "h": h, "l": l, "c": c, "v": v or 0}
         else:
             out.append({"t": day, "o": o, "h": h, "l": l, "c": c, "v": v or 0})
+    return (out, res.get("meta") or {}) if with_meta else out
+
+
+def _latest_daily(sym: str) -> list[dict]:
+    """Ten years of daily candles, topped up with the newest sessions.
+    Yahoo's long-range series can lag a session or two behind; the short range and the quote
+    'meta' carry the latest day, so they are merged in (newer data wins)."""
+    bars = _yahoo(sym, "10y")
+    try:
+        recent, meta = _yahoo(sym, "5d", with_meta=True)
+    except Exception:  # noqa: BLE001 - the long series is still usable on its own
+        return bars
+    by_day = {b["t"]: b for b in bars}
+    for b in recent:
+        by_day[b["t"]] = b
+    out = [by_day[k] for k in sorted(by_day)]
+    px, ts = meta.get("regularMarketPrice"), meta.get("regularMarketTime")
+    if px and ts and px > 0:
+        day = (dt.datetime.fromtimestamp(ts, dt.timezone.utc) + dt.timedelta(hours=5, minutes=30)).date().isoformat()
+        if not out or day > out[-1]["t"]:
+            hi = meta.get("regularMarketDayHigh") or px
+            lo = meta.get("regularMarketDayLow") or px
+            op = meta.get("regularMarketOpen") or (out[-1]["c"] if out else px)
+            out.append({"t": day, "o": op, "h": max(hi, op, px), "l": min(lo, op, px), "c": px,
+                        "v": meta.get("regularMarketVolume") or 0})
     return out
 
 
@@ -84,19 +141,19 @@ def _demo(symbol: str) -> list[dict]:
     return out
 
 
-def get_bars(symbol: str, refresh: bool = False) -> tuple[list[dict], str, bool]:
-    """-> (daily bars, source label, has_real_ohlc)"""
+def get_bars(symbol: str, refresh: bool = False, with_time: bool = False):
+    """-> (daily bars, source label, has_real_ohlc[, fetched_at])"""
     sym = scraper.clean_symbol(symbol)
     key = f"CHART::{sym}"
     cached = store.get_company(key)
-    if cached and not refresh and time.time() - cached[0] < CHART_TTL:
+    if cached and not refresh and not is_stale(cached[0], time.time(), sym.startswith("US:")):
         p = cached[1]
-        return p["bars"], p["source"], p["ohlc"]
+        return (p["bars"], p["source"], p["ohlc"], cached[0]) if with_time else (p["bars"], p["source"], p["ohlc"])
     if config.DEMO:
         bars, src, ohlc = _demo(sym), "demo data", True
     elif sym.startswith("US:"):
         t = sym[3:]
-        bars = _yahoo(t)
+        bars = _latest_daily(t)
         src, ohlc = f"Yahoo Finance ({t})", True
     else:
         comp = store.get_company(sym)
@@ -109,7 +166,7 @@ def get_bars(symbol: str, refresh: bool = False) -> tuple[list[dict], str, bool]
         bars, src, ohlc, errs = [], "", True, []
         for t in tries:
             try:
-                bars = _yahoo(t)
+                bars = _latest_daily(t)
                 if len(bars) > 30:
                     src = f"Yahoo Finance ({t})"
                     break
@@ -121,7 +178,7 @@ def get_bars(symbol: str, refresh: bool = False) -> tuple[list[dict], str, bool]
         if not bars:
             raise scraper.FetchError("Price history unavailable: " + "; ".join(errs))
     store.put_company(key, {"bars": bars, "source": src, "ohlc": ohlc})
-    return bars, src, ohlc
+    return (bars, src, ohlc, time.time()) if with_time else (bars, src, ohlc)
 
 
 def to_weekly(bars: list[dict]) -> list[dict]:
@@ -474,7 +531,7 @@ def r2(x):
 
 def build(symbol: str, interval: str = "1d", refresh: bool = False) -> dict:
     money.set_market(money.market_of(scraper.clean_symbol(symbol)))
-    bars, src, ohlc = get_bars(symbol, refresh)
+    bars, src, ohlc, fetched = get_bars(symbol, refresh, with_time=True)
     if interval == "1wk":
         bars = to_weekly(bars)
     t = [b["t"] for b in bars]
@@ -512,6 +569,7 @@ def build(symbol: str, interval: str = "1d", refresh: bool = False) -> dict:
     cut = max(len(c) - keep, 0)
     out = {
         "symbol": scraper.clean_symbol(symbol), "interval": interval, "source": src, "ohlc": ohlc,
+        "fetched_at": dt.datetime.fromtimestamp(fetched, IST).isoformat(timespec="minutes"),
         "t": t, "o": [r2(x) for x in o], "h": [r2(x) for x in h], "l": [r2(x) for x in l], "c": [r2(x) for x in c], "v": v,
         "ema20": [r2(x) for x in e20], "ema50": [r2(x) for x in e50], "ema200": [r2(x) for x in e200],
         "bb_up": [r2(x) for x in bb_up], "bb_lo": [r2(x) for x in bb_lo],

@@ -17,6 +17,10 @@ const RANGES = { '1d': [['3M', 63], ['6M', 126], ['1Y', 252], ['3Y', 756], ['5Y'
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* ignore */ } }
 
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const fmtDay = (d) => { if (!d) return '—'; const [y, m, dd] = d.split('-'); return `${+dd} ${MON[+m - 1]} ${y}` }
+const fmtStamp = (s) => { const [d, t] = s.split('T'); return `${fmtDay(d)}, ${t.slice(0, 5)} IST` }
+
 export default function StockChart({ symbol }) {
   const [interval, setInterval_] = useState('1d')
   const [data, setData] = useState(null)
@@ -26,11 +30,12 @@ export default function StockChart({ symbol }) {
   const [range, setRange] = useState('1Y')
   const [legend, setLegend] = useState(null)
   const box = useRef()
+  const [fresh, setFresh] = useState(0)   // bump to force a fresh download
 
   useEffect(() => {
     setData(null); setErr(null)
-    api(`/api/chart/${encodeURIComponent(symbol)}?interval=${interval}`).then(setData).catch((e) => setErr(e.message))
-  }, [symbol, interval])
+    api(`/api/chart/${encodeURIComponent(symbol)}?interval=${interval}${fresh ? '&refresh=true' : ''}`).then(setData).catch((e) => setErr(e.message))
+  }, [symbol, interval, fresh])
   useEffect(() => save('eql_over2', over), [over])
   useEffect(() => save('eql_panes', panes), [panes])
 
@@ -187,7 +192,11 @@ export default function StockChart({ symbol }) {
             <span key={k} className="chip" style={{ cursor: 'pointer', color: panes[k] ? 'var(--accent)' : null, borderColor: panes[k] ? 'var(--accent)' : null }}
               onClick={() => setPanes({ ...panes, [k]: !panes[k] })}>{panes[k] ? '✓ ' : ''}{l}</span>))}
         </div>
-        <div className="small muted">Source: {data.source}{!data.ohlc && ' — closes only, so candles, Supertrend and ADX are off'}. Tap a chip to show/hide.</div>
+        <div className="small muted" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <span>Source: {data.source}{!data.ohlc && ' — closes only, so candles, Supertrend and ADX are off'}.
+            {' '}Last candle <b style={{ color: 'var(--text)' }}>{fmtDay(data.stats?.date)}</b>{data.fetched_at ? ` · updated ${fmtStamp(data.fetched_at)}` : ''}. Tap a chip to show/hide.</span>
+          <button className="btn" style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => setFresh((n) => n + 1)}>↻ Refresh</button>
+        </div>
       </div>
 
       <div className="flow">
