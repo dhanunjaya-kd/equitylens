@@ -155,6 +155,34 @@ def live_price(company: dict, symbol: str) -> tuple[dict, Optional[dict]]:
     return dict(company, ratios=top), info
 
 
+def entry_decision(symbol: str, a: dict, extras: dict) -> Optional[dict]:
+    """Entry decision for the stock page (see entry.py). Never breaks the report."""
+    from . import calendars, entry, technicals
+    try:
+        bars, _, ohlc = technicals.get_bars(symbol)
+        if not ohlc or len(bars) < 260:
+            return None
+        m, scores = a["metrics"], a["scores"]
+        pe_series = (extras.get("pe_chart") or {}).get("Price to Earning") or []
+        nr = calendars.next_results(symbol)
+        days = None
+        if nr:
+            today = technicals.dt.datetime.now(technicals.IST).date()
+            days = (technicals.dt.date.fromisoformat(nr["date"]) - today).days
+        sv = store.get_company("SURV::IN")
+        surv = bool(sv and sv[1].get("flags", {}).get(symbol))
+        out = entry.decide(
+            bars, pe_hist=[v for _, v in pe_series], pe_now=m.get("pe"), business=scores.get("business"),
+            high_flags=sum(1 for f in a.get("flags", []) if f.get("severity") == "high"),
+            loss_making=isinstance(m.get("eps_ttm"), (int, float)) and m["eps_ttm"] <= 0,
+            fair_value=(a.get("valuation") or {}).get("fair_value"), results_in_days=days, surveillance=surv)
+        track = store.get_company("ENTRY_TRACK::IN")
+        out["track"] = track[1] if track else None
+        return out
+    except Exception:  # noqa: BLE001 - the rest of the report still works
+        return None
+
+
 def build_report(symbol: str, refresh: bool = False) -> dict:
     money.set_market(money.market_of(scraper.clean_symbol(symbol)))
     payload, ts = get_payload(symbol, refresh=refresh, full=True)
@@ -165,6 +193,8 @@ def build_report(symbol: str, refresh: bool = False) -> dict:
     if company.get("market") == "US":
         extras = dict(extras, peers=us_peers(payload["symbol"], company))
     a = analysis.analyse(company, median_pe_from(extras), extras.get("peers"), extras.get("pe_chart"))
+    if company.get("market", "IN") == "IN":
+        a = dict(a, entry=entry_decision(payload["symbol"], a, extras))
     store.put_ranking(payload["symbol"], ranking_row(payload, a))
     return {
         "symbol": payload["symbol"],

@@ -6,6 +6,7 @@ import {
 import { Badge, DataTable, Loading, Logo, ScoreBar, ScoreRing, Tile } from '../components/ui'
 import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import StockChart from './StockChart'
+import EntryCard from '../components/EntryCard'
 import { StockAI } from './AI'
 import { StockMoney, SurveillanceBanner } from './SmartMoney'
 import { KeyPoints, KeyRatios, LatestQuarter, StoryTimeline } from './OverviewExtra'
@@ -141,6 +142,8 @@ function Overview({ d }) {
           <Tile k="Valuation score" v={ok(s.valuation) ? Math.round(s.valuation) : '—'} color={scoreColor(s.valuation)} s="how attractive the price is" />
         </div>
       </div>
+
+      <EntryCard e={a.entry} />
 
       <div className="flow">
       <KeyRatios d={d} />
