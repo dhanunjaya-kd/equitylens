@@ -227,7 +227,42 @@ def build_context(report: dict, tech: Optional[dict] = None) -> str:
     if tech:
         ctx["technicals"] = {"summary": tech.get("summary"), "stats": tech.get("stats"), "levels": tech.get("levels"),
                              "recent_crosses": tech.get("markers", [])[-3:]}
+    ent = a.get("entry")
+    if ent and ent.get("verdict") not in (None, "NA"):
+        ctx["entry_decision"] = {k: ent.get(k) for k in ("verdict", "rule", "label", "price", "date", "checks", "reasons", "review_if", "levels", "group")}
+        ctx["entry_track_record"] = entry_evidence(ent)
     return json.dumps(ctx, separators=(",", ":"), default=str)
+
+
+def entry_evidence(ent: dict) -> Optional[dict]:
+    """The entry rule's own backtest, cut to what matters for this stock (vs same-month peers, in %)."""
+    t = ent.get("track")
+    if not t or t.get("rules_version") != ent.get("rules_version"):
+        return {"status": "no backtest yet for the current rules"}
+    pick = lambda b: None if not b else {
+        "calls": b.get("n"), "vs_peers_12m": (b.get("p12") or {}).get("avg"), "median_vs_peers_12m": (b.get("p12") or {}).get("median"),
+        "vs_peers_24m": (b.get("p24") or {}).get("avg"), "vs_peers_36m": (b.get("p36") or {}).get("avg"),
+        "2016_20": ((b.get("first_half") or {}).get("p12") or {}).get("avg"), "2021_on": ((b.get("second_half") or {}).get("p12") or {}).get("avg"),
+        "months_beat_peers_pct": b.get("months_beat_pct")}
+    rule = (t.get("by_rule") or {}).get(ent.get("rule"))
+    state = ((ent.get("checks") or {}).get("value") or {}).get("state")
+    g = ent.get("group")
+    out = {"universe": t.get("universe_label"), "tested": t.get("built"), "pass_test": t.get("pass_test"), "note": t.get("note")}
+    if ent.get("rule") == "avoid_business":
+        out["rule"] = "business check: not backtested (past business scores are not available)"
+    elif rule:
+        out["rule"] = dict(pick(rule), claim=rule.get("expect"), passed=rule.get("passed"))
+        gb = (rule.get("groups") or {}).get(g) if g else None
+        if gb:
+            out["rule_in_this_stocks_group"] = dict(pick(gb), group=(t.get("groups") or {}).get(g), claim_held=gb.get("claim_held"))
+        wt = (gb or {}).get("wait_test") or rule.get("wait_test")
+        if wt:
+            out["if_you_waited_for_the_turn_pct"] = wt
+    if state:
+        sb = ((t.get("by_state_groups") or {}).get(g) or {}).get(state) if g else None
+        out["value_state"] = dict(pick(sb or (t.get("by_state") or {}).get(state)) or {}, state=state)
+        out["value_test"] = t.get("value_test")
+    return out
 
 
 RULES = """You are EquityLens AI, an equity research analyst for companies listed in India and the US.
@@ -278,13 +313,144 @@ Keep it under 700 words."""
     return out
 
 
-def chat(report: dict, tech: Optional[dict], history: list[dict]) -> dict:
+ENTRY_PROMPT = """ENTRY_RESEARCH
+Research the entry decision for this stock for a 1-3 year holding. The verdict comes from EquityLens's fixed,
+backtested rules (entry_decision); you cannot change it. Your job is to test it against everything else in the
+data and say plainly where the evidence agrees or disagrees.
+
+Work through, in this order:
+1. The engine's call: which rule fired (entry_decision.rule, checks) and how that rule has really done
+   (entry_track_record: vs peers, both halves, this stock's group, waiting test). Treat it as history, not a promise.
+2. The business now: last 8 quarters (sales, operating profit, margin, net profit) - is the trend improving or
+   slipping? Balance sheet and cash flow. Forensic scores and red flags.
+3. Price vs value: P/E vs its own history (entry_decision.checks.value), fair-value range, scenarios, peers.
+4. Ownership: promoter / FII / DII changes in shareholding_pct.
+5. Timing: trend, 200/50-day levels, stretch, results date (entry_decision.checks.events).
+
+Reply with ONE JSON object and nothing else (no code fence), exactly these keys:
+{"headline": "one sentence: the call and the single biggest reason",
+ "verdict_check": {"stance": "agrees" | "partly" | "disagrees", "why": "2 sentences with numbers"},
+ "thesis": [{"point": "...", "evidence": "the exact figures", "source": "quarters|profit_loss|balance_sheet|cash_flow|valuation|forensics|peers|shareholding|technicals|track_record|entry"}],
+ "risks": [same shape as thesis],
+ "what_changes_it": [{"trigger": "...", "level": "a measurable condition, using levels that are in the data", "effect": "what the call would become"}],
+ "watch": [{"item": "...", "now": "its current value from the data", "why": "..."}],
+ "confidence": {"level": "low" | "medium" | "high", "why": "...", "data_gaps": ["what is missing or stale"]}}
+thesis and risks: 2-4 items each, the strongest evidence first. what_changes_it: 2-3. watch: 3-5.
+Rules: every number must be copied from the data (same figure, same units); no new price levels or targets;
+no buy/sell advice beyond restating the engine's verdict; if the data cannot answer something, put it in data_gaps."""
+
+_DATES = re.compile(r"\b(?:\d{4}-\d{2}-\d{2}|(?:19|20)\d{2}\s*[-–/]\s*\d{2,4}|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*(?:\s+\d{4})?|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}|[QH][1-4]|FY\s?\d{2,4})\b")
+_NUM = re.compile(r"(?<![\w.])[-+−]?(?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d+)?")
+
+
+def _numbers_in(obj) -> list[float]:
+    out = []
+    if isinstance(obj, dict):
+        for v in obj.values():
+            out += _numbers_in(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            out += _numbers_in(v)
+    elif isinstance(obj, bool) or obj is None:
+        pass
+    elif isinstance(obj, (int, float)):
+        out.append(float(obj))
+    elif isinstance(obj, str):
+        out += [float(m.replace(",", "").replace("−", "-")) for m in _NUM.findall(obj)]
+    return out
+
+
+def verify_numbers(text: str, evidence_json: str) -> tuple[int, list[str]]:
+    """Check every figure the AI quoted against the numbers in the data it was given.
+    -> (figures checked, figures not found). Years and small counts (1-12) are not checked."""
+    pool = _numbers_in(json.loads(evidence_json))
+    checked, missing = 0, []
+    text = _DATES.sub(" ", text)          # dates and periods (17 Nov, 2026-11-17, 2016-20, FY24, Q2) are not figures
+    for raw in _NUM.findall(text):
+        v = float(raw.replace(",", "").replace("−", "-"))
+        a = abs(v)
+        if (a <= 12 and v == int(v)) or (1990 <= a <= 2100 and v == int(v)):
+            continue
+        checked += 1
+        dec = len(raw.split(".")[1]) if "." in raw else 0
+        tol = max(0.5 * 10 ** -dec, a * 0.005)
+        if not any(abs(abs(x) - a) <= tol or abs(abs(x) * 100 - a) <= tol for x in pool):
+            missing.append(raw)
+    return checked, missing
+
+
+def _parse_json(text: str) -> Optional[dict]:
+    t = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
+    i, j = t.find("{"), t.rfind("}")
+    if i < 0 or j <= i:
+        return None
+    try:
+        out = json.loads(t[i:j + 1])
+    except json.JSONDecodeError:
+        return None
+    return out if isinstance(out, dict) and out.get("headline") else None
+
+
+def entry_research(report: dict, tech: Optional[dict], refresh: bool = False) -> dict:
+    """AI research on the entry decision: structured, sourced, and every quoted figure checked against the data."""
+    ent = report["analysis"].get("entry")
+    if not ent or ent.get("verdict") in (None, "NA"):
+        raise AIError("There is no entry decision for this stock yet (it needs about a year of prices).")
+    s = load_settings()
+    key = f"AI::ENTRY::{report['symbol']}::{model_label(s)}::{ent.get('date')}::{ent.get('rule')}"
+    if not refresh and (hit := _cache_get(key, 12 * 3600)):
+        return hit
+    data = build_context(report, tech)
+    system = f"{_rules(report)}\nAnswer in JSON as asked; the Markdown rule does not apply here.\n<data>\n{data}\n</data>"
+    text = complete(system, [{"role": "user", "content": ENTRY_PROMPT}], max_tokens=2500, s=s)
+    parsed = _parse_json(text)
+    if parsed is None:   # one retry, asking only for the JSON
+        text = complete(system, [{"role": "user", "content": ENTRY_PROMPT}, {"role": "assistant", "content": text[:4000]},
+                                 {"role": "user", "content": "That was not a single valid JSON object. Send only the JSON object, same keys."}],
+                        max_tokens=2500, s=s)
+        parsed = _parse_json(text)
+    out = {"model": model_label(s), "created": time.time(), "entry_date": ent.get("date"), "verdict": ent.get("verdict"), "rule": ent.get("rule")}
+    if parsed is None:
+        out.update(text=text, structured=False)
+    else:
+        def sec(items, keys):
+            return [{k: str(x.get(k, "")) for k in keys} for x in (items or []) if isinstance(x, dict)][:5]
+        r = {"headline": str(parsed.get("headline", "")),
+             "verdict_check": {"stance": str((parsed.get("verdict_check") or {}).get("stance", "partly")).lower(),
+                               "why": str((parsed.get("verdict_check") or {}).get("why", ""))},
+             "thesis": sec(parsed.get("thesis"), ("point", "evidence", "source")),
+             "risks": sec(parsed.get("risks"), ("point", "evidence", "source")),
+             "what_changes_it": sec(parsed.get("what_changes_it"), ("trigger", "level", "effect")),
+             "watch": sec(parsed.get("watch"), ("item", "now", "why")),
+             "confidence": {"level": str((parsed.get("confidence") or {}).get("level", "medium")).lower(),
+                            "why": str((parsed.get("confidence") or {}).get("why", "")),
+                            "data_gaps": [str(x) for x in ((parsed.get("confidence") or {}).get("data_gaps") or [])][:5]}}
+        if r["verdict_check"]["stance"] not in ("agrees", "partly", "disagrees"):
+            r["verdict_check"]["stance"] = "partly"
+        total, missing = 0, []
+        for group in ("thesis", "risks", "what_changes_it", "watch"):
+            for item in r[group]:
+                n, miss = verify_numbers(" ".join(item.values()), data)
+                item["unverified"] = miss
+                total, missing = total + n, missing + miss
+        n, miss = verify_numbers(r["headline"] + " " + r["verdict_check"]["why"], data)
+        r["unverified_top"] = miss
+        r["numbers"] = {"checked": total + n, "found": total + n - len(missing) - len(miss), "not_found": (missing + miss)[:12]}
+        out.update(r, structured=True)
+    store.put_company(key, out)
+    return out
+
+
+def chat(report: dict, tech: Optional[dict], history: list[dict], focus: str = "") -> dict:
     s = load_settings()
     msgs = [{"role": h["role"], "content": str(h["content"])[:4000]} for h in history[-12:] if h.get("role") in ("user", "assistant")]
     if not msgs or msgs[-1]["role"] != "user":
         raise AIError("Ask a question first.")
-    text = complete(_system(report, tech, "Answer the user's question about this company in under 250 words unless they ask for detail."),
-                    msgs, max_tokens=1200, s=s)
+    extra = "Answer the user's question about this company in under 250 words unless they ask for detail."
+    if focus == "entry":
+        extra += (" The user is looking at the entry decision card (entry_decision, entry_track_record). Explain it from that data;"
+                  " you cannot change its verdict, and its track record is history, not a promise.")
+    text = complete(_system(report, tech, extra), msgs, max_tokens=1200, s=s)
     return {"text": text, "model": model_label(s)}
 
 
@@ -492,6 +658,18 @@ def _demo_answer(system: str, messages: list[dict]) -> str:
     name = comp.get("name", "This company") if isinstance(comp, dict) else (comp or "This company")
     met = d.get("metrics", {})
     q = messages[-1]["content"]
+    if "ENTRY_RESEARCH" in q or "single valid JSON" in q:
+        e = d.get("entry_decision") or {}
+        lv = e.get("levels") or {}
+        val = ((e.get("checks") or {}).get("value") or {})
+        return json.dumps({
+            "headline": f"{e.get('label', 'No call')} — demo research from EquityLens data.",
+            "verdict_check": {"stance": "partly", "why": f"Price {e.get('price')} vs 200-day average {lv.get('sma200')}; P/E {met.get('pe')}."},
+            "thesis": [{"point": "Returns on capital", "evidence": f"ROCE {met.get('roce_avg_5')}% over 5 years", "source": "profit_loss"}],
+            "risks": [{"point": "Valuation", "evidence": f"P/E {met.get('pe')}, value state {val.get('state')}", "source": "valuation"}],
+            "what_changes_it": [{"trigger": "Trend", "level": f"200-day average {lv.get('sma200')}", "effect": "the call is re-checked daily"}],
+            "watch": [{"item": "P/E", "now": str(met.get("pe")), "why": "valuation vs its own history"}],
+            "confidence": {"level": "low", "why": "Demo mode: no real AI was asked.", "data_gaps": ["add an AI key in Settings"]}})
     if "chart_story" in d:
         story = "\n".join(f"- {x}" for x in (d.get("chart_story") or []))
         return f"## What the chart is saying now\n{story}\n\n_(Demo mode — add an API key in ⚙️ Settings for a real AI explanation.)_"

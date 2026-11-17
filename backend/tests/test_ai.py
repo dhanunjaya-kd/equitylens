@@ -137,6 +137,58 @@ def test_chart_outlook():
     assert ai.explain_chart(rep, t)["text"]
 
 
+
+def test_entry_decision_is_in_every_ai_context():
+    rep = service.build_report("TESTCO")
+    ctx = ai.build_context(rep)
+    assert '"entry_decision"' in ctx and '"entry_track_record"' in ctx and rep["analysis"]["entry"]["rule"] in ctx
+
+
+def test_entry_research_demo_is_structured_and_checked():
+    rep = service.build_report("TESTCO")
+    r = ai.entry_research(rep, None, refresh=True)
+    assert r["structured"] and r["headline"] and r["verdict_check"]["stance"] in ("agrees", "partly", "disagrees")
+    assert r["thesis"] and r["risks"] and r["what_changes_it"] and r["watch"] and r["confidence"]["level"]
+    assert r["numbers"]["checked"] > 0 and r["numbers"]["found"] == r["numbers"]["checked"]
+    assert ai.entry_research(rep, None)["created"] == r["created"]          # cached for the day
+
+
+def test_verify_numbers_flags_invented_figures_not_dates():
+    data = '{"metrics": {"pe": 42.3, "roce_avg_5": 18.6}, "price": 1840.5, "pct": 0.47}'
+    n, miss = ai.verify_numbers("P/E 42.3, ROCE 18.6%, price ₹1,840.5, 47th percentile; results on 12 Dec 2026, FY24, 2016-20, Q2", data)
+    assert miss == [] and n == 4
+    n, miss = ai.verify_numbers("ROCE 31.2% and a target of ₹2,500", data)
+    assert miss == ["31.2", "2,500"]
+
+
+def test_entry_research_claude_reply_parsed_and_invented_number_flagged():
+    rep = service.build_report("TESTCO")
+    pe = rep["analysis"]["metrics"]["pe"]
+    body = ('```json\n{"headline": "Enter, trend intact", "verdict_check": {"stance": "agrees", "why": "P/E %s"},'
+            ' "thesis": [{"point": "Margins", "evidence": "operating margin rose to 987.6%%", "source": "quarters"}],'
+            ' "risks": [], "what_changes_it": [], "watch": [], "confidence": {"level": "high", "why": "x", "data_gaps": []}}\n```') % pe
+    calls, s = _capture("claude", {"content": [{"type": "text", "text": body}]})
+    ai.save_settings(s)
+    try:
+        r = ai.entry_research(rep, None, refresh=True)
+    finally:
+        ai.save_settings({"provider": "demo"})
+    assert calls[0][0].endswith("/v1/messages") and "ENTRY_RESEARCH" in calls[0][1]["json"]["messages"][0]["content"]
+    assert r["structured"] and r["verdict_check"]["stance"] == "agrees"
+    assert r["thesis"][0]["unverified"] == ["987.6"] and "987.6" in r["numbers"]["not_found"]
+
+
+def test_entry_research_falls_back_to_text_after_one_retry():
+    rep = service.build_report("TESTCO")
+    calls, s = _capture("claude", {"content": [{"type": "text", "text": "Sorry, here is prose instead."}]})
+    ai.save_settings(s)
+    try:
+        r = ai.entry_research(rep, None, refresh=True)
+    finally:
+        ai.save_settings({"provider": "demo"})
+    assert len(calls) == 2 and r["structured"] is False and r["text"].startswith("Sorry")
+
+
 if __name__ == "__main__":
     import requests as _r
     orig = _r.post

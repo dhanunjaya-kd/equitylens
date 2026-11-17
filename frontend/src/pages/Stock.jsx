@@ -143,7 +143,7 @@ function Overview({ d }) {
         </div>
       </div>
 
-      <EntryCard e={a.entry} />
+      <EntryCard e={a.entry} sym={d.symbol} />
 
       <div className="flow">
       <KeyRatios d={d} />

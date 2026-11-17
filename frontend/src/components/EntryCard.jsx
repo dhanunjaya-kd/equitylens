@@ -1,5 +1,7 @@
-import { rs } from '../util'
+import { useEffect, useRef, useState } from 'react'
+import { api, ago, go, rs } from '../util'
 import { Badge } from './ui'
+import { Md, useAISettings } from '../pages/AI'
 
 const TONE = { ENTER: 'good', WAIT: 'warn', AVOID: 'bad', NA: 'neutral' }
 const SHORT = { ENTER: 'Enter now', WAIT: 'Wait', AVOID: 'Avoid', NA: 'No call' }
@@ -101,7 +103,143 @@ function Edge({ t, e }) {
   return null
 }
 
-export default function EntryCard({ e }) {
+// ------------------------------------------------------------------ AI research on the entry
+const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+const STANCE = { agrees: ['good', 'Agrees with the engine'], partly: ['ok', 'Partly agrees'], disagrees: ['warn', 'Disagrees · verdict unchanged'] }
+const SRC = { quarters: 'Quarters', profit_loss: 'P&L', balance_sheet: 'Balance sheet', cash_flow: 'Cash flow', valuation: 'Valuation', forensics: 'Forensics',
+  peers: 'Peers', shareholding: 'Shareholding', technicals: 'Technicals', track_record: 'Track record', entry: 'Entry card' }
+const CONF = { high: 'var(--good)', medium: 'var(--text)', low: 'var(--warn)' }
+
+function Busy({ text }) {
+  return <div className="row small muted" style={{ padding: '10px 0' }}><div className="spinner" style={{ width: 18, height: 18, margin: 0, borderWidth: 2 }} />{text}</div>
+}
+function Unverified({ list }) {
+  return list?.length ? <div className="small" style={{ color: 'var(--warn)', marginTop: 2 }}>⚠ not found in EquityLens data: {list.join(', ')}</div> : null
+}
+
+function Points({ title, items, color }) {
+  return (
+    <div className="tile">
+      <div className="k" style={{ color }}>{title}</div>
+      {!items?.length && <div className="small muted" style={{ marginTop: 4 }}>Nothing strong enough in the data.</div>}
+      {items?.map((x, i) => (
+        <div key={i} style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{x.point} {x.source && <span className="chip" style={{ fontSize: 10.5, padding: '1px 6px', marginLeft: 4 }}>{SRC[x.source] || x.source}</span>}</div>
+          <div className="small muted" style={{ lineHeight: 1.45 }}>{x.evidence}</div>
+          <Unverified list={x.unverified} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const ASK = ['What would make this an Enter?', 'Is the business getting better or worse?', 'How did this rule do for stocks like this?', 'What do the results need to show?']
+
+function EntryAsk({ sym }) {
+  const [msgs, setMsgs] = useState([]), [q, setQ] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
+  const end = useRef()
+  useEffect(() => { setMsgs([]); setErr(null) }, [sym])
+  useEffect(() => { if (msgs.length) end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [msgs, busy])
+  const ask = async (text) => {
+    const t = (text ?? q).trim()
+    if (!t || busy) return
+    const next = [...msgs, { role: 'user', content: t }]
+    setMsgs(next); setQ(''); setBusy(true); setErr(null)
+    try { const r = await post(`/api/ai/chat/${encodeURIComponent(sym)}`, { messages: next, focus: 'entry' }); setMsgs([...next, { role: 'assistant', content: r.text }]) }
+    catch (x) { setErr(x.message) } finally { setBusy(false) }
+  }
+  return (
+    <div style={{ marginTop: 12 }}>
+      {msgs.length === 0 && <div>{ASK.map((s) => <span key={s} className="chip" style={{ cursor: 'pointer' }} onClick={() => ask(s)}>{s}</span>)}</div>}
+      {msgs.map((m, i) => <div key={i} className={`bubble ${m.role}`}>{m.role === 'assistant' ? <Md text={m.content} /> : m.content}</div>)}
+      {busy && <Busy text="Thinking…" />}
+      <div ref={end} />
+      {err && <div className="small t-bad" style={{ marginTop: 6 }}>⚠️ {err}</div>}
+      <div className="row" style={{ marginTop: 8 }}>
+        <input className="grow" aria-label="Ask about this entry" value={q} placeholder="Ask about this entry…" onChange={(x) => setQ(x.target.value)} onKeyDown={(x) => x.key === 'Enter' && ask()} />
+        <button className="btn primary" disabled={busy || !q.trim()} onClick={() => ask()}>Ask</button>
+      </div>
+    </div>
+  )
+}
+
+function EntryAI({ sym, e }) {
+  const settings = useAISettings()
+  const [r, setR] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
+  const run = async (refresh) => {
+    setBusy(true); setErr(null)
+    try { setR(await post(`/api/ai/entry/${encodeURIComponent(sym)}${refresh ? '?refresh=1' : ''}`)) } catch (x) { setErr(x.message) } finally { setBusy(false) }
+  }
+  useEffect(() => { setR(null); if (settings?.ready) run(false) }, [settings?.ready, sym, e.date, e.rule]) // eslint-disable-line react-hooks/exhaustive-deps
+  const st = r?.structured && (STANCE[r.verdict_check?.stance] || STANCE.partly)
+  return (
+    <section aria-label="AI research on this entry" style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 12 }}>
+      <div className="row between" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <h4 style={{ margin: 0, fontSize: 15 }}>✦ AI research on this entry</h4>
+        <div className="row" style={{ gap: 8 }}>
+          {st && <Badge tone={st[0]}>{st[1]}</Badge>}
+          {r && <button className="btn small" disabled={busy} onClick={() => run(true)}>↻ Redo</button>}
+        </div>
+      </div>
+      {settings && !settings.ready && (
+        <p className="small muted" style={{ marginBottom: 0 }}>Add an AI key in Settings to get AI research on every entry. <button className="btn small" onClick={() => go('settings')}>⚙️ Settings</button></p>
+      )}
+      {busy && <Busy text="Researching: the rule's track record, last 8 quarters, value, ownership and timing… (20–60 s)" />}
+      {err && <div className="small t-bad" style={{ marginTop: 6 }}>⚠️ {err}</div>}
+      {r && !r.structured && <Md text={r.text} />}
+      {r?.structured && (
+        <>
+          <p style={{ fontWeight: 600, margin: '10px 0 4px', lineHeight: 1.45 }}>{r.headline}</p>
+          <p className="small" style={{ margin: 0, lineHeight: 1.5 }}>{r.verdict_check.why}</p>
+          <Unverified list={r.unverified_top} />
+          <div className="grid2" style={{ marginTop: 10 }}>
+            <Points title="Why it could work" items={r.thesis} color="var(--good)" />
+            <Points title="What could go wrong" items={r.risks} color="var(--bad)" />
+          </div>
+          {r.what_changes_it?.length > 0 && (
+            <div className="tile" style={{ marginTop: 10 }}>
+              <div className="k">What would change the call</div>
+              {r.what_changes_it.map((x, i) => (
+                <div key={i} style={{ marginTop: 8, fontSize: 13.5, lineHeight: 1.45 }}>
+                  <b>{x.trigger}</b>: {x.level} <span className="muted">→ {x.effect}</span>
+                  <Unverified list={x.unverified} />
+                </div>
+              ))}
+            </div>
+          )}
+          {r.watch?.length > 0 && (
+            <div className="tile" style={{ marginTop: 10, overflowX: 'auto' }}>
+              <div className="k">Watch next</div>
+              <table style={{ width: '100%', fontSize: 13, marginTop: 6, borderCollapse: 'collapse' }}>
+                <thead><tr className="small muted" style={{ textAlign: 'left' }}><th style={{ fontWeight: 500, padding: '4px 8px 4px 0' }}>What</th><th style={{ fontWeight: 500, padding: '4px 8px' }}>Now</th><th style={{ fontWeight: 500, padding: '4px 0 4px 8px' }}>Why it matters</th></tr></thead>
+                <tbody>{r.watch.map((x, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid var(--line)', verticalAlign: 'top' }}>
+                    <td style={{ padding: '6px 8px 6px 0', fontWeight: 600 }}>{x.item}</td>
+                    <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{x.now}<Unverified list={x.unverified} /></td>
+                    <td className="muted" style={{ padding: '6px 0 6px 8px' }}>{x.why}</td>
+                  </tr>))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="small" style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: '4px 18px', lineHeight: 1.5 }}>
+            <span>Confidence: <b style={{ color: CONF[r.confidence?.level] || 'var(--text)' }}>{r.confidence?.level}</b> <span className="muted">· {r.confidence?.why}</span></span>
+            {r.numbers?.checked > 0 && (
+              <span style={{ color: r.numbers.found === r.numbers.checked ? 'var(--good)' : 'var(--warn)' }}>
+                Numbers checked: {r.numbers.found} of {r.numbers.checked} found in EquityLens data
+              </span>
+            )}
+          </div>
+          {r.confidence?.data_gaps?.length > 0 && <div className="small muted">Not in the data: {r.confidence.data_gaps.join('; ')}</div>}
+          <div className="small muted" style={{ marginTop: 4 }}>{r.model} · {ago(r.created)} · AI view; the verdict above comes from the tested rules and does not change.</div>
+        </>
+      )}
+      {settings?.ready && <EntryAsk sym={sym} />}
+    </section>
+  )
+}
+
+export default function EntryCard({ e, sym }) {
   if (!e) return null
   const c = e.checks || {}
   const rows = [
@@ -140,6 +278,7 @@ export default function EntryCard({ e }) {
             <div className="small muted">or a new serious red flag · not backtested as an exit</div></div>
         )}
       </div>
+      {sym && e.verdict !== 'NA' && <EntryAI sym={sym} e={e} />}
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 10 }}>
         <Track t={e.track} e={e} />
         <div className="small muted" style={{ marginTop: 6 }}>Research aid, not investment advice. Based on prices up to {e.date}.</div>

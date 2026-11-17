@@ -189,7 +189,13 @@ def ai_note(symbol: str, refresh: bool = False):
 @app.post("/api/ai/chat/{symbol}")
 def ai_chat(symbol: str, body: dict = Body(...)):
     rep, tech = _report_and_tech(symbol)
-    return _ai(ai.chat, rep, tech, body.get("messages") or [])
+    return _ai(ai.chat, rep, tech, body.get("messages") or [], str(body.get("focus") or ""))
+
+
+@app.post("/api/ai/entry/{symbol}")
+def ai_entry(symbol: str, refresh: bool = False):
+    rep, tech = _report_and_tech(symbol)
+    return _ai(ai.entry_research, rep, tech, refresh)
 
 
 @app.post("/api/ai/guidance/{symbol}")
