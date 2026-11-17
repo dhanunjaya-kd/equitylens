@@ -1,22 +1,29 @@
-"""Entry decision engine: is this a good time and price to buy, for a 1-3 year holding?
+"""Entry decision engine: is this a good time to buy, for a 1-3 year holding?
 
 One set of fixed rules, used both live on the stock page and in tools/entry_backtest.py,
 so the track record shown on the page is the track record of exactly these rules.
 
-Four checks:
-  1. Business  - EquityLens business score and red flags (live only; history isn't available)
-  2. Value     - today's P/E against the stock's OWN earlier P/E history (percentile),
-                 and, live, also against the fair-value range; the more cautious one wins
-  3. Timing    - trend (200-day average), stretch above the 50-day average (in ATRs), RSI
-  4. Events    - results within 7 days
+Rules v2 (17 Nov 2026), after the first 500-stock backtest showed (vs same-month peers):
+  - waiting on "stretched" stocks was harmful (they did best: momentum), so it is dropped;
+  - the 3-part plan cost ~8 points a year vs buying at once, so it is dropped;
+  - price buy zones were reached only ~24% of the time, so they are dropped;
+  - P/E vs its own history did not order 12-month returns, so value no longer changes the
+    verdict (it is shown as information, and tested again at 24 and 36 months);
+  - stocks below a falling 200-day average did worst, so that is the one WAIT rule.
 
-Answers: ENTER (buy now) · PARTS (buy in 3 parts at set levels) · WAIT (with a buy zone) · AVOID.
+Verdicts and the rule behind each:
+  AVOID  avoid_business  loss-making, serious red flag, surveillance or weak business (live only, not backtested)
+  WAIT   wait_falling    below a falling 200-day average -> wait until it closes back above it
+  ENTER  enter_stretched not falling, but stretched above its 50-day average (a note, not a wait)
+  ENTER  enter           not falling
+Results within 7 days is a warning only (not backtested). No numbers were tuned.
 """
 from __future__ import annotations
 
 import bisect
 from typing import Optional
 
+RULES_VERSION = 2
 # --- rule constants: chosen up front, not tuned on results -------------------------------
 CHEAP, FAIR, FULL = 0.30, 0.60, 0.85        # P/E percentile edges: cheap < 30% < fair < 60% < full < 85% < expensive
 MIN_PE_POINTS = 100                         # ~3 years of P/E history before the value check is trusted
@@ -25,6 +32,8 @@ HOT_RSI = 75
 RESULTS_DAYS = 7
 GOOD_BUSINESS = 55                          # below this the business check fails (same line as the verdict's "weak")
 STATES = ["Cheap", "Fair", "Full", "Expensive"]
+# What each rule claims, so the backtest can check the claim: +1 = should beat peers, -1 = should trail them.
+EXPECT = {"enter": 1, "enter_stretched": 1, "wait_falling": -1}
 
 
 def _sma(c, n, i):
@@ -58,16 +67,6 @@ def _rsi(c, i, n=14):
     if ag is None:
         return None
     return 100.0 if al == 0 else 100 - 100 / (1 + ag / al)
-
-
-def _supports(h, l, c, i, lookback=250, k=5):
-    """Swing lows below today's price, nearest first (only bars up to i)."""
-    px = c[i]
-    lows = []
-    for j in range(max(k, i - lookback), i - k + 1):
-        if l[j] == min(l[j - k:j + k + 1]) and l[j] < px * 0.995:
-            lows.append(l[j])
-    return sorted(set(round(x, 2) for x in lows), reverse=True)
 
 
 def pe_state(pe_hist: list[float], pe_now: Optional[float]) -> tuple[Optional[str], Optional[float], dict]:
@@ -105,11 +104,12 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
     s50, s200, s200_prev = _sma(c, 50, i), _sma(c, 200, i), _sma(c, 200, i - 20) if i >= 220 else None
     atr, rsi = _atr(h, l, c, i), _rsi(c, i)
     if s200 is None or atr is None or atr <= 0 or px <= 0:     # flat/suspended prices: no call
-        return {"verdict": "NA", "label": "Not enough price history", "reasons": ["Needs about 1 year of prices."]}
+        return {"verdict": "NA", "label": "Not enough price history", "reasons": ["Needs about 1 year of prices."],
+                "rules_version": RULES_VERSION}
 
     reasons, checks = [], {}
 
-    # 1. business (live only)
+    # 1. business (live only; cannot be backtested)
     gate_fail = None
     if loss_making:
         gate_fail = "The company is making losses right now."
@@ -122,7 +122,7 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
     checks["business"] = {"ok": gate_fail is None if business is not None or loss_making or high_flags or surveillance else None,
                           "text": gate_fail or ("Strong, no serious red flags" if business is not None else "Not scored")}
 
-    # 2. value
+    # 2. value - information only, not used in the verdict
     st_pe, pct, edges = pe_state(pe_hist or [], pe_now)
     st_fv = fv_state(px, fair_value)
     states = [s for s in (st_pe, st_fv) if s]
@@ -133,106 +133,48 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
     if st_fv:
         why.append(f"{st_fv.lower()} vs fair value")
     checks["value"] = {"state": state, "pe_state": st_pe, "fv_state": st_fv,
-                       "pe_percentile": _r(pct * 100 if pct is not None else None),
-                       "ok": state in ("Cheap", "Fair") if state else None,
-                       "text": (f"{state} — {'; '.join(why)}" if state else "Value not available")}
+                       "pe_percentile": _r(pct * 100 if pct is not None else None), "ok": None,
+                       "text": (f"{state} — {'; '.join(why)}. Shown for information; not used in the verdict."
+                                if state else "Value not available")}
 
-    # 3. timing
+    # 3. trend - the one tested rule that decides between ENTER and WAIT
     down = px < s200 and s200_prev is not None and s200 < s200_prev
     up = px > s200 and s50 is not None and s50 > s200
     stretch = (px - s50) / atr if s50 else 0
     hot = stretch > STRETCH_ATR or (rsi is not None and rsi > HOT_RSI)
     trend = "Uptrend" if up else "Downtrend" if down else "Sideways"
-    checks["timing"] = {"trend": trend, "stretch_atr": _r(stretch, 1), "rsi": _r(rsi),
-                        "ok": (not hot) and not down,
-                        "text": ("Stretched above its trend" if hot else f"{trend}, not stretched")}
+    checks["timing"] = {"trend": trend, "stretch_atr": _r(stretch, 1), "rsi": _r(rsi), "ok": not down,
+                        "text": (f"Below a falling 200-day average (₹{s200:,.0f})" if down else
+                                 f"{trend}, stretched above its 50-day average — expect swings" if hot else
+                                 f"{trend}, not falling")}
 
-    # 4. events
+    # 4. events - a warning only (not backtested)
     soon = results_in_days is not None and 0 <= results_in_days <= RESULTS_DAYS
-    checks["events"] = {"ok": not soon, "text": f"Results in {results_in_days} day(s)" if soon else "No results in the next 7 days"}
+    checks["events"] = {"ok": not soon, "text": (f"Results in {results_in_days} day(s) — expect a bigger move; not part of the tested rules"
+                                                 if soon else "No results in the next 7 days")}
 
-    sup = _supports(h, l, c, i)
-    exit_if = min(s200 * 0.90, sup[-1] if sup else s200 * 0.90)
-
-    def value_price(edge):          # price at which the P/E would sit at that edge
-        return px * edges[edge] / pe_now if edges and pe_now else None
-
-    def zone_near_trend():
-        hi = s50 + 0.5 * atr
-        return [max(hi - 1.5 * atr, 0.01), hi]
-
-    plan = None
     if gate_fail:
-        verdict, label, zone = "AVOID", "Avoid for now", None
-        rule = "avoid_business"
+        verdict, label, rule = "AVOID", "Avoid for now", "avoid_business"
         reasons.append(gate_fail)
-    elif soon and state != "Cheap":
-        verdict, label, zone = "WAIT", "Wait for the results", None
-        rule = "wait_results"
-        reasons.append(f"Results are due in {results_in_days} day(s); a surprise can move the price a lot. Decide after them.")
-    elif state == "Expensive":
-        top = value_price("fair")
-        zone = [top * 0.97, top] if top and top < px else zone_near_trend()
-        verdict, label = "WAIT", "Wait — price is expensive"
-        rule = "wait_expensive"
-        reasons.append("The P/E is higher than most of its own history; returns from here depend on everything going right.")
+    elif down:
+        verdict, label, rule = "WAIT", f"Wait until it closes back above its 200-day average (₹{s200:,.0f})", "wait_falling"
+        reasons.append("The price is below its 200-day average, and that average is falling.")
     elif hot:
-        zone = zone_near_trend()
-        cap = value_price("full")
-        if cap and cap < zone[1]:
-            zone = [min(zone[0], cap * 0.97), cap]
-        verdict, label = "WAIT", "Wait — stretched above its trend"
-        rule = "wait_stretched"
-        reasons.append(f"The price is {stretch:.1f} ATRs above its 50-day average" + (f" and RSI is {rsi:.0f}" if rsi and rsi > HOT_RSI else "") +
-                       "; prices that stretched usually come back toward the average.")
-    elif state in ("Cheap", "Fair") or state is None:
-        if down:
-            verdict, label, zone = "PARTS", "Enter in parts — still falling", None
-            rule = "parts_falling"
-            t2 = next((s for s in sup if s <= px - atr), px - 1.5 * atr)
-            t3 = next((s for s in sup if s <= t2 - atr), t2 - 1.5 * atr)
-            plan = [{"pct": 40, "price": px}, {"pct": 30, "price": t2}, {"pct": 30, "price": t3}]
-            reasons.append("Good value, but the price is below a falling 200-day average. Buying in steps avoids putting everything in before the fall ends.")
-        else:
-            verdict, label, zone = "ENTER", "Enter now", None
-            rule = "enter"
-            reasons.append("Reasonable value and a healthy trend; nothing argues for waiting.")
-    else:   # Full
-        if up:
-            verdict, label, zone = "PARTS", "Enter in parts — fully priced", None
-            rule = "parts_full_uptrend"
-            t2 = min(s50, px - atr)            # never a "buy more" level above today's price
-            plan = [{"pct": 40, "price": px}, {"pct": 30, "price": t2}, {"pct": 30, "price": t2 - atr}]
-            reasons.append("Strong uptrend, but the price already asks a lot. Start small and add the rest only on dips."
-                           if px >= s50 else
-                           "Uptrend, now dipping below its 50-day average, but the price already asks a lot. Start small and add lower.")
-        else:
-            top = value_price("fair")
-            zone = [top * 0.97, top] if top and top < px else zone_near_trend()
-            verdict, label = "WAIT", "Wait — fully priced, no trend support"
-            rule = "wait_full_no_trend"
-            reasons.append("Fully priced without an uptrend behind it; a better price is likely.")
-
-    if plan:   # each later part strictly lower than the one before, at least 1 ATR apart
-        for k in (1, 2):
-            plan[k]["price"] = min(plan[k]["price"], plan[k - 1]["price"] - atr)
-
-    if verdict == "WAIT" and zone is None and state != "Cheap":
-        zone = zone_near_trend()
-    if zone:
-        zone = [round(min(zone), 2), round(max(zone), 2)]
-        if zone[1] >= px:      # the zone must be below today's price to mean "wait"
-            zone = [round(px * 0.95, 2), round(px * 0.98, 2)]
-        label += f" · buy zone ₹{zone[0]:,.0f}–{zone[1]:,.0f}"
-
-    score_val = (1 - pct) * 100 if pct is not None else 50
-    score_tim = (60 if not down else 20) + (0 if hot else 40)
-    conviction = round(0.4 * (business if business is not None else 60) + 0.35 * score_val + 0.25 * score_tim)
+        verdict, label, rule = "ENTER", "Enter — stretched, expect swings", "enter_stretched"
+        reasons.append(f"Not in a downtrend. The price is {stretch:.1f} ATRs above its 50-day average"
+                       + (f" and RSI is {rsi:.0f}" if rsi and rsi > HOT_RSI else "")
+                       + ", so short dips are likely; the tested rules do not say to wait for them.")
+    else:
+        verdict, label, rule = "ENTER", "Enter now", "enter"
+        reasons.append("Not in a downtrend; nothing in the tested rules argues for waiting.")
+    if soon and verdict != "AVOID":
+        reasons.append(f"Results are due in {results_in_days} day(s); the price may move sharply either way.")
 
     return {
         "verdict": verdict, "rule": rule, "label": label, "price": round(px, 2), "date": bars[i]["t"],
-        "zone": zone, "plan": [{"pct": p["pct"], "price": round(p["price"], 2)} for p in plan] if plan else None,
-        "exit_if": round(exit_if, 2), "checks": checks, "reasons": reasons, "conviction": conviction,
-        "levels": {"sma50": _r(s50, 2), "sma200": _r(s200, 2), "atr": _r(atr, 2), "supports": sup[:3],
-                   "value_edges": {k: _r(value_price(k), 2) for k in ("cheap", "fair", "full")} if edges else None},
+        "trigger": round(s200, 2) if verdict == "WAIT" else None,
+        "review_if": {"below": round(s200, 2), "falling": bool(s200_prev is not None and s200 < s200_prev)},
+        "checks": checks, "reasons": reasons, "rules_version": RULES_VERSION,
+        "levels": {"sma50": _r(s50, 2), "sma200": _r(s200, 2), "atr": _r(atr, 2),
+                   "value_edges": {k: _r(px * edges[k] / pe_now, 2) for k in ("cheap", "fair", "full")} if edges and pe_now else None},
     }

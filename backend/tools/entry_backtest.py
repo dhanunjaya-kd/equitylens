@@ -5,7 +5,8 @@
 
 At the end of every month since 2016, for every stock, it asks the engine for its verdict using
 only data known on that day (prices up to that day, the stock's P/E history up to that day),
-then measures what really happened over the next 6 and 12 months, against NIFTY 50.
+then measures what really happened over the next 6, 12, 24 and 36 months, against NIFTY 50
+and against all tested stocks in the same month ("vs peers", the fair comparison).
 The business check is NOT applied here: past business scores aren't available without
 look-ahead. So this measures the value and timing rules; the business check is an extra
 filter on top live.
@@ -27,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app import config, entry, service, store, technicals, universe  # noqa: E402
 
 SPLIT = "2021-01-01"     # rules fixed before looking: 2016-2020 = first half, 2021 on = second half
+MIN_MONTH_CALLS = 5      # a month counts only with at least this many calls
 
 
 def month_ends(bars, start="2016-01-01"):
@@ -57,18 +59,54 @@ def pe_series(sym):
     return sorted((d, v) for d, v in s if v)
 
 
-def summarize(rows):
+def summarize(rows, halves=False):
+    """Average / median / worst 10% for each return; 'p' keys are vs same-month peers."""
     out = {}
-    for key in ("r6", "r12", "x12", "p12"):
-        vals = [r[key] for r in rows if r.get(key) is not None]
+    for key in ("r6", "r12", "x12", "p12", "p24", "p36"):
+        vals = sorted(r[key] for r in rows if r.get(key) is not None)
         if vals:
-            vals.sort()
             out[key] = {"avg": round(statistics.mean(vals) * 100, 1), "median": round(statistics.median(vals) * 100, 1),
-                        "worst10": round(vals[int(len(vals) * 0.1)] * 100, 1)}
+                        "worst10": round(vals[int(len(vals) * 0.1)] * 100, 1), "n": len(vals)}
     x = [r["x12"] for r in rows if r.get("x12") is not None]
     out["beat_nifty"] = round(sum(v > 0 for v in x) / len(x) * 100, 1) if x else None
     out["n"] = len(rows)
+    # share of months in which this group's average beat its peers (months with >= 5 calls in the group)
+    m = defaultdict(list)
+    for r in rows:
+        if r.get("p12") is not None:
+            m[r["date"][:7]].append(r["p12"])
+    ms = [statistics.mean(v) for v in m.values() if len(v) >= MIN_MONTH_CALLS]
+    out["months"] = len(ms)
+    out["months_beat_pct"] = round(sum(v > 0 for v in ms) / len(ms) * 100, 1) if ms else None
+    if halves:
+        out["first_half"] = summarize([r for r in rows if r["date"] < SPLIT])
+        out["second_half"] = summarize([r for r in rows if r["date"] >= SPLIT])
     return out
+
+
+def avg(blk, key="p12"):
+    return (blk.get(key) or {}).get("avg")
+
+
+def passes(blk, expect):
+    """The test fixed before the rerun (17 Nov 2026): the rule's claim (beat or trail peers over 12 months)
+    holds in BOTH halves, and in more than half of the months."""
+    f, g, mb = avg(blk["first_half"]), avg(blk["second_half"]), blk.get("months_beat_pct")
+    if f is None or g is None or mb is None:
+        return None
+    share = mb if expect > 0 else 100 - mb
+    return bool(f * expect > 0 and g * expect > 0 and share > 50)
+
+
+def peers(rows, key, out_key):
+    by_month = defaultdict(list)
+    for r in rows:
+        if r.get(key) is not None:
+            by_month[r["date"][:7]].append(r[key])
+    m_avg = {m: statistics.mean(v) for m, v in by_month.items() if len(v) >= MIN_MONTH_CALLS}
+    for r in rows:
+        m = m_avg.get(r["date"][:7])
+        r[out_key] = (r[key] - m) if (m is not None and r.get(key) is not None) else None
 
 
 def main():
@@ -81,7 +119,7 @@ def main():
     if a.limit:
         syms = syms[: a.limit]
     nifty = technicals._latest_daily("^NSEI")
-    print(f"{len(syms)} stocks, NIFTY bars {nifty[0]['t']} -> {nifty[-1]['t']}")
+    print(f"{len(syms)} stocks, NIFTY bars {nifty[0]['t']} -> {nifty[-1]['t']} · entry rules v{entry.RULES_VERSION}")
 
     rows, skipped, t0 = [], defaultdict(int), time.time()
     for n, sym in enumerate(syms, 1):
@@ -98,6 +136,11 @@ def main():
             skipped["P/E history too short"] += 1
             continue
         pe_dates = [d for d, _ in pes]
+        c = [b["c"] for b in bars]
+        cum = [0.0]
+        for x in c:
+            cum.append(cum[-1] + x)
+        sma200 = lambda j: (cum[j + 1] - cum[j - 199]) / 200 if j >= 199 else None
         for i in month_ends(bars):
             d = bars[i]["t"]
             k = bisect.bisect_right(pe_dates, d)
@@ -113,85 +156,83 @@ def main():
                 continue
             r12, b12 = fwd(bars, i, 252), bench_ret(nifty, d, 252)
             row = {"sym": sym, "date": d, "verdict": v["verdict"], "rule": v["rule"], "state": v["checks"]["value"]["state"],
-                   "r6": fwd(bars, i, 126), "r12": r12, "x12": (r12 - b12) if r12 is not None and b12 is not None else None}
-            if v["verdict"] == "WAIT" and v["zone"]:
-                hi = v["zone"][1]
-                j = next((j for j in range(i + 1, min(i + 127, len(bars))) if bars[j]["l"] <= hi), None)
-                row["zone_hit"] = j is not None
-                if j is not None and j + 252 < len(bars) and r12 is not None:
-                    row["r12_zone"] = bars[j + 252]["c"] / min(hi, bars[j]["o"]) - 1
-            if v["verdict"] == "PARTS" and v["plan"] and i + 252 < len(bars):
-                cost, fills = [], 0
-                for t in v["plan"]:
-                    j = next((j for j in range(i, min(i + 127, len(bars))) if bars[j]["l"] <= t["price"]), None)
-                    price = min(t["price"], bars[j]["o"]) if j is not None else bars[min(i + 126, len(bars) - 1)]["c"]
-                    fills += j is not None
-                    cost.append((t["pct"] / 100, price))
-                end = bars[i + 252]["c"]
-                row["r12_plan"] = sum(w * (end / p - 1) for w, p in cost)
-                row["fills"] = fills
+                   "r6": fwd(bars, i, 126), "r12": r12, "r24": fwd(bars, i, 504), "r36": fwd(bars, i, 756),
+                   "x12": (r12 - b12) if r12 is not None and b12 is not None else None}
+            if v["verdict"] == "WAIT" and r12 is not None:
+                # Follow the card: buy at the first close back above the 200-day average; if that never
+                # happens within 12 months, the money stays in cash (0%). Same end date as buying now.
+                j = next((j for j in range(i + 1, i + 253) if c[j] > sma200(j)), None)
+                row["turned"] = j is not None
+                row["r12_wait"] = c[i + 252] / c[j] - 1 if j is not None else 0.0
             rows.append(row)
         if n % 25 == 0:
             print(f"  {n}/{len(syms)} stocks · {len(rows)} monthly verdicts · {(time.time() - t0) / 60:.1f} min")
 
-    by_month = defaultdict(list)
-    for r in rows:
-        if r["r12"] is not None:
-            by_month[r["date"][:7]].append(r["r12"])
-    avg_month = {m: statistics.mean(v) for m, v in by_month.items() if len(v) >= 5}
-    for r in rows:
-        m = avg_month.get(r["date"][:7])
-        r["p12"] = (r["r12"] - m) if (m is not None and r["r12"] is not None) else None
+    peers(rows, "r12", "p12")
+    peers(rows, "r24", "p24")
+    peers(rows, "r36", "p36")
 
-    result = {"built": time.strftime("%Y-%m-%d"), "stocks": len(syms) - sum(skipped.values()),
-              "skipped": dict(skipped), "verdicts": len(rows), "split": SPLIT,
-              "note": "NIFTY 500 as it is today (stocks that dropped out are missing, which flatters all verdicts equally). "
-                      "Value and timing rules only; the business check is applied on top live.",
-              "by_verdict": {}, "by_state": {}}
-    for vd in ("ENTER", "PARTS", "WAIT"):
-        sub = [r for r in rows if r["verdict"] == vd]
-        blk = {"all": summarize(sub),
-               "first_half": summarize([r for r in sub if r["date"] < SPLIT]),
-               "second_half": summarize([r for r in sub if r["date"] >= SPLIT])}
-        if vd == "WAIT":
-            z = [r for r in sub if "zone_hit" in r]
-            blk["zone_hit_rate"] = round(sum(r["zone_hit"] for r in z) / len(z) * 100, 1) if z else None
-            pair = [r for r in sub if r.get("r12_zone") is not None]
-            if pair:
-                blk["r12_if_bought_now"] = round(statistics.mean(r["r12"] for r in pair) * 100, 1)
-                blk["r12_if_bought_in_zone"] = round(statistics.mean(r["r12_zone"] for r in pair) * 100, 1)
-        if vd == "PARTS":
-            p = [r for r in sub if r.get("r12_plan") is not None]
-            if p:
-                blk["r12_plan"] = round(statistics.mean(r["r12_plan"] for r in p) * 100, 1)
-                blk["r12_all_at_once"] = round(statistics.mean(r["r12"] for r in p) * 100, 1)
-        result["by_verdict"][vd] = blk
+    result = {"built": time.strftime("%Y-%m-%d"), "rules_version": entry.RULES_VERSION,
+              "stocks": len(syms) - sum(skipped.values()), "skipped": dict(skipped), "verdicts": len(rows), "split": SPLIT,
+              "note": "NIFTY 500 as it is today, so absolute returns are flattered; compare 'vs peers' (12m return minus "
+                      "the average of all tested stocks in the same month). Overlapping monthly windows: the number of "
+                      "calls overstates how sure we can be. The business check and the results warning are not tested.",
+              "pass_test": "The rule's claim (beat or trail peers over 12 months) holds in both halves "
+                           "(2016-20 and 2021 on) and in more than half of the months. Fixed before the rerun.",
+              "by_verdict": {}, "by_rule": {}, "by_state": {}}
+    for vd in ("ENTER", "WAIT"):
+        result["by_verdict"][vd] = summarize([r for r in rows if r["verdict"] == vd], halves=True)
+    for ru, expect in entry.EXPECT.items():
+        sub = [r for r in rows if r["rule"] == ru]
+        blk = summarize(sub, halves=True)
+        blk["expect"] = "beat peers" if expect > 0 else "trail peers"
+        blk["passed"] = passes(blk, expect) if sub else None
+        if ru == "wait_falling":
+            w = [r for r in sub if "r12_wait" in r]
+            if w:
+                blk["wait_test"] = {"n": len(w), "turned_pct": round(sum(r["turned"] for r in w) / len(w) * 100, 1),
+                                    "r12_bought_now": round(statistics.mean(r["r12"] for r in w) * 100, 1),
+                                    "r12_waited": round(statistics.mean(r["r12_wait"] for r in w) * 100, 1),
+                                    "waiting_won_pct": round(sum(r["r12_wait"] > r["r12"] for r in w) / len(w) * 100, 1)}
+        result["by_rule"][ru] = blk
     for st in entry.STATES:
-        result["by_state"][st] = summarize([r for r in rows if r["state"] == st])
-    result["by_rule"] = {ru: summarize([r for r in rows if r["rule"] == ru]) for ru in sorted({r["rule"] for r in rows})}
+        result["by_state"][st] = summarize([r for r in rows if r["state"] == st], halves=True)
+    # Value test fixed before the rerun: value may change the verdict again only if Expensive trails
+    # BOTH Cheap and Fair at 24 months, in both halves.
+    bs = result["by_state"]
+    vt = []
+    for half in ("first_half", "second_half"):
+        e, ch, fa = (avg(bs[s][half], "p24") for s in ("Expensive", "Cheap", "Fair"))
+        vt.append(None if None in (e, ch, fa) else (e < ch and e < fa))
+    result["value_test"] = {"rule": "Expensive trails both Cheap and Fair at 24m vs peers, in both halves",
+                            "passed": None if None in vt else all(vt)}
 
     store.put_company("ENTRY_TRACK::IN", result)
     (config.DATA_DIR / "entry_track.json").write_text(json.dumps(result, indent=1))
 
+    fmt = lambda x: "  n/a" if x is None else f"{x:5.1f}%"
     print(f"\nDone in {(time.time() - t0) / 60:.1f} min · {result['verdicts']} monthly verdicts on {result['stocks']} stocks")
-    print("'vs peers' = 12m return minus the average of ALL tested stocks in the same month (fair comparison between verdicts)")
-    print(f"{'verdict':8} {'n':>6} {'avg 12m':>8} {'median':>7} {'vs NIFTY':>9} {'vs peers':>9} {'beat %':>7} {'worst10%':>9}  | vs peers 1st half / 2nd half")
-    for vd, blk in result["by_verdict"].items():
-        s, f, g = blk["all"], blk["first_half"], blk["second_half"]
-        if not s.get("r12"):
+    print("'vs peers' = return minus the average of ALL tested stocks in the same month (the fair comparison)")
+    print(f"\n{'rule':16} {'n':>6} {'12m vs peers':>12} {'median':>7} {'2016-20':>8} {'2021-':>7} {'months beat':>11} "
+          f"{'24m vs peers':>12} {'36m':>7}  claim / passed")
+    for ru, b in result["by_rule"].items():
+        if not b.get("p12"):
+            print(f"{ru:16} {b['n']:6}  (no 12-month results)")
             continue
-        print(f"{vd:8} {s['n']:6} {s['r12']['avg']:7.1f}% {s['r12']['median']:6.1f}% {s['x12']['avg']:8.1f}% {s.get('p12', {}).get('avg', 0):8.1f}% "
-              f"{s['beat_nifty']:6.1f}% {s['r12']['worst10']:8.1f}%  | {f.get('p12', {}).get('avg')}% / {g.get('p12', {}).get('avg')}%")
-    print("\nBy rule (which part of the logic made the call):")
-    for ru, s in result["by_rule"].items():
-        if s.get("p12"):
-            print(f"  {ru:20} n={s['n']:6}  avg 12m {s['r12']['avg']:6.1f}%  vs peers {s['p12']['avg']:6.1f}%  worst10% {s['r12']['worst10']:6.1f}%")
-    w = result["by_verdict"]["WAIT"]
-    print(f"\nWAIT: price reached the buy zone within 6 months {w.get('zone_hit_rate')}% of the time; "
-          f"12m return bought now {w.get('r12_if_bought_now')}% vs in the zone {w.get('r12_if_bought_in_zone')}%")
-    p = result["by_verdict"]["PARTS"]
-    print(f"PARTS: 12m return with the 3-part plan {p.get('r12_plan')}% vs all at once {p.get('r12_all_at_once')}%")
-    print("By value: " + ", ".join(f"{k} {v.get('p12', {}).get('avg')}% vs peers (n={v['n']})" for k, v in result["by_state"].items()))
+        print(f"{ru:16} {b['n']:6} {fmt(avg(b)):>12} {fmt(b['p12']['median']):>7} {fmt(avg(b['first_half'])):>8} "
+              f"{fmt(avg(b['second_half'])):>7} {fmt(b['months_beat_pct']):>11} {fmt(avg(b, 'p24')):>12} {fmt(avg(b, 'p36')):>7}"
+              f"  {b['expect']} / {'YES' if b['passed'] else 'NO' if b['passed'] is False else 'n/a'}")
+    wt = result["by_rule"]["wait_falling"].get("wait_test")
+    if wt:
+        print(f"\nWAIT (falling): trend turned within 12 months {wt['turned_pct']}% of the time. Same end date: "
+              f"bought now {wt['r12_bought_now']}% vs waited for the turn {wt['r12_waited']}% "
+              f"(waiting won {wt['waiting_won_pct']}% of the time)")
+    print("\nBy value (information only):")
+    for st, b in bs.items():
+        print(f"  {st:9} n={b['n']:6}  12m vs peers {fmt(avg(b))}  24m {fmt(avg(b, 'p24'))} "
+              f"(2016-20 {fmt(avg(b['first_half'], 'p24'))}, 2021- {fmt(avg(b['second_half'], 'p24'))})  36m {fmt(avg(b, 'p36'))}")
+    print(f"Value test ({result['value_test']['rule']}): "
+          f"{'YES' if result['value_test']['passed'] else 'NO' if result['value_test']['passed'] is False else 'n/a'}")
     if skipped:
         print("Skipped:", dict(skipped))
 

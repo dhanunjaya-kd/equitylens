@@ -19,50 +19,55 @@ def make_bars(n=600, drift=0.001, vol=0.008, seed=3, tail=None):
 PE = [20 + 10 * math.sin(k / 15) for k in range(300)]      # own history: 10..30
 
 
-def test_uptrend_fair_value_says_enter():
+def falling():
+    return make_bars(drift=0.0006, tail=lambda k: -0.004 if k > 380 else 0)
+
+
+def test_uptrend_says_enter():
     v = entry.decide(make_bars(drift=0.001, vol=0.008, seed=3), pe_hist=PE, pe_now=20, business=75)
-    assert v["verdict"] == "ENTER", v["reasons"]
+    assert v["verdict"] == "ENTER" and v["rule"] == "enter", v["reasons"]
 
 
-def test_expensive_says_wait_with_zone_below_price():
-    v = entry.decide(make_bars(), pe_hist=PE, pe_now=29.9, business=75)
-    assert v["verdict"] == "WAIT" and v["zone"][1] < v["price"]
-    assert v["checks"]["value"]["state"] == "Expensive"
-
-
-def test_stretched_spike_says_wait():
-    bars = make_bars(tail=lambda k: 0.02 if k > 585 else 0)
-    v = entry.decide(bars, pe_hist=PE, pe_now=20, business=75)
-    assert v["verdict"] == "WAIT" and "stretched" in v["label"] and v["zone"][1] < v["price"]
-
-
-def test_cheap_but_falling_says_parts_with_lower_levels():
-    bars = make_bars(drift=0.0006, tail=lambda k: -0.004 if k > 380 else 0)
-    v = entry.decide(bars, pe_hist=PE, pe_now=11, business=75)
-    assert v["verdict"] == "PARTS", v["reasons"]
-    prices = [p["price"] for p in v["plan"]]
-    assert prices[0] > prices[1] > prices[2] and sum(p["pct"] for p in v["plan"]) == 100
-
-
-def test_business_gate_and_results_wait():
-    assert entry.decide(make_bars(), pe_hist=PE, pe_now=20, business=40)["verdict"] == "AVOID"
-    assert entry.decide(make_bars(), pe_hist=PE, pe_now=20, business=80, high_flags=1)["verdict"] == "AVOID"
-    v = entry.decide(make_bars(), pe_hist=PE, pe_now=20, business=80, results_in_days=3)
-    assert v["verdict"] == "WAIT" and "results" in v["label"].lower()
-
-
-def test_cautious_side_wins_between_pe_and_fair_value():
+def test_value_is_information_only():
+    """Rules v2: an expensive P/E or price above fair value no longer changes the verdict."""
     bars = make_bars()
     px = bars[-1]["c"]
-    v = entry.decide(bars, pe_hist=PE, pe_now=20, business=75, fair_value={"low": px * 0.5, "mid": px * 0.6, "high": px * 0.7})
-    assert v["checks"]["value"]["state"] == "Expensive" and v["verdict"] == "WAIT"
+    for kw in ({"pe_now": 29.9}, {"pe_now": 20, "fair_value": {"low": px * 0.5, "mid": px * 0.6, "high": px * 0.7}}):
+        v = entry.decide(bars, pe_hist=PE, business=75, **kw)
+        assert v["checks"]["value"]["state"] == "Expensive" and v["checks"]["value"]["ok"] is None
+        assert v["verdict"] == "ENTER", v["reasons"]
+
+
+def test_stretched_still_enters_with_a_note():
+    bars = make_bars(tail=lambda k: 0.02 if k > 585 else 0)
+    v = entry.decide(bars, pe_hist=PE, pe_now=20, business=75)
+    assert v["verdict"] == "ENTER" and v["rule"] == "enter_stretched" and "swings" in v["label"]
+
+
+def test_falling_says_wait_for_close_above_200_day_average():
+    for pe_now in (11, 20, 29.9):                   # whatever the value
+        v = entry.decide(falling(), pe_hist=PE, pe_now=pe_now, business=75)
+        assert v["verdict"] == "WAIT" and v["rule"] == "wait_falling", v["reasons"]
+        assert v["trigger"] == v["levels"]["sma200"] > v["price"] and "200-day" in v["label"]
+        assert "zone" not in v and "plan" not in v and "conviction" not in v
+
+
+def test_business_gate_and_results_warning():
+    assert entry.decide(make_bars(), pe_hist=PE, pe_now=20, business=40)["verdict"] == "AVOID"
+    assert entry.decide(make_bars(), pe_hist=PE, pe_now=20, business=80, high_flags=1)["verdict"] == "AVOID"
+    assert entry.decide(falling(), pe_hist=PE, pe_now=20, business=40)["rule"] == "avoid_business"
+    v = entry.decide(make_bars(), pe_hist=PE, pe_now=20, business=80, results_in_days=3)
+    assert v["verdict"] == "ENTER" and v["checks"]["events"]["ok"] is False
+    assert any("Results are due in 3" in r for r in v["reasons"])
 
 
 def test_uses_only_past_bars():
     bars = make_bars(n=700)
-    a = entry.decide(bars, 500, pe_hist=PE, pe_now=20)
-    b = entry.decide(bars[:501], pe_hist=PE, pe_now=20)
-    assert {k: a[k] for k in ("verdict", "zone", "plan", "exit_if")} == {k: b[k] for k in ("verdict", "zone", "plan", "exit_if")}
+    keys = ("verdict", "rule", "trigger", "review_if")
+    for i in (450, 500, 650):
+        a = entry.decide(bars, i, pe_hist=PE, pe_now=20)
+        b = entry.decide(bars[:i + 1], pe_hist=PE, pe_now=20)
+        assert {k: a[k] for k in keys} == {k: b[k] for k in keys}
 
 
 def test_not_enough_history():
@@ -103,21 +108,27 @@ def test_backtest_tool_runs_end_to_end(monkeypatch, tmp_path):
     mod.main()
     res = saved["ENTRY_TRACK::IN"]
     assert res["verdicts"] > 300 and (tmp_path / "entry_track.json").exists()
-    assert {"ENTER", "PARTS", "WAIT"} <= set(res["by_verdict"])
-    assert res["by_verdict"]["WAIT"]["zone_hit_rate"] is not None
+    assert res["rules_version"] == entry.RULES_VERSION and set(res["by_verdict"]) == {"ENTER", "WAIT"}
+    assert set(res["by_rule"]) == set(entry.EXPECT)
+    for b in res["by_rule"].values():
+        if b["n"]:
+            assert b["passed"] in (True, False, None) and "first_half" in b and "second_half" in b
+    assert res["by_rule"]["wait_falling"]["wait_test"]["turned_pct"] is not None
+    assert "p24" in res["by_state"]["Fair"] and res["value_test"]["passed"] in (True, False, None)
 
 
-def test_plan_levels_are_always_below_todays_price():
-    for seed in range(12):
-        for tail in (lambda k: -0.004 if k > 380 else 0, lambda k: -0.003 if k > 560 else 0):
-            bars = make_bars(seed=seed, tail=tail)
-            for pe_now in (11, 20, 25):
-                v = entry.decide(bars, pe_hist=PE, pe_now=pe_now, business=75)
-                if v["plan"]:
-                    p = [x["price"] for x in v["plan"]]
-                    assert p[0] >= p[1] + v["levels"]["atr"] - 0.02 and p[1] >= p[2] + v["levels"]["atr"] - 0.02, (seed, p)
-                if v["zone"]:
-                    assert v["zone"][1] < v["price"]
+def test_pass_rule_needs_both_halves_and_most_months():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("eb", Path(__file__).resolve().parents[1] / "tools" / "entry_backtest.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    blk = lambda f, g, mb: {"first_half": {"p12": {"avg": f}}, "second_half": {"p12": {"avg": g}}, "months_beat_pct": mb}
+    assert mod.passes(blk(1.0, 2.0, 60), 1) is True
+    assert mod.passes(blk(-3.1, 3.1, 60), 1) is False           # flips between halves
+    assert mod.passes(blk(1.0, 2.0, 45), 1) is False            # beat peers in too few months
+    assert mod.passes(blk(-2.0, -1.0, 30), -1) is True          # a WAIT rule must trail peers
+    assert mod.passes(blk(-2.0, -1.0, 55), -1) is False
 
 
 def test_flat_suspended_prices_give_no_call():
