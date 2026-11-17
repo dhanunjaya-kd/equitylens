@@ -128,6 +128,26 @@ def by_groups(rows):
     return out
 
 
+def wait_test(sub):
+    """For falling stocks: buying at the first close back above the 200-day average vs buying at once,
+    both measured to the same end date (cash at 0% if the turn never came within 12 months)."""
+    w = [r for r in sub if "r12_wait" in r]
+    if not w:
+        return None
+    return {"n": len(w), "turned_pct": round(sum(r["turned"] for r in w) / len(w) * 100, 1),
+            "r12_bought_now": round(statistics.mean(r["r12"] for r in w) * 100, 1),
+            "r12_waited": round(statistics.mean(r["r12_wait"] for r in w) * 100, 1),
+            "waiting_won_pct": round(sum(r["r12_wait"] > r["r12"] for r in w) / len(w) * 100, 1)}
+
+
+def value_test(by_state):
+    vt = []
+    for half in ("first_half", "second_half"):
+        e, ch, fa = (avg(by_state[s][half], "p24") for s in ("Expensive", "Cheap", "Fair"))
+        vt.append(None if None in (e, ch, fa) else (e < ch and e < fa))
+    return None if None in vt else all(vt)
+
+
 def liquid(bars, i):
     vals = sorted(b["c"] * (b.get("v") or 0) for b in bars[max(0, i - LIQ_DAYS + 1):i + 1])
     return vals[len(vals) // 2] >= MIN_TRADED_VALUE
@@ -193,9 +213,9 @@ def main():
             row = {"sym": sym, "group": group, "date": d, "verdict": v["verdict"], "rule": v["rule"], "state": v["checks"]["value"]["state"],
                    "r6": fwd(bars, i, 126), "r12": r12, "r24": fwd(bars, i, 504), "r36": fwd(bars, i, 756),
                    "x12": (r12 - b12) if r12 is not None and b12 is not None else None}
-            if v["verdict"] == "WAIT" and r12 is not None:
-                # Follow the card: buy at the first close back above the 200-day average; if that never
-                # happens within 12 months, the money stays in cash (0%). Same end date as buying now.
+            if v["rule"] == "avoid_falling" and r12 is not None:
+                # What waiting would have done: buy at the first close back above the 200-day average; if
+                # that never happens within 12 months, the money stays in cash (0%). Same end date as buying now.
                 j = next((j for j in range(i + 1, i + 253) if c[j] > sma200(j)), None)
                 row["turned"] = j is not None
                 row["r12_wait"] = c[i + 252] / c[j] - 1 if j is not None else 0.0
@@ -221,7 +241,7 @@ def main():
               "pass_test": "The rule's claim (beat or trail peers over 12 months) holds in both halves "
                            "(2016-20 and 2021 on) and in more than half of the months. Fixed before the rerun.",
               "by_verdict": {}, "by_rule": {}, "by_state": {}}
-    for vd in ("ENTER", "WAIT"):
+    for vd in ("ENTER", "AVOID"):
         result["by_verdict"][vd] = summarize([r for r in rows if r["verdict"] == vd], halves=True)
         result["by_verdict"][vd]["groups"] = by_groups([r for r in rows if r["verdict"] == vd])
     for ru, expect in entry.EXPECT.items():
@@ -232,25 +252,22 @@ def main():
         blk["groups"] = by_groups(sub)
         for gb in blk["groups"].values():          # shown for information; pass/fail is decided on the whole run
             gb["claim_held"] = passes(gb, expect) if gb["n"] else None
-        if ru == "wait_falling":
-            w = [r for r in sub if "r12_wait" in r]
-            if w:
-                blk["wait_test"] = {"n": len(w), "turned_pct": round(sum(r["turned"] for r in w) / len(w) * 100, 1),
-                                    "r12_bought_now": round(statistics.mean(r["r12"] for r in w) * 100, 1),
-                                    "r12_waited": round(statistics.mean(r["r12_wait"] for r in w) * 100, 1),
-                                    "waiting_won_pct": round(sum(r["r12_wait"] > r["r12"] for r in w) / len(w) * 100, 1)}
+        if ru == "avoid_falling":
+            blk["wait_test"] = wait_test(sub)
+            for g in GROUPS:
+                blk["groups"][g]["wait_test"] = wait_test([r for r in sub if r["group"] == g])
         result["by_rule"][ru] = blk
     for st in entry.STATES:
         result["by_state"][st] = summarize([r for r in rows if r["state"] == st], halves=True)
-    # Value test fixed before the rerun: value may change the verdict again only if Expensive trails
-    # BOTH Cheap and Fair at 24 months, in both halves.
+    result["by_state_groups"] = {g: {st: summarize([dict(r, p12=r["g12"], p24=r["g24"], p36=r["g36"]) for r in rows
+                                                    if r["group"] == g and r["state"] == st], halves=True)
+                                      for st in entry.STATES} for g in GROUPS}
+    # Value test fixed before the NIFTY 500 rerun: Expensive trails BOTH Cheap and Fair at 24 months,
+    # in both halves. Passed: Expensive shows a caution (it still does not change the verdict).
     bs = result["by_state"]
-    vt = []
-    for half in ("first_half", "second_half"):
-        e, ch, fa = (avg(bs[s][half], "p24") for s in ("Expensive", "Cheap", "Fair"))
-        vt.append(None if None in (e, ch, fa) else (e < ch and e < fa))
     result["value_test"] = {"rule": "Expensive trails both Cheap and Fair at 24m vs peers, in both halves",
-                            "passed": None if None in vt else all(vt)}
+                            "passed": value_test(bs),
+                            "groups": {g: value_test(result["by_state_groups"][g]) for g in GROUPS}}
 
     store.put_company("ENTRY_TRACK::IN", result)
     (config.DATA_DIR / "entry_track.json").write_text(json.dumps(result, indent=1))
@@ -276,17 +293,24 @@ def main():
                 print(f"  {ru:16} n={gb['n']:6}  12m {fmt(avg(gb))}  2016-20 {fmt(avg(gb['first_half']))}  "
                       f"2021- {fmt(avg(gb['second_half']))}  months beat {fmt(gb['months_beat_pct'])}  24m {fmt(avg(gb, 'p24'))}"
                       f"  claim held: {'YES' if gb['claim_held'] else 'NO' if gb['claim_held'] is False else 'n/a'}")
-    wt = result["by_rule"]["wait_falling"].get("wait_test")
-    if wt:
-        print(f"\nWAIT (falling): trend turned within 12 months {wt['turned_pct']}% of the time. Same end date: "
-              f"bought now {wt['r12_bought_now']}% vs waited for the turn {wt['r12_waited']}% "
-              f"(waiting won {wt['waiting_won_pct']}% of the time)")
+    af = result["by_rule"]["avoid_falling"]
+    for label, wt in [("All", af.get("wait_test"))] + [(gl, af["groups"][g].get("wait_test")) for g, gl in GROUPS.items()]:
+        if wt:
+            print(f"\nAVOID (falling), {label}: if you had waited for the turn instead - it came within 12 months "
+                  f"{wt['turned_pct']}% of the time; same end date: bought at once {wt['r12_bought_now']}% vs waited "
+                  f"{wt['r12_waited']}% (waiting won {wt['waiting_won_pct']}% of the time)")
+    ow = af["groups"]["OTHER"].get("wait_test")
+    if ow and ow["r12_waited"] > ow["r12_bought_now"]:
+        print("  CHECK (fixed 17 Nov): outside NIFTY 500 waiting for the turn WON - falling stocks there should go back to WAIT.")
     print("\nBy value (information only):")
     for st, b in bs.items():
         print(f"  {st:9} n={b['n']:6}  12m vs peers {fmt(avg(b))}  24m {fmt(avg(b, 'p24'))} "
               f"(2016-20 {fmt(avg(b['first_half'], 'p24'))}, 2021- {fmt(avg(b['second_half'], 'p24'))})  36m {fmt(avg(b, 'p36'))}")
-    print(f"Value test ({result['value_test']['rule']}): "
-          f"{'YES' if result['value_test']['passed'] else 'NO' if result['value_test']['passed'] is False else 'n/a'}")
+    yn = lambda x: 'YES' if x else 'NO' if x is False else 'n/a'
+    for g, gl in GROUPS.items():
+        print(f"  {gl}: " + ", ".join(f"{st} 24m {fmt(avg(b, 'p24'))}" for st, b in result["by_state_groups"][g].items()))
+    print(f"Value test ({result['value_test']['rule']}): {yn(result['value_test']['passed'])}"
+          f" · NIFTY 500 {yn(result['value_test']['groups']['N500'])} · outside NIFTY 500 {yn(result['value_test']['groups']['OTHER'])}")
     if skipped:
         print("Skipped:", dict(skipped))
 

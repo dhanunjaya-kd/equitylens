@@ -29,27 +29,33 @@ def test_uptrend_says_enter():
 
 
 def test_value_is_information_only():
-    """Rules v2: an expensive P/E or price above fair value no longer changes the verdict."""
+    """An expensive P/E or price above fair value is a caution only: it does not change the verdict."""
     bars = make_bars()
     px = bars[-1]["c"]
     for kw in ({"pe_now": 29.9}, {"pe_now": 20, "fair_value": {"low": px * 0.5, "mid": px * 0.6, "high": px * 0.7}}):
         v = entry.decide(bars, pe_hist=PE, business=75, **kw)
-        assert v["checks"]["value"]["state"] == "Expensive" and v["checks"]["value"]["ok"] is None
+        assert v["checks"]["value"]["state"] == "Expensive" and v["checks"]["value"]["caution"] is True
         assert v["verdict"] == "ENTER", v["reasons"]
 
 
-def test_stretched_still_enters_with_a_note():
+def test_stretched_enters_as_strong_trend():
     bars = make_bars(tail=lambda k: 0.02 if k > 585 else 0)
     v = entry.decide(bars, pe_hist=PE, pe_now=20, business=75)
-    assert v["verdict"] == "ENTER" and v["rule"] == "enter_stretched" and "swings" in v["label"]
+    assert v["verdict"] == "ENTER" and v["rule"] == "enter_stretched" and "strong trend" in v["label"]
 
 
-def test_falling_says_wait_for_close_above_200_day_average():
+def test_falling_says_avoid_with_no_buy_level():
     for pe_now in (11, 20, 29.9):                   # whatever the value
         v = entry.decide(falling(), pe_hist=PE, pe_now=pe_now, business=75)
-        assert v["verdict"] == "WAIT" and v["rule"] == "wait_falling", v["reasons"]
-        assert v["trigger"] == v["levels"]["sma200"] > v["price"] and "200-day" in v["label"]
-        assert "zone" not in v and "plan" not in v and "conviction" not in v
+        assert v["verdict"] == "AVOID" and v["rule"] == "avoid_falling", v["reasons"]
+        assert v["review_if"]["below"] == v["levels"]["sma200"] > v["price"] and "200-day" in v["label"]
+        assert not any(k in v for k in ("trigger", "zone", "plan", "conviction"))
+
+
+def test_expensive_adds_a_caution_only():
+    v = entry.decide(make_bars(), pe_hist=PE, pe_now=29.9, business=75)
+    assert v["checks"]["value"]["caution"] is True and v["verdict"] == "ENTER"
+    assert entry.decide(make_bars(), pe_hist=PE, pe_now=20, business=75)["checks"]["value"]["caution"] is False
 
 
 def test_business_gate_and_results_warning():
@@ -63,7 +69,7 @@ def test_business_gate_and_results_warning():
 
 def test_uses_only_past_bars():
     bars = make_bars(n=700)
-    keys = ("verdict", "rule", "trigger", "review_if")
+    keys = ("verdict", "rule", "review_if")
     for i in (450, 500, 650):
         a = entry.decide(bars, i, pe_hist=PE, pe_now=20)
         b = entry.decide(bars[:i + 1], pe_hist=PE, pe_now=20)
@@ -113,12 +119,16 @@ def test_backtest_tool_runs_end_to_end(monkeypatch, tmp_path):
     for g in ("N500", "OTHER"):
         gb = res["by_rule"]["enter"]["groups"][g]
         assert gb["n"] and gb["p12"]["n"] and gb["claim_held"] in (True, False, None)
-    assert res["rules_version"] == entry.RULES_VERSION and set(res["by_verdict"]) == {"ENTER", "WAIT"}
+    assert res["rules_version"] == entry.RULES_VERSION and set(res["by_verdict"]) == {"ENTER", "AVOID"}
     assert set(res["by_rule"]) == set(entry.EXPECT)
     for b in res["by_rule"].values():
         if b["n"]:
             assert b["passed"] in (True, False, None) and "first_half" in b and "second_half" in b
-    assert res["by_rule"]["wait_falling"]["wait_test"]["turned_pct"] is not None
+    af = res["by_rule"]["avoid_falling"]
+    assert af["wait_test"]["turned_pct"] is not None
+    assert all("wait_test" in af["groups"][g] for g in ("N500", "OTHER"))
+    assert set(res["by_state_groups"]) == {"N500", "OTHER"} and "Expensive" in res["by_state_groups"]["OTHER"]
+    assert set(res["value_test"]["groups"]) == {"N500", "OTHER"}
     assert "p24" in res["by_state"]["Fair"] and res["value_test"]["passed"] in (True, False, None)
 
 

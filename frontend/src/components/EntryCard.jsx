@@ -3,7 +3,7 @@ import { Badge } from './ui'
 
 const TONE = { ENTER: 'good', WAIT: 'warn', AVOID: 'bad', NA: 'neutral' }
 const SHORT = { ENTER: 'Enter now', WAIT: 'Wait', AVOID: 'Avoid', NA: 'No call' }
-const RULE_NAME = { enter: 'Enter (not falling)', enter_stretched: 'Enter (stretched)', wait_falling: 'Wait (falling)' }
+const RULE_NAME = { enter: 'Enter (not falling)', enter_stretched: 'Enter (strong trend)', avoid_falling: 'Avoid (falling)' }
 const pctTxt = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`)
 const avg = (b, k = 'p12') => b?.[k]?.avg
 
@@ -19,7 +19,7 @@ function PriceBar({ e }) {
     const shift = f < 0.12 ? '0%' : f > 0.88 ? '-100%' : '-50%'
     return <div key={label + top} style={{ position: 'absolute', left: X(v), top, transform: `translateX(${shift})`, fontSize: 11, color, whiteSpace: 'nowrap' }}>{label}</div>
   }
-  const trendColor = e.verdict === 'WAIT' ? 'var(--warn)' : 'var(--muted)'
+  const trendColor = e.rule === 'avoid_falling' ? 'var(--warn)' : 'var(--muted)'
   return (
     <div style={{ position: 'relative', height: 64, margin: '16px 4px 6px' }} aria-label="Price compared with its 200-day average and its usual P/E range">
       <div style={{ position: 'absolute', top: 26, left: 0, right: 0, height: 8, borderRadius: 4, background: 'var(--card2)', border: '1px solid var(--line)' }} />
@@ -46,6 +46,7 @@ function Track({ t, e }) {
   const where = t.universe_label || 'NIFTY 500 stocks'
   const g = e.group && b?.groups?.[e.group]
   const gName = t.groups?.[e.group]
+  const wt = g?.wait_test || b?.wait_test
   return (
     <div className="small muted" style={{ lineHeight: 1.6 }}>
       {e.rule === 'avoid_business'
@@ -57,7 +58,7 @@ function Track({ t, e }) {
             {' '}(2016–20 {pctTxt(avg(b.first_half))}, 2021 on {pctTxt(avg(b.second_half))})
             {b.months_beat_pct != null && `, beat peers in ${b.months_beat_pct}% of months`};
             {' '}24 months {pctTxt(avg(b, 'p24'))} vs peers. The rule claims these stocks {b.expect}.
-            {e.rule === 'wait_falling' && b.wait_test && ` Waiting for the close above the 200-day average, measured to the same end date: ${pctTxt(b.wait_test.r12_waited)} vs ${pctTxt(b.wait_test.r12_bought_now)} buying now (the trend turned within 12 months ${b.wait_test.turned_pct}% of the time).`}
+            {e.rule === 'avoid_falling' && wt && ` Had you waited for the close back above the 200-day average and bought then, to the same end date: ${pctTxt(wt.r12_waited)} vs ${pctTxt(wt.r12_bought_now)} buying at once; waiting won ${wt.waiting_won_pct}% of the time.`}
           </div>
         )}
       {g?.p12 && gName && t.universe === 'ALL' && (
@@ -73,6 +74,22 @@ function Track({ t, e }) {
         {' '}"vs peers" = return minus the average of all tested stocks in the same month. Calls on illiquid stocks (under ₹1 crore a day) left out. Stocks delisted since 2016 are missing. Results warning not tested. Past results, not a promise. Tested {t.built}.</div>
     </div>
   )
+}
+
+// Expensive vs its own P/E history: a caution backed by the backtest (it never changes the verdict).
+function ValueCaution({ t, e }) {
+  if (!e.checks?.value?.caution) return null
+  const fresh = t && t.rules_version === e.rules_version
+  const st = fresh && ((t.universe === 'ALL' && e.group && t.by_state_groups?.[e.group]?.Expensive) || t.by_state?.Expensive)
+  const inGroup = fresh && t.universe === 'ALL' && e.group && t.by_state_groups?.[e.group]?.Expensive
+  let text = 'Caution: expensive vs its own P/E history.'
+  if (fresh && t.value_test?.passed && st?.p24) {
+    text += ` Stocks this expensive ${inGroup ? `(${e.group === 'N500' ? 'in the NIFTY 500' : 'outside the NIFTY 500'}) ` : ''}did ${pctTxt(avg(st, 'p24'))} vs peers over 2 years`
+      + (st.p36 ? ` and ${pctTxt(avg(st, 'p36'))} over 3 years` : '') + '. It does not change the verdict.'
+  } else if (fresh && t.value_test?.passed === false) {
+    text += ' The latest backtest did not confirm that expensive stocks lag, so treat this as information only.'
+  }
+  return <p className="small" style={{ margin: '8px 0 0', lineHeight: 1.45, color: 'var(--warn)' }}>{text}</p>
 }
 
 function Edge({ t, e }) {
@@ -101,6 +118,7 @@ export default function EntryCard({ e }) {
         <Badge tone={TONE[e.verdict]}>{SHORT[e.verdict]}</Badge>
       </div>
       {e.reasons?.map((r) => <p key={r} style={{ margin: '8px 0 0', lineHeight: 1.45 }}>{r}</p>)}
+      <ValueCaution t={e.track} e={e} />
       {e.verdict !== 'NA' && <PriceBar e={e} />}
       <div className="grid2" style={{ marginTop: 6 }}>
         {rows.map(([k, x]) => x && (
@@ -113,9 +131,9 @@ export default function EntryCard({ e }) {
         ))}
       </div>
       <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: '10px 24px' }}>
-        {e.trigger && (
-          <div><div className="small muted">Buy trigger</div><b>a close above {rs(e.trigger)}</b>
-            <div className="small muted">its 200-day average; this level moves every day</div></div>
+        {e.rule === 'avoid_falling' && e.review_if && (
+          <div><div className="small muted">What changes it</div><b>no longer below a falling 200-day average (now {rs(e.review_if.below)})</b>
+            <div className="small muted">then this turns to Enter by itself · not a buy level</div></div>
         )}
         {e.verdict === 'ENTER' && e.review_if && (
           <div><div className="small muted">Review if</div><b>it closes below a falling 200-day average (now {rs(e.review_if.below)})</b>

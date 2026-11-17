@@ -11,10 +11,18 @@ Rules v2 (17 Nov 2026), after the first 500-stock backtest showed (vs same-month
     verdict (it is shown as information, and tested again at 24 and 36 months);
   - stocks below a falling 200-day average did worst, so that is the one WAIT rule.
 
+Rules v3 (17 Nov 2026), after the all-NSE backtest (1,541 stocks, vs same-month peers):
+  - stocks below a falling 200-day average trailed peers (-4.0% over 12 months, in both halves and
+    80% of months), and waiting for the close back above the average, then buying, did worse than
+    buying at once (17.5% vs 25.2%). So it is AVOID with no buy level, not "wait for X";
+  - stretched stocks did best (+5.7%), so they are "strong trend", still ENTER;
+  - an Expensive P/E vs its own history trailed peers over 2-3 years (the value test fixed before
+    the run passed), so it adds a caution; it still does not change the verdict.
+
 Verdicts and the rule behind each:
   AVOID  avoid_business  loss-making, serious red flag, surveillance or weak business (live only, not backtested)
-  WAIT   wait_falling    below a falling 200-day average -> wait until it closes back above it
-  ENTER  enter_stretched not falling, but stretched above its 50-day average (a note, not a wait)
+  AVOID  avoid_falling   below a falling 200-day average (turns to ENTER by itself once it is not)
+  ENTER  enter_stretched not falling, strong trend: stretched above its 50-day average
   ENTER  enter           not falling
 Results within 7 days is a warning only (not backtested). No numbers were tuned.
 """
@@ -23,7 +31,7 @@ from __future__ import annotations
 import bisect
 from typing import Optional
 
-RULES_VERSION = 2
+RULES_VERSION = 3
 # --- rule constants: chosen up front, not tuned on results -------------------------------
 CHEAP, FAIR, FULL = 0.30, 0.60, 0.85        # P/E percentile edges: cheap < 30% < fair < 60% < full < 85% < expensive
 MIN_PE_POINTS = 100                         # ~3 years of P/E history before the value check is trusted
@@ -33,7 +41,7 @@ RESULTS_DAYS = 7
 GOOD_BUSINESS = 55                          # below this the business check fails (same line as the verdict's "weak")
 STATES = ["Cheap", "Fair", "Full", "Expensive"]
 # What each rule claims, so the backtest can check the claim: +1 = should beat peers, -1 = should trail them.
-EXPECT = {"enter": 1, "enter_stretched": 1, "wait_falling": -1}
+EXPECT = {"enter": 1, "enter_stretched": 1, "avoid_falling": -1}
 
 
 def _sma(c, n, i):
@@ -132,9 +140,11 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
         why.append(f"P/E {st_pe.lower()} vs its own history ({pct * 100:.0f}th percentile)")
     if st_fv:
         why.append(f"{st_fv.lower()} vs fair value")
-    checks["value"] = {"state": state, "pe_state": st_pe, "fv_state": st_fv,
-                       "pe_percentile": _r(pct * 100 if pct is not None else None), "ok": None,
-                       "text": (f"{state} — {'; '.join(why)}. Shown for information; not used in the verdict."
+    caution = state == "Expensive"
+    checks["value"] = {"state": state, "pe_state": st_pe, "fv_state": st_fv, "caution": caution,
+                       "pe_percentile": _r(pct * 100 if pct is not None else None), "ok": False if caution else None,
+                       "text": (f"{state} — {'; '.join(why)}." + (" A caution; it does not change the verdict." if caution
+                                                                   else " Shown for information; not used in the verdict.")
                                 if state else "Value not available")}
 
     # 3. trend - the one tested rule that decides between ENTER and WAIT
@@ -145,7 +155,7 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
     trend = "Uptrend" if up else "Downtrend" if down else "Sideways"
     checks["timing"] = {"trend": trend, "stretch_atr": _r(stretch, 1), "rsi": _r(rsi), "ok": not down,
                         "text": (f"Below a falling 200-day average (₹{s200:,.0f})" if down else
-                                 f"{trend}, stretched above its 50-day average — expect swings" if hot else
+                                 f"{trend}, strong: stretched above its 50-day average — expect swings" if hot else
                                  f"{trend}, not falling")}
 
     # 4. events - a warning only (not backtested)
@@ -157,13 +167,14 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
         verdict, label, rule = "AVOID", "Avoid for now", "avoid_business"
         reasons.append(gate_fail)
     elif down:
-        verdict, label, rule = "WAIT", f"Wait until it closes back above its 200-day average (₹{s200:,.0f})", "wait_falling"
-        reasons.append("The price is below its 200-day average, and that average is falling.")
+        verdict, label, rule = "AVOID", "Avoid for now — below a falling 200-day average", "avoid_falling"
+        reasons.append("The price is below its 200-day average, and that average is falling. Prefer stocks that are "
+                       "not falling; there is no buy level to wait for (the track record below shows how this rule did).")
     elif hot:
-        verdict, label, rule = "ENTER", "Enter — stretched, expect swings", "enter_stretched"
-        reasons.append(f"Not in a downtrend. The price is {stretch:.1f} ATRs above its 50-day average"
+        verdict, label, rule = "ENTER", "Enter — strong trend, expect swings", "enter_stretched"
+        reasons.append(f"A strong trend: the price is {stretch:.1f} ATRs above its 50-day average"
                        + (f" and RSI is {rsi:.0f}" if rsi and rsi > HOT_RSI else "")
-                       + ", so short dips are likely; the tested rules do not say to wait for them.")
+                       + ". Short dips are likely, but the tested rules do not say to wait for them.")
     else:
         verdict, label, rule = "ENTER", "Enter now", "enter"
         reasons.append("Not in a downtrend; nothing in the tested rules argues for waiting.")
@@ -172,7 +183,6 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
 
     return {
         "verdict": verdict, "rule": rule, "label": label, "price": round(px, 2), "date": bars[i]["t"],
-        "trigger": round(s200, 2) if verdict == "WAIT" else None,
         "review_if": {"below": round(s200, 2), "falling": bool(s200_prev is not None and s200 < s200_prev)},
         "checks": checks, "reasons": reasons, "rules_version": RULES_VERSION,
         "levels": {"sma50": _r(s50, 2), "sma200": _r(s200, 2), "atr": _r(atr, 2),
