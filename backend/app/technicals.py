@@ -52,6 +52,18 @@ def _market_open(now: float) -> bool:
     return n.weekday() < 5 and dt.time(9, 15) <= n.time() <= dt.time(15, 35)
 
 
+CACHE_VERSION = 2   # bump when the way candles are fetched changes, so old saved charts are thrown away
+
+
+def expected_last_session(now: float) -> str:
+    """Date of the latest NSE session whose final candle should be out by now (weekday, after 15:50 IST)."""
+    n = dt.datetime.fromtimestamp(now, IST)
+    day = n.date() if n.time() >= CLOSE_SETTLED else n.date() - dt.timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= dt.timedelta(days=1)
+    return day.isoformat()
+
+
 def is_stale(fetched_at: float, now: float, us: bool = False) -> bool:
     age = now - fetched_at
     max_age = CHART_TTL if us else 20 * 3600   # safety net; normally a session close is what triggers a refresh
@@ -141,14 +153,38 @@ def _demo(symbol: str) -> list[dict]:
     return out
 
 
+def _top_up(bars: list[dict], tries: list[str], comp, view: str) -> tuple[list[dict], str]:
+    """Yahoo is missing the latest session(s): take them from the BSE listing or screener.in."""
+    last = bars[-1]["t"]
+    for t in tries[1:]:                    # e.g. the .BO listing
+        try:
+            newer = [b for b in _latest_daily(t) if b["t"] > last]
+        except Exception:  # noqa: BLE001
+            newer = []
+        if newer:
+            return bars + newer, f"latest from {t}"
+    if comp:
+        try:
+            newer = [b for b in _close_only(comp[1]["company"], view) if b["t"] > last]
+        except Exception:  # noqa: BLE001
+            newer = []
+        if newer:
+            return bars + newer, "latest close from screener.in"
+    return bars, ""
+
+
 def get_bars(symbol: str, refresh: bool = False, with_time: bool = False):
     """-> (daily bars, source label, has_real_ohlc[, fetched_at])"""
     sym = scraper.clean_symbol(symbol)
     key = f"CHART::{sym}"
     cached = store.get_company(key)
-    if cached and not refresh and not is_stale(cached[0], time.time(), sym.startswith("US:")):
+    now = time.time()
+    us = sym.startswith("US:")
+    if cached and not refresh and cached[1].get("v") == CACHE_VERSION and not is_stale(cached[0], now, us):
         p = cached[1]
-        return (p["bars"], p["source"], p["ohlc"], cached[0]) if with_time else (p["bars"], p["source"], p["ohlc"])
+        behind = (not us) and p["bars"] and p["bars"][-1]["t"] < expected_last_session(now)
+        if not (behind and now - cached[0] > 15 * 60):     # missing the latest session: retry every 15 min
+            return (p["bars"], p["source"], p["ohlc"], cached[0]) if with_time else (p["bars"], p["source"], p["ohlc"])
     if config.DEMO:
         bars, src, ohlc = _demo(sym), "demo data", True
     elif sym.startswith("US:"):
@@ -177,7 +213,12 @@ def get_bars(symbol: str, refresh: bool = False, with_time: bool = False):
             src, ohlc = "daily closes (screener.in)", False
         if not bars:
             raise scraper.FetchError("Price history unavailable: " + "; ".join(errs))
-    store.put_company(key, {"bars": bars, "source": src, "ohlc": ohlc})
+        want = expected_last_session(now)
+        if ohlc and bars[-1]["t"] < want:
+            bars, extra = _top_up(bars, tries, comp, view)
+            if extra:
+                src += f" + {extra}"
+    store.put_company(key, {"v": CACHE_VERSION, "bars": bars, "source": src, "ohlc": ohlc})
     return (bars, src, ohlc, time.time()) if with_time else (bars, src, ohlc)
 
 
@@ -570,6 +611,7 @@ def build(symbol: str, interval: str = "1d", refresh: bool = False) -> dict:
     out = {
         "symbol": scraper.clean_symbol(symbol), "interval": interval, "source": src, "ohlc": ohlc,
         "fetched_at": dt.datetime.fromtimestamp(fetched, IST).isoformat(timespec="minutes"),
+        "expected_last": None if scraper.clean_symbol(symbol).startswith("US:") else expected_last_session(time.time()),
         "t": t, "o": [r2(x) for x in o], "h": [r2(x) for x in h], "l": [r2(x) for x in l], "c": [r2(x) for x in c], "v": v,
         "ema20": [r2(x) for x in e20], "ema50": [r2(x) for x in e50], "ema200": [r2(x) for x in e200],
         "bb_up": [r2(x) for x in bb_up], "bb_lo": [r2(x) for x in bb_lo],

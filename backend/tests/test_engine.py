@@ -139,3 +139,33 @@ def test_latest_candles_are_merged_into_the_long_history(monkeypatch):
     out = T._latest_daily("X.NS")
     assert [b["t"] for b in out] == ["2026-11-12", "2026-11-13", "2026-11-16"]
     assert out[1]["c"] == 101.5 and out[2]["c"] == 104.0 and out[2]["h"] == 105.0
+
+
+def test_old_or_lagging_chart_cache_is_refetched_and_topped_up(monkeypatch):
+    import datetime as dt
+    from app import technicals as T
+    ts = lambda *a: dt.datetime(*a, tzinfo=T.IST).timestamp()
+    assert T.expected_last_session(ts(2026, 11, 17, 6, 47)) == "2026-11-16"
+    assert T.expected_last_session(ts(2026, 11, 16, 16, 0)) == "2026-11-16"
+    assert T.expected_last_session(ts(2026, 11, 15, 12, 0)) == "2026-11-13"   # Sunday -> Friday
+    lagging = [{"t": "2026-11-12", "o": 1, "h": 1, "l": 1, "c": 100, "v": 1},
+               {"t": "2026-11-13", "o": 1, "h": 1, "l": 1, "c": 101, "v": 1}] * 1
+    lagging = [{"t": f"2026-10-{d:02d}", "o": 1, "h": 1, "l": 1, "c": 90, "v": 1} for d in range(1, 31)] + lagging
+    calls = []
+
+    def fake_latest(t):
+        calls.append(t)
+        if t.endswith(".BO"):
+            return lagging + [{"t": "2026-11-16", "o": 1, "h": 1, "l": 1, "c": 103, "v": 1}]
+        return list(lagging)
+    saved = {}
+    monkeypatch.setattr(T.config, "DEMO", False)
+    monkeypatch.setattr(T, "_latest_daily", fake_latest)
+    monkeypatch.setattr(T.time, "time", lambda: ts(2026, 11, 17, 6, 47))
+    monkeypatch.setattr(T.store, "get_company", lambda k: saved.get(k) or ({"KPITTECH": (0, {"company": {"nse_symbol": "KPITTECH", "bse_code": "542651"}})}.get(k)))
+    monkeypatch.setattr(T.store, "put_company", lambda k, v: saved.__setitem__(k, (ts(2026, 11, 17, 6, 47), v)))
+    # an old-format cache from this morning must be ignored
+    saved["CHART::KPITTECH"] = (ts(2026, 11, 17, 6, 30), {"bars": lagging, "source": "x", "ohlc": True})
+    bars, src, ohlc = T.get_bars("KPITTECH")
+    assert bars[-1]["t"] == "2026-11-16" and bars[-1]["c"] == 103
+    assert "542651.BO" in src and calls[0] == "KPITTECH.NS"

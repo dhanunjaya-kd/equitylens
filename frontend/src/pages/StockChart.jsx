@@ -194,7 +194,9 @@ export default function StockChart({ symbol }) {
         </div>
         <div className="small muted" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <span>Source: {data.source}{!data.ohlc && ' — closes only, so candles, Supertrend and ADX are off'}.
-            {' '}Last candle <b style={{ color: 'var(--text)' }}>{fmtDay(data.stats?.date)}</b>{data.fetched_at ? ` · updated ${fmtStamp(data.fetched_at)}` : ''}. Tap a chip to show/hide.</span>
+            {' '}Last candle <b style={{ color: 'var(--text)' }}>{fmtDay(data.stats?.date)}</b>{data.fetched_at ? ` · updated ${fmtStamp(data.fetched_at)}` : ''}.
+            {data.interval === '1d' && data.expected_last && data.stats?.date < data.expected_last && <b style={{ color: 'var(--warn)' }}> {fmtDay(data.expected_last)} not published by the data source yet — retrying every 15 minutes.</b>}
+            {' '}Tap a chip to show/hide.</span>
           <button className="btn" style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => setFresh((n) => n + 1)}>↻ Refresh</button>
         </div>
       </div>
