@@ -164,14 +164,17 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
     plan = None
     if gate_fail:
         verdict, label, zone = "AVOID", "Avoid for now", None
+        rule = "avoid_business"
         reasons.append(gate_fail)
     elif soon and state != "Cheap":
         verdict, label, zone = "WAIT", "Wait for the results", None
+        rule = "wait_results"
         reasons.append(f"Results are due in {results_in_days} day(s); a surprise can move the price a lot. Decide after them.")
     elif state == "Expensive":
         top = value_price("fair")
         zone = [top * 0.97, top] if top and top < px else zone_near_trend()
         verdict, label = "WAIT", "Wait — price is expensive"
+        rule = "wait_expensive"
         reasons.append("The P/E is higher than most of its own history; returns from here depend on everything going right.")
     elif hot:
         zone = zone_near_trend()
@@ -179,21 +182,25 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
         if cap and cap < zone[1]:
             zone = [min(zone[0], cap * 0.97), cap]
         verdict, label = "WAIT", "Wait — stretched above its trend"
+        rule = "wait_stretched"
         reasons.append(f"The price is {stretch:.1f} ATRs above its 50-day average" + (f" and RSI is {rsi:.0f}" if rsi and rsi > HOT_RSI else "") +
                        "; prices that stretched usually come back toward the average.")
     elif state in ("Cheap", "Fair") or state is None:
         if down:
             verdict, label, zone = "PARTS", "Enter in parts — still falling", None
+            rule = "parts_falling"
             t2 = next((s for s in sup if s <= px - atr), px - 1.5 * atr)
             t3 = next((s for s in sup if s <= t2 - atr), t2 - 1.5 * atr)
             plan = [{"pct": 40, "price": px}, {"pct": 30, "price": t2}, {"pct": 30, "price": t3}]
             reasons.append("Good value, but the price is below a falling 200-day average. Buying in steps avoids putting everything in before the fall ends.")
         else:
             verdict, label, zone = "ENTER", "Enter now", None
+            rule = "enter"
             reasons.append("Reasonable value and a healthy trend; nothing argues for waiting.")
     else:   # Full
         if up:
             verdict, label, zone = "PARTS", "Enter in parts — fully priced", None
+            rule = "parts_full_uptrend"
             t2 = min(s50, px - atr)            # never a "buy more" level above today's price
             plan = [{"pct": 40, "price": px}, {"pct": 30, "price": t2}, {"pct": 30, "price": t2 - atr}]
             reasons.append("Strong uptrend, but the price already asks a lot. Start small and add the rest only on dips."
@@ -203,6 +210,7 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
             top = value_price("fair")
             zone = [top * 0.97, top] if top and top < px else zone_near_trend()
             verdict, label = "WAIT", "Wait — fully priced, no trend support"
+            rule = "wait_full_no_trend"
             reasons.append("Fully priced without an uptrend behind it; a better price is likely.")
 
     if plan:   # each later part strictly lower than the one before, at least 1 ATR apart
@@ -222,7 +230,7 @@ def decide(bars: list[dict], i: Optional[int] = None, pe_hist: Optional[list[flo
     conviction = round(0.4 * (business if business is not None else 60) + 0.35 * score_val + 0.25 * score_tim)
 
     return {
-        "verdict": verdict, "label": label, "price": round(px, 2), "date": bars[i]["t"],
+        "verdict": verdict, "rule": rule, "label": label, "price": round(px, 2), "date": bars[i]["t"],
         "zone": zone, "plan": [{"pct": p["pct"], "price": round(p["price"], 2)} for p in plan] if plan else None,
         "exit_if": round(exit_if, 2), "checks": checks, "reasons": reasons, "conviction": conviction,
         "levels": {"sma50": _r(s50, 2), "sma200": _r(s200, 2), "atr": _r(atr, 2), "supports": sup[:3],

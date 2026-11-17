@@ -59,7 +59,7 @@ def pe_series(sym):
 
 def summarize(rows):
     out = {}
-    for key in ("r6", "r12", "x12"):
+    for key in ("r6", "r12", "x12", "p12"):
         vals = [r[key] for r in rows if r.get(key) is not None]
         if vals:
             vals.sort()
@@ -108,7 +108,7 @@ def main():
             if v["verdict"] == "NA":
                 continue
             r12, b12 = fwd(bars, i, 252), bench_ret(nifty, d, 252)
-            row = {"sym": sym, "date": d, "verdict": v["verdict"], "state": v["checks"]["value"]["state"],
+            row = {"sym": sym, "date": d, "verdict": v["verdict"], "rule": v["rule"], "state": v["checks"]["value"]["state"],
                    "r6": fwd(bars, i, 126), "r12": r12, "x12": (r12 - b12) if r12 is not None and b12 is not None else None}
             if v["verdict"] == "WAIT" and v["zone"]:
                 hi = v["zone"][1]
@@ -129,6 +129,15 @@ def main():
             rows.append(row)
         if n % 25 == 0:
             print(f"  {n}/{len(syms)} stocks · {len(rows)} monthly verdicts · {(time.time() - t0) / 60:.1f} min")
+
+    by_month = defaultdict(list)
+    for r in rows:
+        if r["r12"] is not None:
+            by_month[r["date"][:7]].append(r["r12"])
+    avg_month = {m: statistics.mean(v) for m, v in by_month.items() if len(v) >= 5}
+    for r in rows:
+        m = avg_month.get(r["date"][:7])
+        r["p12"] = (r["r12"] - m) if (m is not None and r["r12"] is not None) else None
 
     result = {"built": time.strftime("%Y-%m-%d"), "stocks": len(syms) - sum(skipped.values()),
               "skipped": dict(skipped), "verdicts": len(rows), "split": SPLIT,
@@ -155,24 +164,30 @@ def main():
         result["by_verdict"][vd] = blk
     for st in entry.STATES:
         result["by_state"][st] = summarize([r for r in rows if r["state"] == st])
+    result["by_rule"] = {ru: summarize([r for r in rows if r["rule"] == ru]) for ru in sorted({r["rule"] for r in rows})}
 
     store.put_company("ENTRY_TRACK::IN", result)
     (config.DATA_DIR / "entry_track.json").write_text(json.dumps(result, indent=1))
 
     print(f"\nDone in {(time.time() - t0) / 60:.1f} min · {result['verdicts']} monthly verdicts on {result['stocks']} stocks")
-    print(f"{'verdict':8} {'n':>6} {'avg 12m':>8} {'median':>7} {'vs NIFTY':>9} {'beat %':>7} {'worst10%':>9}  | 1st half / 2nd half avg vs NIFTY")
+    print("'vs peers' = 12m return minus the average of ALL tested stocks in the same month (fair comparison between verdicts)")
+    print(f"{'verdict':8} {'n':>6} {'avg 12m':>8} {'median':>7} {'vs NIFTY':>9} {'vs peers':>9} {'beat %':>7} {'worst10%':>9}  | vs peers 1st half / 2nd half")
     for vd, blk in result["by_verdict"].items():
         s, f, g = blk["all"], blk["first_half"], blk["second_half"]
         if not s.get("r12"):
             continue
-        print(f"{vd:8} {s['n']:6} {s['r12']['avg']:7.1f}% {s['r12']['median']:6.1f}% {s['x12']['avg']:8.1f}% {s['beat_nifty']:6.1f}% "
-              f"{s['r12']['worst10']:8.1f}%  | {f.get('x12', {}).get('avg')}% / {g.get('x12', {}).get('avg')}%")
+        print(f"{vd:8} {s['n']:6} {s['r12']['avg']:7.1f}% {s['r12']['median']:6.1f}% {s['x12']['avg']:8.1f}% {s.get('p12', {}).get('avg', 0):8.1f}% "
+              f"{s['beat_nifty']:6.1f}% {s['r12']['worst10']:8.1f}%  | {f.get('p12', {}).get('avg')}% / {g.get('p12', {}).get('avg')}%")
+    print("\nBy rule (which part of the logic made the call):")
+    for ru, s in result["by_rule"].items():
+        if s.get("p12"):
+            print(f"  {ru:20} n={s['n']:6}  avg 12m {s['r12']['avg']:6.1f}%  vs peers {s['p12']['avg']:6.1f}%  worst10% {s['r12']['worst10']:6.1f}%")
     w = result["by_verdict"]["WAIT"]
     print(f"\nWAIT: price reached the buy zone within 6 months {w.get('zone_hit_rate')}% of the time; "
           f"12m return bought now {w.get('r12_if_bought_now')}% vs in the zone {w.get('r12_if_bought_in_zone')}%")
     p = result["by_verdict"]["PARTS"]
     print(f"PARTS: 12m return with the 3-part plan {p.get('r12_plan')}% vs all at once {p.get('r12_all_at_once')}%")
-    print("By value: " + ", ".join(f"{k} {v.get('x12', {}).get('avg')}% vs NIFTY (n={v['n']})" for k, v in result["by_state"].items()))
+    print("By value: " + ", ".join(f"{k} {v.get('p12', {}).get('avg')}% vs peers (n={v['n']})" for k, v in result["by_state"].items()))
     if skipped:
         print("Skipped:", dict(skipped))
 
