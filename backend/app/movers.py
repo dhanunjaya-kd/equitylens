@@ -23,6 +23,7 @@ from . import config, store, technicals, universe, us
 
 TF = {"1D": 1, "1W": 5, "1M": 21, "3M": 63, "1Y": 252}
 TTL = 6 * 3600
+OPEN_TTL = 15 * 60      # while the market is open: a full NIFTY 500 pass takes a few minutes, so every 15 min
 STATE: dict = {"IN": {"running": False, "done": 0, "total": 0, "failed": 0, "started": None},
                "US": {"running": False, "done": 0, "total": 0, "failed": 0, "started": None}}
 _lock = threading.Lock()
@@ -67,7 +68,8 @@ def _bars(sym: str) -> list[dict]:
         return _demo_bars(sym)
     for attempt in range(2):
         try:
-            return technicals._yahoo(_yahoo_symbol(sym), "2y")
+            bars, meta = technicals._yahoo(_yahoo_symbol(sym), "2y", with_meta=True)
+            return technicals.apply_meta(bars, meta)     # long series can lag the latest session
         except Exception:  # noqa: BLE001
             if attempt:
                 raise
@@ -240,7 +242,10 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
     tf = tf if tf in TF else "1D"
     hit = store.get_company(_key(market))
     data = hit[1] if hit else None
-    stale = (not hit) or (time.time() - hit[0] > TTL)
+    now = time.time()
+    us_mkt = market == "US"
+    stale = (not hit) or (now - hit[0] > TTL) or technicals._last_close_after(hit[0], now, us_mkt) \
+        or ((not us_mkt) and technicals._market_open(now) and now - hit[0] > OPEN_TTL)
     if stale and not STATE[market]["running"]:
         refresh(market)
     rows = data["rows"] if data else []
@@ -267,6 +272,10 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
         r["fund"] = ({"overall": k.get("overall"), "business": k.get("business"), "verdict": k.get("verdict"),
                       "tone": k.get("tone"), "market_cap": k.get("market_cap"), "high_flags": k.get("high_flags"),
                       "pe": k.get("pe")} if k else None)
+    session = max((r.get("date") or "" for r in rows), default="") or None
+    live = (market == "IN" and session == technicals.dt.datetime.fromtimestamp(now, technicals.IST).date().isoformat()
+            and technicals._market_open(now))
     return {"market": market, "tf": tf, "rows": rows, "updated": data["updated"] if data else None,
+            "session": session, "live": live,
             "mood": _mood(rows, tf) if rows else None, "sectors": _sectors(rows, tf) if rows else [],
             "status": status(market), "scanned": len(ranks), "universe": loaded, "count": len(rows)}

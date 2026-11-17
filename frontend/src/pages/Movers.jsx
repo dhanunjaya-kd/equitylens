@@ -123,7 +123,7 @@ export default function Movers() {
       <div className="card">
         <div className="row between wrapflex">
           <div><h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Market Movers</h3>
-            <div className="small muted">{mk === 'US' ? 'S&P 500' : (univ === 'ALL' && d?.universe === 'ALL' ? 'All NSE stocks' : univ === 'ALL' ? 'NIFTY 500' : univ.replace('N', 'NIFTY '))} · {d?.rows?.length || 0} stocks · {d?.updated ? `updated ${ago(d.updated)}` : 'loading…'}</div></div>
+            <div className="small muted">{mk === 'US' ? 'S&P 500' : (univ === 'ALL' && d?.universe === 'ALL' ? 'All NSE stocks' : univ === 'ALL' ? 'NIFTY 500' : univ.replace('N', 'NIFTY '))} · {d?.rows?.length || 0} stocks · {d?.session ? <>{d.live ? <b style={{ color: 'var(--good)' }}>● Live session </b> : 'Session '}{new Date(d.session + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} · </> : null}{d?.updated ? `updated ${ago(d.updated)}` : 'loading…'}</div></div>
           <button className="btn small" disabled={st.running} onClick={async () => { await api(`/api/movers/refresh?market=${mk}`, { method: 'POST' }); load() }}>{st.running ? 'Refreshing…' : '↻ Refresh'}</button>
         </div>
         {mk === 'IN' && <div style={{ marginTop: 10 }}><UniverseChips /></div>}
@@ -238,7 +238,7 @@ export default function Movers() {
                 )
               })}
             </div>
-            <p className="disclaimer">End-of-day prices from Yahoo Finance, refreshed every few hours. "Top buyers/sellers" measure volume pressure from daily data, not live order flow.</p>
+            <p className="disclaimer">Prices from Yahoo Finance, refreshed after every market close and every 15 minutes while the market is open. "Top buyers/sellers" measure volume pressure from daily data, not live order flow.</p>
           </div>
         </div>
       )}

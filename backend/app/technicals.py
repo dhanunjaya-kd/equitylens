@@ -109,7 +109,11 @@ def _latest_daily(sym: str) -> list[dict]:
     by_day = {b["t"]: b for b in bars}
     for b in recent:
         by_day[b["t"]] = b
-    out = [by_day[k] for k in sorted(by_day)]
+    return apply_meta([by_day[k] for k in sorted(by_day)], meta)
+
+
+def apply_meta(out: list[dict], meta: dict) -> list[dict]:
+    """Add the latest session from Yahoo's quote 'meta' when the candle list doesn't have it yet."""
     px, ts = meta.get("regularMarketPrice"), meta.get("regularMarketTime")
     if px and ts and px > 0:
         day = (dt.datetime.fromtimestamp(ts, dt.timezone.utc) + dt.timedelta(hours=5, minutes=30)).date().isoformat()
@@ -117,8 +121,8 @@ def _latest_daily(sym: str) -> list[dict]:
             hi = meta.get("regularMarketDayHigh") or px
             lo = meta.get("regularMarketDayLow") or px
             op = meta.get("regularMarketOpen") or (out[-1]["c"] if out else px)
-            out.append({"t": day, "o": op, "h": max(hi, op, px), "l": min(lo, op, px), "c": px,
-                        "v": meta.get("regularMarketVolume") or 0})
+            out = out + [{"t": day, "o": op, "h": max(hi, op, px), "l": min(lo, op, px), "c": px,
+                          "v": meta.get("regularMarketVolume") or 0}]
     return out
 
 

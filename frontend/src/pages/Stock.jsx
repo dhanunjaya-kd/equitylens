@@ -86,6 +86,7 @@ export default function Stock({ symbol, tab }) {
         </div>
         <div className="row wrapflex" style={{ gap: 18, marginTop: 6 }}>
           <div><div className="price">{rs(m.price, 2)}</div>
+            {d.price_info && <div className="small muted">{d.price_info.live ? <b style={{ color: 'var(--good)' }}>● Live</b> : `Close of ${new Date(d.price_info.date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}`} · updated {d.price_info.fetched_at.slice(11, 16)} IST</div>}
             <div className="small muted">52w {rs(m.low_52w)} – {rs(m.high_52w)} · {signed(m.off_high_pct, 1, '%')} from high</div></div>
           <div><div className="small muted">Market cap</div><b>{cr(m.market_cap)}</b></div>
           <div><div className="small muted">P/E</div><b>{num(m.pe, 1)}</b></div>

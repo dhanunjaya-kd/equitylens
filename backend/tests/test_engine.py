@@ -169,3 +169,28 @@ def test_old_or_lagging_chart_cache_is_refetched_and_topped_up(monkeypatch):
     bars, src, ohlc = T.get_bars("KPITTECH")
     assert bars[-1]["t"] == "2026-11-16" and bars[-1]["c"] == 103
     assert "542651.BO" in src and calls[0] == "KPITTECH.NS"
+
+
+def test_stock_page_price_comes_from_the_latest_session(monkeypatch):
+    import datetime as dt
+    from app import service, technicals as T
+    bars = [{"t": "2026-11-13", "o": 1, "h": 1, "l": 1, "c": 550.0, "v": 1},
+            {"t": "2026-11-16", "o": 1, "h": 1, "l": 1, "c": 561.0, "v": 1}]
+    fetched = dt.datetime(2026, 11, 17, 6, 55, tzinfo=T.IST).timestamp()
+    monkeypatch.setattr(T, "get_bars", lambda sym, refresh=False, with_time=False: (bars, "Yahoo Finance (X.NS)", True, fetched))
+    company = {"ratios": {"current_price": 550.0, "pe": 50.0, "market_cap": 15000.0, "book_value": 100.0}}
+    new, info = service.live_price(company, "X")
+    assert new["ratios"]["current_price"] == 561.0
+    assert round(new["ratios"]["pe"], 2) == 51.0 and round(new["ratios"]["market_cap"]) == 15300
+    assert company["ratios"]["current_price"] == 550.0        # cached fundamentals untouched
+    assert info["date"] == "2026-11-16" and info["fetched_at"].startswith("2026-11-17T06:55")
+
+
+def test_meta_adds_the_session_the_long_series_is_missing():
+    from app import technicals as T
+    bars = [{"t": "2026-11-13", "o": 1, "h": 2, "l": 1, "c": 101, "v": 1}]
+    meta = {"regularMarketPrice": 104.0, "regularMarketTime": 1794822000, "regularMarketDayHigh": 105.0,
+            "regularMarketDayLow": 100.5, "regularMarketVolume": 9}
+    out = T.apply_meta(bars, meta)
+    assert out[-1]["t"] == "2026-11-16" and out[-1]["c"] == 104.0 and len(bars) == 1
+    assert T.apply_meta(out, meta) == out        # already there: nothing added

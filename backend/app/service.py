@@ -129,10 +129,39 @@ def median_pe_from(extras: dict) -> Optional[float]:
     return statistics.median(vals) if len(vals) >= 20 else None
 
 
+def live_price(company: dict, symbol: str) -> tuple[dict, Optional[dict]]:
+    """Put the latest session's price on top of the (daily-cached) fundamentals.
+    Price-based figures (P/E, market cap) are scaled to the new price; the financials stay as they are."""
+    from . import technicals
+    try:
+        bars, src, _, fetched = technicals.get_bars(symbol, with_time=True)
+    except Exception:  # noqa: BLE001 - keep the report's own price
+        return company, None
+    if not bars:
+        return company, None
+    top = dict(company.get("ratios") or {})
+    old, new = top.get("current_price"), bars[-1]["c"]
+    if isinstance(old, (int, float)) and old > 0 and new:
+        k = new / old
+        for key in ("pe", "market_cap"):
+            if isinstance(top.get(key), (int, float)):
+                top[key] = top[key] * k
+    top["current_price"] = new
+    now = time.time()
+    today = technicals.dt.datetime.fromtimestamp(now, technicals.IST).date().isoformat()
+    info = {"date": bars[-1]["t"], "source": src,
+            "fetched_at": technicals.dt.datetime.fromtimestamp(fetched, technicals.IST).isoformat(timespec="minutes"),
+            "live": bars[-1]["t"] == today and technicals._market_open(now)}
+    return dict(company, ratios=top), info
+
+
 def build_report(symbol: str, refresh: bool = False) -> dict:
     money.set_market(money.market_of(scraper.clean_symbol(symbol)))
     payload, ts = get_payload(symbol, refresh=refresh, full=True)
     company, extras = payload["company"], payload["extras"]
+    price_info = None
+    if company.get("market", "IN") == "IN":
+        company, price_info = live_price(company, payload["symbol"])
     if company.get("market") == "US":
         extras = dict(extras, peers=us_peers(payload["symbol"], company))
     a = analysis.analyse(company, median_pe_from(extras), extras.get("peers"), extras.get("pe_chart"))
@@ -141,6 +170,7 @@ def build_report(symbol: str, refresh: bool = False) -> dict:
         "symbol": payload["symbol"],
         "view": payload["view"],
         "fetched_at": ts,
+        "price_info": price_info,
         "company": company,
         "peers": extras.get("peers"),
         "price_chart": extras.get("price_chart"),
