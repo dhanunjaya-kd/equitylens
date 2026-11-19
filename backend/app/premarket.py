@@ -19,6 +19,7 @@ import random
 import statistics
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import quote
@@ -384,11 +385,30 @@ def build(market: str = "IN", refresh: bool = False) -> dict:
     day = session_day(now)
     notes = []
     series = {}
-    for f in FACTORS + [{"sym": NIFTY}]:
+
+    def _daily(f):
         try:
-            series[f["sym"]] = daily(f["sym"])
+            return f, daily(f["sym"]), None
         except Exception as e:  # noqa: BLE001
-            notes.append(f"{f.get('name', 'NIFTY 50')}: prices not available ({e})")
+            return f, None, e
+
+    def _quote(sym):
+        try:
+            return sym, quote_one(sym), None
+        except Exception as e:  # noqa: BLE001 - one missing tile never hides the rest
+            return sym, None, e
+
+    tile_syms = sorted({t[0] for _, tiles in GROUPS_IN for t in tiles})
+    with ThreadPoolExecutor(max_workers=8) as ex:          # ~25 Yahoo calls in parallel instead of one by one
+        got_daily = list(ex.map(_daily, FACTORS + [{"sym": NIFTY, "name": "NIFTY 50"}]))
+        quotes = {sym: (q, e) for sym, q, e in ex.map(_quote, tile_syms)}
+        flows_future = ex.submit(fii_dii)
+        today_future = ex.submit(_today_items, day)
+    for f, bars, e in got_daily:
+        if bars is None:
+            notes.append(f"{f.get('name')}: prices not available ({e})")
+        else:
+            series[f["sym"]] = bars
     fv = factor_values(series, day)
     sc = score_of(fv)
     call = call_of(sc)
@@ -397,16 +417,15 @@ def build(market: str = "IN", refresh: bool = False) -> dict:
     for gname, tiles in GROUPS_IN:
         items = []
         for sym, name, direction, neutral, why in tiles:
-            try:
-                q = quote_one(sym)
-            except Exception as e:  # noqa: BLE001 - one missing tile never hides the rest
+            q, e = quotes.get(sym, (None, "not fetched"))
+            if q is None:
                 items.append({"sym": sym, "name": name, "price": None, "change_pct": None, "impact": "neutral", "why": why, "error": str(e)})
                 continue
             items.append({"sym": sym, "name": name, **q, "impact": impact(direction, q["change_pct"], neutral), "why": why})
         groups.append({"name": gname, "items": items})
     flows_rows = []
     try:
-        for r in fii_dii():
+        for r in flows_future.result():
             flows_rows.append({"name": r["name"], "net": r["net"], "date": r["date"],
                                "impact": impact(1, r["net"], 500), "why": "NSE provisional cash-market data, crore rupees"})
     except Exception as e:  # noqa: BLE001
@@ -416,7 +435,7 @@ def build(market: str = "IN", refresh: bool = False) -> dict:
     out = {"market": market, "day": day, "built": now.strftime("%Y-%m-%d %H:%M"), "built_ts": time.time(),
            "score": sc, **call, "factors": fv, "rules": {"up": UP, "down": DOWN, "scale": SCALE},
            "groups": groups, "flows": flows_rows, "gift": {"available": False, "note": GIFT_NOTE},
-           "today": _today_items(day), "track": t, "live": live_calls(series.get(NIFTY)), "notes": notes,
+           "today": today_future.result(), "track": t, "live": live_calls(series.get(NIFTY)), "notes": notes,
            "frozen": False,
            "after_open": day == now.date().isoformat() and (now.hour, now.minute) >= (9, 15)}
     # freeze the morning call: the last build before 09:15 on the NIFTY day itself is the one that counts
