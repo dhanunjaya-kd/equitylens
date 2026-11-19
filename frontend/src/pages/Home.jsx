@@ -20,6 +20,15 @@ export default function Home() {
         <SearchBox autoFocus />
       </div>
 
+      {mk !== 'US' && (
+        <div className="card guide-cta" onClick={() => go('premarket')}>
+          <span style={{ fontSize: 30 }}>🌅</span>
+          <div className="grow"><b>Pre-market: how is NIFTY likely to open?</b>
+            <div className="small muted">Overnight US, Asia, crude, gold, Bitcoin, rupee and FII flows, the opening call and its real track record.</div></div>
+          <span className="btn small primary">Open →</span>
+        </div>
+      )}
+
       <div className="card guide-cta" onClick={() => go('guide')}>
         <span style={{ fontSize: 30 }}>📘</span>
         <div className="grow"><b>New to stocks? Learn to read a company in 10 minutes</b>

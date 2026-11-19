@@ -34,6 +34,7 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 | | Area | In one line |
 |:-:|---|---|
 | 🔎 | **Stock report** | Verdict, 6 scores, red flags, forensics, valuation, 10-year story, 3/5/10-year scenarios, chart outlook |
+| 🌅 | **Pre-market** | Before 09:15: overnight US, Asia, crude, gold, silver, Bitcoin, rupee, yields and FII / DII flows, each marked positive or negative for NIFTY, plus a NIFTY opening call with its real backtested and live track record |
 | 🚦 | **Entry decision** | *Enter now* or *Avoid for now* for a 1–3 year holding, from fixed rules tested on 10 years of NSE data, with the rule's real track record and AI research on every stock |
 | 📊 | **Market dashboard** | NIFTY · BANK NIFTY · SENSEX · VIX (or S&P 500 · NASDAQ · DOW · RUSSELL · VIX) on every page, plus market movers, mood and sector heatmap |
 | 🧭 | **Smart money** | Delivery %, bulk & block deals, promoter / insider trades and exchange surveillance flags |
@@ -236,6 +237,17 @@ venv\Scripts\python tools\entry_backtest.py
 REM or NIFTY 500 only
 venv\Scripts\python tools\entry_backtest.py --universe N500
 ```
+
+### 🌅 Pre-market — how is NIFTY likely to open?
+
+Open **Pre-market** (side menu, or the card on the home page). From 08:20 to 09:15 IST it rebuilds every 10 minutes by itself:
+
+- **Overnight markets**: S&P 500, NASDAQ, Dow and S&P futures now · Nikkei, Hang Seng, Kospi · Brent crude, gold, silver, Bitcoin · USD/INR, dollar index, US 10-year · US VIX and India VIX · yesterday's FII and DII cash flows (NSE). Every tile says **positive, negative or neutral for NIFTY** and why, from fixed rules.
+- **NIFTY opening call**: one transparent score, fixed before any testing: S&P 500 ×3, US VIX ×−1, Brent crude ×−1, USD/INR ×−1, each from that market's last session that closed before 09:15 IST and scaled by its own normal daily move. Score ≥ +20 → gap-up likely, ≤ −20 → gap-down likely, otherwise flat or mixed.
+- **Track record**: the same rules are backtested on every NIFTY day since 2016 (re-run weekly by itself). The page shows how often the open's direction was right compared with simply always guessing, for 2016–20 and 2021 on separately. It says plainly when there is **no edge for the day's direction** (open → close). Each morning's call is saved at 09:14 and checked against the real open; nothing is edited afterwards.
+- **AI pre-market brief** (with an AI key): written only from the figures on the page, every number checked.
+- **GIFT Nifty** has no free official feed or price history, so EquityLens can't read or test it; the page says so. Check it in your broker app.
+- Coming next: verified global news (a story counts only when 2+ independent sources report it), stocks in focus from overnight filings, results, deals and US-listed shares, and a US pre-market page.
 
 ### 📊 Market dashboard
 
@@ -586,7 +598,7 @@ cd backend
 python run_tests.py
 ```
 
-101 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+110 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -602,6 +614,7 @@ python run_tests.py
 | `test_brokers.py` | Every broker's holdings format, TOTP (RFC 6238 test vectors), CSV and Excel uploads with ISIN mapping, masked keys, merging the same stock across brokers |
 | `test_access.py` | Password sign-in, protected keys, shutdown only from this computer, phone addresses, log viewer |
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys; entry research parsing, retry, caching and flagging of invented numbers |
+| `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |
 
@@ -635,6 +648,7 @@ equitylens/
 │   │   ├── enrich.py         F&O list + live fields joined onto every list
 │   │   ├── logos.py          company logos with initials fallback
 │   │   ├── entry.py          entry decision rules (Enter / Avoid), live and in the backtest
+│   │   ├── premarket.py      overnight board, NIFTY opening call, its backtest and frozen live calls
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
 │   │   ├── brokers.py        read-only holdings from 8 brokers + CSV / Excel import
 │   │   ├── portfolio.py      portfolio X-ray: merge, score, warnings, mix
@@ -663,6 +677,7 @@ equitylens/
 | `GET /api/flows/delivery` · `deals` · `insiders` · `surveillance` | Market-wide smart-money lists |
 | `GET /api/calendar/earnings` · `economy` · `next/{symbol}` | Calendars and next results date |
 | `POST /api/ai/{note,chat,guidance,debate,doc,chart}/{symbol}` | AI features for a stock (`chat` takes `focus: "entry"` for questions about the entry card) |
+| `GET /api/premarket?market=IN&refresh=` · `POST /api/premarket/backtest` · `POST /api/ai/premarket` | Pre-market board, opening call, backtest, AI brief |
 | `POST /api/ai/entry/{symbol}?refresh=` | AI research on the entry decision: structured, sourced, numbers checked |
 | `POST /api/ai/{picks,movers,calendar}` | AI explanations of lists, moves and the week |
 | `GET /api/fno` | F&O stocks and lot sizes |

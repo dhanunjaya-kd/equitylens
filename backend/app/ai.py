@@ -441,6 +441,46 @@ def entry_research(report: dict, tech: Optional[dict], refresh: bool = False) ->
     return out
 
 
+PREMARKET_PROMPT = """PREMARKET_BRIEF
+Write this morning's pre-market brief for the Indian market from the data only, in Markdown, 150-220 words:
+1. One bold line: the opening call (call.label, score) and the two factors that drive it most (largest |contrib|),
+   with their figures. Say how often this call has been right in the backtest (track) and live (live), as history.
+2. The overnight moves that matter beyond the score (tiles marked positive/negative): what each means for which
+   Indian sectors (crude -> oil marketers, paints, airlines; rupee and NASDAQ -> IT; gold -> jewellers, gold lenders;
+   Hang Seng -> metals). Only moves that are in the data.
+3. FII / DII flows and today's calendar (today), if present.
+4. One line: what in the first 15 minutes would prove the call wrong.
+Rules: every figure copied from the data; GIFT Nifty is NOT in the data (say so once, briefly); there is no news in
+this data, so do not mention any news, events or reasons that are not in it; no buy/sell advice."""
+
+
+def premarket_brief(payload: dict, refresh: bool = False) -> dict:
+    s = load_settings()
+    key = f"AI::PREMARKET::{payload.get('market')}::{model_label(s)}::{payload.get('day')}::{payload.get('built')}"
+    if not refresh and (hit := _cache_get(key, 3 * 3600)):
+        return hit
+    t = payload.get("track") or {}
+    data = json.dumps({
+        "day": payload.get("day"), "built_ist": payload.get("built"),
+        "call": {"label": payload.get("label"), "score": payload.get("score"), "rules": payload.get("rules")},
+        "factors": [{k: f.get(k) for k in ("name", "w", "ret", "z", "contrib", "date", "why")} for f in payload.get("factors", [])],
+        "tiles": [{"group": g["name"], **{k: i.get(k) for k in ("name", "price", "change_pct", "impact", "why")}}
+                  for g in payload.get("groups", []) for i in g["items"] if i.get("price") is not None],
+        "flows": payload.get("flows"), "today": payload.get("today"),
+        "track": {"backtest_all": t.get("all"), "gap_passed": t.get("gap_passed"), "day_passed": t.get("day_passed"),
+                  "from": t.get("from"), "to": t.get("to")} if t else "no backtest yet",
+        "live": {k: (payload.get("live") or {}).get(k) for k in ("checked", "right")},
+    }, separators=(",", ":"), default=str)
+    system = ("You are EquityLens's pre-market analyst for Indian equities. Plain English, short sentences. Use ONLY the "
+              "data in the <data> block; if something isn't there, say it isn't. Never invent numbers, news or events.\n"
+              f"<data>\n{data}\n</data>")
+    text = complete(system, [{"role": "user", "content": PREMARKET_PROMPT}], max_tokens=900, s=s)
+    n, missing = verify_numbers(text, data)
+    out = {"text": text, "model": model_label(s), "created": time.time(), "numbers": {"checked": n, "found": n - len(missing), "not_found": missing[:12]}}
+    store.put_company(key, out)
+    return out
+
+
 def chat(report: dict, tech: Optional[dict], history: list[dict], focus: str = "") -> dict:
     s = load_settings()
     msgs = [{"role": h["role"], "content": str(h["content"])[:4000]} for h in history[-12:] if h.get("role") in ("user", "assistant")]
@@ -658,6 +698,12 @@ def _demo_answer(system: str, messages: list[dict]) -> str:
     name = comp.get("name", "This company") if isinstance(comp, dict) else (comp or "This company")
     met = d.get("metrics", {})
     q = messages[-1]["content"]
+    if "PREMARKET_BRIEF" in q:
+        c = d.get("call") or {}
+        top = sorted(d.get("factors") or [], key=lambda f: -abs(f.get("contrib") or 0))[:2]
+        why = " and ".join(f"{f['name']} {f['ret']}%" for f in top if f.get("ret") is not None)
+        return (f"**{c.get('label')} (score {c.get('score')}), driven by {why}.** Demo brief: add an AI key in Settings for "
+                "a real one. GIFT Nifty is not in EquityLens's data.")
     if "ENTRY_RESEARCH" in q or "single valid JSON" in q:
         e = d.get("entry_decision") or {}
         lv = e.get("levels") or {}

@@ -454,3 +454,13 @@ html, body { transition: background-color .2s ease; }
 .guide-tips { display: grid; gap: 12px; margin-bottom: 16px; }
 @media (min-width: 760px) { .guide-tips { grid-template-columns: 1fr 1fr; } }
 .guide-tip { cursor: pointer; margin-bottom: 0; } .guide-tip:hover { border-color: var(--accent); }
+
+/* Pre-market */
+.pm-top { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.pm-top > .card { margin-bottom: 12px; }
+.pm-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 10px; }
+.pm-table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 560px; }
+.pm-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 6px 10px 6px 0; }
+.pm-table td { padding: 8px 10px 8px 0; border-top: 1px solid var(--line); }
+@media (max-width: 900px) { .pm-top { grid-template-columns: 1fr; } .pm-hits { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .pm-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }

@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 
 from . import universe as universe_mod
-from . import access, ai, brokers, calendars, config, enrich, flows, portfolio, indices, logos, movers, scraper, service, store, technicals, universe, us
+from . import access, ai, brokers, calendars, config, enrich, flows, portfolio, premarket, indices, logos, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
@@ -29,6 +29,11 @@ log = logging.getLogger("equitylens")
 app = FastAPI(title="EquityLens", version="1.0.0")
 app.add_middleware(GZipMiddleware, minimum_size=2000)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.on_event("startup")
+def _background_jobs():
+    premarket.start_background()      # builds the pre-market page before the open; refreshes its backtest weekly
 
 
 @app.middleware("http")
@@ -190,6 +195,25 @@ def ai_note(symbol: str, refresh: bool = False):
 def ai_chat(symbol: str, body: dict = Body(...)):
     rep, tech = _report_and_tech(symbol)
     return _ai(ai.chat, rep, tech, body.get("messages") or [], str(body.get("focus") or ""))
+
+
+@app.get("/api/premarket")
+def premarket_get(market: str = "IN", refresh: bool = False):
+    try:
+        return premarket.build(market, refresh)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"Pre-market data not available: {e}") from e
+
+
+@app.post("/api/premarket/backtest")
+def premarket_backtest():
+    threading.Thread(target=premarket.backtest, daemon=True).start()
+    return {"started": True}
+
+
+@app.post("/api/ai/premarket")
+def ai_premarket(market: str = "IN", refresh: bool = False):
+    return _ai(ai.premarket_brief, premarket.build(market), refresh)
 
 
 @app.post("/api/ai/entry/{symbol}")

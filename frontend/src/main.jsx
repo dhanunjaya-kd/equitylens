@@ -22,6 +22,7 @@ import Watch from './pages/Watch'
 import Compare from './pages/Compare'
 import Screener from './pages/Screener'
 import Movers from './pages/Movers'
+import PreMarket from './pages/PreMarket'
 import Calendar from './pages/Calendar'
 import IndexStrip from './components/IndexStrip'
 import SmartMoney from './pages/SmartMoney'
@@ -81,6 +82,7 @@ function App() {
         {route.page === 'watch' && <Watch />}
         {route.page === 'screener' && <Screener />}
         {route.page === 'movers' && <Movers />}
+        {route.page === 'premarket' && <PreMarket />}
         {route.page === 'calendar' && <Calendar tab={route.tab} />}
         {route.page === 'money' && <SmartMoney tab={route.tab} />}
         {route.page === 'guide' && <Guide />}

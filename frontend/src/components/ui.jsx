@@ -98,6 +98,7 @@ export function DataTable({ table, last = 0, pctRows = true }) {
 }
 
 const I = {
+  sun: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><path d="M4 18h16M7 18a5 5 0 0 1 10 0M12 8V5M5.6 11.6 3.8 9.8M18.4 11.6l1.8-1.8" /></g>,
   search: <path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm9 16-4.3-4.3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
   rank: <path d="M5 20V10m7 10V4m7 16v-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />,
   star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />,
@@ -179,7 +180,7 @@ export function MarketToggle({ market, onChange }) {
 }
 
 export function SideNav({ page, market, onMarket, theme, onTheme }) {
-  const items = [['home', '', 'Search', I.search], ['movers', 'movers', 'Market Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['portfolio', 'portfolio', 'My Portfolio', I.brief], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
+  const items = [['home', '', 'Search', I.search], ['premarket', 'premarket', 'Pre-market', I.sun], ['movers', 'movers', 'Market Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['portfolio', 'portfolio', 'My Portfolio', I.brief], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
     ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare], ['guide', 'guide', 'Beginner guide', I.book]]
   return (
     <aside className="sidenav">
