@@ -126,7 +126,7 @@ def complete(system: str, messages: list[dict], max_tokens: Optional[int] = None
             r = requests.post(f"{GEMINI_BASE}/models/{s['gemini_model']}:generateContent", timeout=180,
                               headers={"x-goog-api-key": s["gemini_api_key"], "Content-Type": "application/json"},
                               json={"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
-                                    "generationConfig": {"maxOutputTokens": mt}})
+                                    "generationConfig": {"maxOutputTokens": mt + 8000}})
             _raise(r, "Gemini")
             body = r.json()
             cands = body.get("candidates") or []
@@ -402,12 +402,12 @@ def entry_research(report: dict, tech: Optional[dict], refresh: bool = False) ->
         return hit
     data = build_context(report, tech)
     system = f"{_rules(report)}\nAnswer in JSON as asked; the Markdown rule does not apply here.\n<data>\n{data}\n</data>"
-    text = complete(system, [{"role": "user", "content": ENTRY_PROMPT}], max_tokens=2500, s=s)
+    text = complete(system, [{"role": "user", "content": ENTRY_PROMPT}], max_tokens=5000, s=s)
     parsed = _parse_json(text)
     if parsed is None:   # one retry, asking only for the JSON
         text = complete(system, [{"role": "user", "content": ENTRY_PROMPT}, {"role": "assistant", "content": text[:4000]},
                                  {"role": "user", "content": "That was not a single valid JSON object. Send only the JSON object, same keys."}],
-                        max_tokens=2500, s=s)
+                        max_tokens=5000, s=s)
         parsed = _parse_json(text)
     out = {"model": model_label(s), "created": time.time(), "entry_date": ent.get("date"), "verdict": ent.get("verdict"), "rule": ent.get("rule")}
     if parsed is None:
@@ -474,7 +474,7 @@ def premarket_brief(payload: dict, refresh: bool = False) -> dict:
     system = ("You are EquityLens's pre-market analyst for Indian equities. Plain English, short sentences. Use ONLY the "
               "data in the <data> block; if something isn't there, say it isn't. Never invent numbers, news or events.\n"
               f"<data>\n{data}\n</data>")
-    text = complete(system, [{"role": "user", "content": PREMARKET_PROMPT}], max_tokens=900, s=s)
+    text = complete(system, [{"role": "user", "content": PREMARKET_PROMPT}], max_tokens=4000, s=s)   # thinking models (Gemini 3) use part of this
     n, missing = verify_numbers(text, data)
     out = {"text": text, "model": model_label(s), "created": time.time(), "numbers": {"checked": n, "found": n - len(missing), "not_found": missing[:12]}}
     store.put_company(key, out)

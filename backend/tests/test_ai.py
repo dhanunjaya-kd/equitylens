@@ -67,7 +67,7 @@ def test_gemini_request_shape():
     assert kw["headers"]["x-goog-api-key"] == "AIza-test"
     assert kw["json"]["systemInstruction"]["parts"][0]["text"] == "sys"
     assert [c["role"] for c in kw["json"]["contents"]] == ["user", "model", "user"]
-    assert kw["json"]["generationConfig"]["maxOutputTokens"] == 50
+    assert kw["json"]["generationConfig"]["maxOutputTokens"] == 50 + 8000   # room for Gemini's thinking tokens
 
 
 def test_gemini_blocked_is_friendly():

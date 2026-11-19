@@ -418,6 +418,13 @@ def build(market: str = "IN", refresh: bool = False) -> dict:
         items = []
         for sym, name, direction, neutral, why in tiles:
             q, e = quotes.get(sym, (None, "not fetched"))
+            if q is None:                                # live quote missing: fall back to the last two daily closes
+                try:
+                    bars = series.get(sym) or daily(sym)
+                    q = {"price": round(bars[-1]["c"], 4 if bars[-1]["c"] < 10 else 2), "prev_close": bars[-2]["c"],
+                         "change_pct": round((bars[-1]["c"] / bars[-2]["c"] - 1) * 100, 2), "time": None, "as_of": bars[-1]["t"]}
+                except Exception:  # noqa: BLE001
+                    q = None
             if q is None:
                 items.append({"sym": sym, "name": name, "price": None, "change_pct": None, "impact": "neutral", "why": why, "error": str(e)})
                 continue
