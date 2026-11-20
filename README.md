@@ -245,6 +245,9 @@ Open **Pre-market** (side menu, or the card on the home page). From 08:20 to 09:
 - **Overnight markets**: S&P 500, NASDAQ, Dow and S&P futures now · Nikkei, Hang Seng, Kospi · Brent crude, gold, silver, Bitcoin · USD/INR, dollar index, US 10-year · US VIX and India VIX · yesterday's FII and DII cash flows (NSE). Every tile says **positive, negative or neutral for NIFTY** and why, from fixed rules.
 - **NIFTY opening call**: one transparent score, fixed before any testing: S&P 500 ×3, US VIX ×−1, Brent crude ×−1, USD/INR ×−1, each from that market's last session that closed before 09:15 IST and scaled by its own normal daily move. Score ≥ +20 → gap-up likely, ≤ −20 → gap-down likely, otherwise flat or mixed.
 - **Track record**: the same rules are backtested on every NIFTY day since 2016 (re-run weekly by itself). The page shows how often the open's direction was right compared with simply always guessing, for 2016–20 and 2021 on separately. It says plainly when there is **no edge for the day's direction** (open → close). Each morning's call is saved at 09:14 and checked against the real open; nothing is edited afterwards.
+- **08:45 check**: the overnight call plus what happened after the US close: S&P 500 futures from the close to 08:45 IST (×3) and Nikkei + Kospi at 08:45 (×2). Yahoo keeps hourly prices for about two years, so it is tested on that window, and it becomes the main call **only if** it beats both the overnight call and always-guessing by 5+ points in both halves (fixed before testing). Until then it is shown as "not proven", with its numbers.
+- **Day map** (levels and odds, not a forecast of the day's direction): the expected range from India VIX (last close ÷ √252 around the previous close) with how often NIFTY really stayed inside it since 2016; previous high / low / close, pivot, CPR (with its width), R1/R2/S1/S2; and a table of what NIFTY did after each size of opening gap since 2016 (gap filled the same day, closed above the open, average open → close). Today's gap is marked at 09:15.
+- **Evening preview** (about 19:00–02:30 IST, while the US trades): the overnight formula on live prices for the next session, marked preliminary and not tested.
 - **AI pre-market brief** (with an AI key): written only from the figures on the page, every number checked.
 - **GIFT Nifty** has no free official feed or price history, so EquityLens can't read or test it; the page says so. Check it in your broker app.
 - Coming next: verified global news (a story counts only when 2+ independent sources report it), stocks in focus from overnight filings, results, deals and US-listed shares, and a US pre-market page.
@@ -598,7 +601,7 @@ cd backend
 python run_tests.py
 ```
 
-110 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+125 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -649,6 +652,7 @@ equitylens/
 │   │   ├── logos.py          company logos with initials fallback
 │   │   ├── entry.py          entry decision rules (Enter / Avoid), live and in the backtest
 │   │   ├── premarket.py      overnight board, NIFTY opening call, its backtest and frozen live calls
+│   │   ├── nextday.py        08:45 check (and its test), day map, evening preview
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
 │   │   ├── brokers.py        read-only holdings from 8 brokers + CSV / Excel import
 │   │   ├── portfolio.py      portfolio X-ray: merge, score, warnings, mix

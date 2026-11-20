@@ -394,7 +394,12 @@ def premarket_get(market: str = "IN", refresh: bool = False):
 
 @app.post("/api/premarket/backtest")
 def premarket_backtest():
-    threading.Thread(target=premarket.backtest, daemon=True).start()
+    from . import nextday
+
+    def run():
+        premarket.backtest()
+        nextday.backtest2()
+    threading.Thread(target=run, daemon=True).start()
     return {"started": True}
 
 

@@ -2,6 +2,7 @@
 import os
 import random
 import sys
+import time
 import tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -108,6 +109,73 @@ def test_build_in_demo_has_every_part():
     assert p["gift"]["available"] is False and "NSE IX" in p["gift"]["note"]
     assert all(i["impact"] in ("positive", "negative", "neutral") for g in p["groups"] for i in g["items"])
     assert p["flows"] and p["live"] is not None
+
+
+
+# ------------------------------------------------------------------ next-day view v2 (nextday.py)
+from app import nextday as nd  # noqa: E402
+
+
+def _ts(y, m, d, h, mi=0):
+    return int(datetime(y, m, d, h, mi, tzinfo=timezone.utc).timestamp())
+
+
+def test_0845_factors_use_only_bars_finished_by_0845_ist():
+    day = "2026-11-19"
+    spx = [{"ts": _ts(2026, 11, 18, h, 30), "c": 100} for h in range(14, 21)]            # US cash session, last bar 20:30-21:00 UTC
+    fut = [{"ts": _ts(2026, 11, 18, h), "c": 100.0} for h in range(14, 24)] + [{"ts": _ts(2026, 11, 19, h), "c": 101.0 + h} for h in range(0, 8)]
+    fut[6]["c"] = 100.0                                                                    # bar 20:00-21:00 ends at the close: 100
+    asia = [{"ts": _ts(2026, 11, 18, h), "c": 200.0} for h in range(0, 6)] + [{"ts": _ts(2026, 11, 19, h), "c": 202.0 + h * 50} for h in range(0, 6)]
+    dly = {s: [{"t": (date(2025, 1, 1) + timedelta(days=i)).isoformat(), "c": 100 * (1.01 if i % 2 else 1)} for i in range(400)] for s in (nd.FUT, "^N225", "^KS11")}
+    f = nd.after_close_factors({nd.SPX: spx, nd.FUT: fut, "^N225": asia, "^KS11": asia}, dly, day)
+    # futures: from the bar that ended at 21:00 UTC (100) to the last bar finished by 03:15 UTC (02:00 bar: 101+2)
+    assert f[0]["ret"] == 3.0
+    # Asia: previous close 200 -> last bar finished by 03:15 UTC (02:00 bar: 202+100); later bars ignored
+    assert f[1]["ret"] == 51.0 and "Nikkei 225" in f[1]["name"]
+    later = {nd.SPX: spx, nd.FUT: fut + [{"ts": _ts(2026, 11, 19, 9), "c": 999.0}], "^N225": asia, "^KS11": asia}
+    assert nd.after_close_factors(later, dly, day) == f
+
+
+def test_0845_backtest_runs_and_applies_its_pass_rule():
+    r = nd.backtest2(save=False)
+    assert r["days"] > 300 and r["passed"] in (True, False) and r["pass_rule"].startswith("Replaces the overnight call")
+    for h in ("first_half", "second_half"):
+        assert r[h]["v1"]["days"] == r[h]["v2"]["days"] > 0                       # both calls judged on the same days
+    ok = all(r[h]["v2"]["gap_hit"] - max(r[h]["v1"]["gap_hit"], r[h]["v2"]["gap_naive"]) >= 5 for h in ("first_half", "second_half"))
+    assert r["passed"] == ok
+
+
+def test_day_map_levels_gaps_and_range():
+    assert nd.bucket_of(-1.0) == 0 and nd.bucket_of(0.05) == 3 and nd.bucket_of(0.5) == 5 and nd.bucket_of(2) == 6
+    lv = nd.levels({"h": 110, "l": 90, "c": 100})
+    assert lv["pivot"] == 100.0 and lv["r1"] == 110.0 and lv["s1"] == 90.0 and lv["cpr_top"] == lv["cpr_bottom"] == 100.0
+    nifty = [{"t": "2026-01-01", "o": 100, "h": 101, "l": 99, "c": 100},
+             {"t": "2026-01-02", "o": 101, "h": 102, "l": 99.5, "c": 101.5},      # gap-up 1%, low 99.5 <= 100: filled, closed above open
+             {"t": "2026-01-05", "o": 101.0, "h": 101.4, "l": 100.6, "c": 101.2}]  # gap-down 0.5%, high 101.4 < 101.5: not filled
+    g = nd.gap_table(nifty)
+    assert g[6]["days"] == 1 and g[6]["gap_filled_pct"] == 100.0 and g[6]["closed_above_open_pct"] == 100.0
+    assert g[1]["days"] == 1 and g[1]["gap_filled_pct"] == 0.0 and g[3]["gap_filled_pct"] is None
+    vix = [{"t": "2026-01-01", "c": 15.87}, {"t": "2026-01-02", "c": 15.87}]                        # ±1% a day
+    rc = nd.range_check(nifty, vix)
+    assert rc["days"] == 2 and rc["stayed_inside_pct"] == 50.0 and rc["closed_inside_pct"] == 50.0   # day 2 (high 102 > 101) is outside
+    m = nd.day_map(nifty, vix, "2026-01-06")
+    assert m["prev_day"] == "2026-01-05" and abs(m["expected_move_pct"] - 1.0) < 0.01 and m["actual_bucket"] is None
+
+
+def test_evening_preview_only_while_the_us_trades():
+    s = _series()
+    day = s[pm.NIFTY][-1]["t"]
+    q = {f["sym"]: {"change_pct": 0.5, "time": time.time()} for f in pm.FACTORS}
+    assert nd.evening_preview(q, s, day, datetime(2026, 11, 19, 22, 0, tzinfo=IST))["score"] is not None
+    assert nd.evening_preview(q, s, day, datetime(2026, 11, 19, 12, 0, tzinfo=IST)) is None        # daytime
+    q[nd.SPX]["time"] = time.time() - 3600
+    assert nd.evening_preview(q, s, day, datetime(2026, 11, 19, 22, 0, tzinfo=IST)) is None        # US not trading
+
+
+def test_build_has_the_0845_check_and_day_map():
+    p = pm.build("IN", refresh=True)
+    assert p["check_0845"]["factors"] and "proven" in p["check_0845"] and p["overnight"]["label"]
+    assert p["day_map"] and len(p["day_map"]["gaps"]) == 7 and p["day_map"]["levels"]["pivot"]
 
 
 if __name__ == "__main__":

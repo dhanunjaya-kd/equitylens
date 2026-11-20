@@ -479,3 +479,5 @@ html, body { transition: background-color .2s ease; }
 .avatar.sm { width: 22px; height: 22px; font-size: 12px; }
 .avatar-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--card2); color: var(--accent); font-weight: 800; }
 .login.signin input { text-align: left; font-size: 15px; }
+.pm-levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px 12px; margin-top: 8px; }
+.pm-levels > div { display: flex; flex-direction: column; gap: 2px; }

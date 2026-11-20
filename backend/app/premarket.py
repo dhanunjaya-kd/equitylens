@@ -362,7 +362,8 @@ def live_calls(nifty: Optional[list[dict]] = None, n: int = 20) -> dict:
     for k in keys:
         c = store.get_company(k)[1]
         hit = bars.get(c["day"])
-        row = {"day": c["day"], "score": c["score"], "call": c["call"], "label": c["label"], "gap": None, "move": None, "right": None}
+        row = {"day": c["day"], "score": c["score"], "call": c["call"], "label": c["label"], "gap": None, "move": None, "right": None,
+               "score2": c.get("score2"), "call2": c.get("call2"), "right2": None}
         if hit and hit[0] > 0 and hit[1].get("o"):
             i, b = hit
             prev = nb[i - 1]["c"]
@@ -371,6 +372,8 @@ def live_calls(nifty: Optional[list[dict]] = None, n: int = 20) -> dict:
                 row["right"] = (row["gap"] > 0) == (c["call"] == "up")
                 checked += 1
                 right += bool(row["right"])
+            if c.get("call2") in ("up", "down"):
+                row["right2"] = (row["gap"] > 0) == (c["call2"] == "up")
         rows.append(row)
     return {"rows": rows[:n], "checked": checked, "right": right}
 
@@ -398,9 +401,20 @@ def build(market: str = "IN", refresh: bool = False) -> dict:
         except Exception as e:  # noqa: BLE001 - one missing tile never hides the rest
             return sym, None, e
 
+    from . import nextday as nd
+
+    def _hourly(sym):
+        try:
+            return sym, nd.hourly(sym)
+        except Exception as e:  # noqa: BLE001 - the 08:45 check is skipped without it
+            log.info("hourly %s: %s", sym, e)
+            return sym, None
+
     tile_syms = sorted({t[0] for _, tiles in GROUPS_IN for t in tiles})
-    with ThreadPoolExecutor(max_workers=8) as ex:          # ~25 Yahoo calls in parallel instead of one by one
-        got_daily = list(ex.map(_daily, FACTORS + [{"sym": NIFTY, "name": "NIFTY 50"}]))
+    extra = [{"sym": s, "name": n} for s, n in [(nd.FUT, "S&P 500 futures"), ("^N225", "Nikkei 225"), ("^KS11", "Kospi"), ("^INDIAVIX", "India VIX")]]
+    with ThreadPoolExecutor(max_workers=8) as ex:          # ~35 Yahoo calls in parallel instead of one by one
+        got_daily = list(ex.map(_daily, FACTORS + [{"sym": NIFTY, "name": "NIFTY 50"}] + extra))
+        got_hourly = dict(ex.map(_hourly, [nd.SPX, nd.FUT, "^N225", "^KS11"]))
         quotes = {sym: (q, e) for sym, q, e in ex.map(_quote, tile_syms)}
         flows_future = ex.submit(fii_dii)
         today_future = ex.submit(_today_items, day)
@@ -412,6 +426,12 @@ def build(market: str = "IN", refresh: bool = False) -> dict:
     fv = factor_values(series, day)
     sc = score_of(fv)
     call = call_of(sc)
+    after = nd.after_close_factors({k: v for k, v in got_hourly.items() if v}, series, day, until=time.time())
+    sc2 = nd.score2_of(fv, after)
+    t2 = nd.track2()
+    check = {"score": sc2, **call_of(sc2), "factors": after, "proven": bool(t2 and t2.get("passed")),
+             "available_from": "06:30 IST, once Japan and Korea have traded an hour"}
+    headline = check if check["proven"] and sc2 is not None else {"score": sc, **call}
 
     groups = []
     for gname, tiles in GROUPS_IN:
@@ -440,7 +460,10 @@ def build(market: str = "IN", refresh: bool = False) -> dict:
 
     t = track()
     out = {"market": market, "day": day, "built": now.strftime("%Y-%m-%d %H:%M"), "built_ts": time.time(),
-           "score": sc, **call, "factors": fv, "rules": {"up": UP, "down": DOWN, "scale": SCALE},
+           **headline, "overnight": {"score": sc, **call}, "check_0845": check, "track2": t2,
+           "day_map": nd.day_map(series.get(NIFTY) or [], series.get("^INDIAVIX") or [], day),
+           "evening": nd.evening_preview({s: q for s, (q, e) in quotes.items() if q}, series, day, now),
+           "factors": fv, "rules": {"up": UP, "down": DOWN, "scale": SCALE},
            "groups": groups, "flows": flows_rows, "gift": {"available": False, "note": GIFT_NOTE},
            "today": today_future.result(), "track": t, "live": live_calls(series.get(NIFTY)), "notes": notes,
            "frozen": False,
@@ -448,7 +471,8 @@ def build(market: str = "IN", refresh: bool = False) -> dict:
     # freeze the morning call: the last build before 09:15 on the NIFTY day itself is the one that counts
     if day == now.date().isoformat() and (8, 0) <= (now.hour, now.minute) < (9, 15) and sc is not None:
         store.put_company(f"PREMARKET::CALL::IN::{day}", {"day": day, "score": sc, "call": call["call"], "label": call["label"],
-                                                          "built": out["built"], "factors": fv})
+                                                          "built": out["built"], "factors": fv, "score2": sc2,
+                                                          "call2": call_of(sc2)["call"], "after": after})
         out["frozen"] = True
     with _lock:
         _cache[market] = (time.time(), out)
@@ -467,6 +491,11 @@ def _loop() -> None:
             t = track()
             if t is None or (time.time() - store.get_company("PREMARKET_TRACK::IN")[0] > 7 * 86400 and now.hour < 8):
                 backtest()
+                from . import nextday
+                nextday.backtest2()
+            elif store.get_company("PREMARKET_TRACK2::IN") is None:
+                from . import nextday
+                nextday.backtest2()
             if now.weekday() < 5 and (8, 20) <= (now.hour, now.minute) < (9, 15) and time.time() - last_build > 540:
                 build("IN", refresh=True)
                 last_build = time.time()

@@ -39,6 +39,7 @@ function CallCard({ d }) {
       <div style={{ fontSize: 28, fontWeight: 800, margin: '10px 0 0', letterSpacing: '-0.02em' }}>{d.label}</div>
       {d.after_open && <div className="small t-warn" style={{ marginTop: 4 }}>The market is already open: this score was rebuilt after 09:15 for reference. The call that counts was saved at 09:14 (see Live calls below).</div>}
       <ScoreBar score={d.score} />
+      <div className="small muted">Main call: {d.check_0845?.proven && d.check_0845?.score != null ? 'the 08:45 check (it passed its test)' : 'the overnight score below (the 08:45 check hasn’t passed its test)'}</div>
       <div className="small muted" style={{ marginBottom: 6 }}>What moves the score (each market's last session before 09:15 IST, scaled by its own normal daily move)</div>
       {top.map((f) => (
         <div key={f.name} className="row" style={{ gap: 10, padding: '6px 0', borderTop: '1px solid var(--line)', alignItems: 'baseline' }}>
@@ -47,6 +48,7 @@ function CallCard({ d }) {
           <span className="small muted" style={{ whiteSpace: 'nowrap' }}>counts {f.contrib == null ? '—' : signed(f.contrib, 1)}</span>
         </div>
       ))}
+      <Check0845 d={d} />
       <div className="grid3 pm-hits" style={{ marginTop: 12 }}>
         <div className="tile">
           <div className="k">Open-direction calls right (backtest)</div>
@@ -66,6 +68,84 @@ function CallCard({ d }) {
         </div>
       </div>
       <p className="small" style={{ margin: '12px 0 0', color: 'var(--warn)', lineHeight: 1.5 }}>GIFT Nifty: {d.gift.note}</p>
+    </section>
+  )
+}
+
+function Check0845({ d }) {
+  const c = d.check_0845, t2 = d.track2
+  if (!c) return null
+  const a = t2?.all
+  const status = c.proven ? ['var(--good)', 'Passed its test: this is the main call now']
+    : t2 ? ['var(--warn)', `Not proven yet · ${t2.from?.slice(0, 7)} to ${t2.to?.slice(0, 7)}: right ${pctOf(a?.v2?.gap_hit)} vs the overnight call ${pctOf(a?.v1?.gap_hit)} vs always guessing ${pctOf(a?.v2?.gap_naive)}`]
+    : ['var(--muted)', 'Being tested on the last two years of hourly prices']
+  return (
+    <div className="tile" style={{ marginTop: 12 }}>
+      <div className="row between" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <div className="k">08:45 check: overnight call + US futures since the close + Asia now</div>
+        {c.score != null && <Badge tone={LEAN[c.call]}>{c.label} · {signed(c.score, 0)}</Badge>}
+      </div>
+      {c.score == null && <div className="s">Not available yet: needs US futures after the close and Asia's first hour (from {c.available_from}).</div>}
+      {c.factors.map((f) => (
+        <div key={f.name} className="s" style={{ marginTop: 4 }}>
+          <b style={{ color: f.contrib > 0 ? 'var(--good)' : f.contrib < 0 ? 'var(--bad)' : 'var(--muted)' }}>{f.contrib > 0 ? '+' : f.contrib < 0 ? '−' : '·'}</b>{' '}
+          {f.name}: {f.ret == null ? 'not yet' : `${signed(f.ret, 2)}%`} <span className="muted">· counts {signed(f.contrib, 1)} (×{f.w})</span>
+        </div>
+      ))}
+      <div className="s" style={{ marginTop: 6, color: status[0], fontWeight: 600 }}>{status[1]}</div>
+    </div>
+  )
+}
+
+function Evening({ e }) {
+  if (!e) return null
+  return (
+    <section className="card" aria-label="Evening preview" style={{ borderColor: 'var(--accent)' }}>
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+        <h3 style={{ margin: 0 }}>🌙 Evening preview for {dayName(e.day)}</h3>
+        <Badge tone={LEAN[e.call]}>{e.lean}</Badge>
+        <span className="small muted">{e.built} IST</span>
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 800, margin: '8px 0 4px' }}>{e.label} <span className="small muted">score {e.score == null ? '—' : signed(e.score, 0)}</span></div>
+      <div className="small muted">{e.factors.map((f) => `${f.name} ${f.ret == null ? '—' : `${signed(f.ret, 2)}%`}`).join(' · ')}</div>
+      <div className="small t-warn" style={{ marginTop: 6 }}>{e.note}</div>
+    </section>
+  )
+}
+
+function DayMap({ m }) {
+  if (!m) return null
+  const L = m.levels, rh = m.range_history
+  const lv = [['Prev high', L.prev_high], ['Prev low', L.prev_low], ['Prev close', L.prev_close], ['Pivot', L.pivot], ['CPR', `${num(L.cpr_bottom, 0)}–${num(L.cpr_top, 0)}`], ['R1', L.r1], ['S1', L.s1], ['R2', L.r2], ['S2', L.s2]]
+  return (
+    <section className="card" aria-label="Day map">
+      <h3>🗺️ Day map · {dayName(m.day)}</h3>
+      <div className="small muted" style={{ marginTop: -4, marginBottom: 10 }}>Levels and odds from NIFTY's own history; not a forecast of the day's direction.</div>
+      <div className="grid3 pm-hits">
+        <div className="tile">
+          <div className="k">Expected range today</div>
+          <div className="v">±{m.expected_move_pct}%</div>
+          <div className="s">≈ {num(m.range_low, 0)} – {num(m.range_high, 0)} · from India VIX {m.vix} ({dayName(m.vix_day)})</div>
+          {rh?.days > 0 && <div className="s">Since {m.since.slice(0, 4)}, NIFTY stayed inside this range all day on {rh.stayed_inside_pct}% of days and closed inside it on {rh.closed_inside_pct}%.</div>}
+        </div>
+        <div className="tile" style={{ gridColumn: 'span 2' }}>
+          <div className="k">Key levels from {dayName(m.prev_day)} · CPR width {L.cpr_width_pct}% {L.cpr_width_pct < 0.2 ? '(narrow: often a trending day)' : L.cpr_width_pct > 0.5 ? '(wide: often a range day)' : ''}</div>
+          <div className="pm-levels">{lv.map(([k, v]) => <div key={k}><span className="small muted">{k}</span><b>{typeof v === 'number' ? num(v, 0) : v}</b></div>)}</div>
+        </div>
+      </div>
+      <h4 style={{ marginTop: 14 }}>What NIFTY did after each size of opening gap (since {m.since.slice(0, 4)})</h4>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="pm-table">
+          <thead><tr><th>Opening gap</th><th>Days</th><th>Gap filled the same day</th><th>Closed above the open</th><th>Avg open → close</th></tr></thead>
+          <tbody>{m.gaps.map((g, i) => (
+            <tr key={g.label} style={i === m.actual_bucket ? { background: 'var(--card2)', fontWeight: 700 } : undefined}>
+              <td>{g.label}{i === m.actual_bucket ? ` ← today (${signed(m.actual_gap_pct, 2)}%)` : ''}</td><td>{num(g.days)}</td>
+              <td>{g.gap_filled_pct == null ? '—' : `${g.gap_filled_pct}%`}</td><td>{pctOf(g.closed_above_open_pct)}</td>
+              <td className={g.avg_open_to_close_pct > 0 ? 't-good' : g.avg_open_to_close_pct < 0 ? 't-bad' : ''}>{g.avg_open_to_close_pct == null ? '—' : `${signed(g.avg_open_to_close_pct, 2)}%`}</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <p className="small muted">{m.actual_bucket == null ? 'At 09:15 today’s opening gap is marked in this table. ' : ''}Gap filled = NIFTY traded back to the previous close the same day. Averages are history, not a promise.</p>
     </section>
   )
 }
@@ -166,16 +246,31 @@ function Track({ d, onRun, running }) {
           <p className="small muted" style={{ lineHeight: 1.5 }}>Rules fixed before the run: {t.rules.factors.map((f) => `${f.name} ×${f.w}`).join(' · ')}; score ≥ +{t.rules.up} gap-up, ≤ {t.rules.down} gap-down. Pass test: {t.rules.pass_rule} Days left out: {Object.entries(t.skipped).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(', ') || 'none'}. Tested {t.built}.</p>
         </div>
       )}
+      {d.track2?.days > 0 && (
+        <>
+          <h4>08:45 check vs the overnight call ({d.track2.from} to {d.track2.to}, {num(d.track2.days)} days of hourly data)</h4>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="pm-table">
+              <thead><tr><th>Window</th><th>Overnight call right</th><th>08:45 check right</th><th>Always guessing</th><th>Up / down calls (08:45)</th></tr></thead>
+              <tbody>{[['All', d.track2.all], ['Before 2026', d.track2.first_half], ['2026', d.track2.second_half]].map(([k, s]) => (
+                <tr key={k}><td>{k}</td><td>{pctOf(s.v1.gap_hit)}</td><td><b>{pctOf(s.v2.gap_hit)}</b></td><td>{pctOf(s.v2.gap_naive)}</td><td>{num(s.v2.up_calls)} / {num(s.v2.down_calls)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <p className="small muted">{d.track2.pass_rule} Result: <b className={d.track2.passed ? 't-good' : 't-warn'}>{d.track2.passed ? 'passed: it is the main call' : 'not passed: shown as a check only'}</b>. Tested {d.track2.built}.</p>
+        </>
+      )}
       <h4>Live calls</h4>
       {!d.live?.rows?.length && <p className="small muted">Each morning's call is saved at 09:14 and checked here after the open. Nothing is edited afterwards.</p>}
       {d.live?.rows?.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
           <table className="pm-table">
-            <thead><tr><th>Day</th><th>Call at 09:14</th><th>Score</th><th>Actual open</th><th>Open → close</th><th>Right?</th></tr></thead>
+            <thead><tr><th>Day</th><th>Call at 09:14</th><th>Score</th><th>Actual open</th><th>Open → close</th><th>Right?</th><th>08:45 check right?</th></tr></thead>
             <tbody>{d.live.rows.map((r) => (
               <tr key={r.day}><td>{dayName(r.day)}</td><td>{r.label}</td><td>{signed(r.score, 0)}</td>
                 <td>{r.gap == null ? 'not yet' : `${signed(r.gap, 2)}%`}</td><td>{r.move == null ? '—' : `${signed(r.move, 2)}%`}</td>
-                <td className={r.right == null ? 'muted' : r.right ? 't-good' : 't-bad'}>{r.right == null ? (r.call === 'flat' ? 'no call' : '—') : r.right ? 'Yes' : 'No'}</td></tr>
+                <td className={r.right == null ? 'muted' : r.right ? 't-good' : 't-bad'}>{r.right == null ? (r.call === 'flat' ? 'no call' : '—') : r.right ? 'Yes' : 'No'}</td>
+                <td className={r.right2 == null ? 'muted' : r.right2 ? 't-good' : 't-bad'}>{r.right2 == null ? (r.call2 === 'flat' ? 'no call' : '—') : r.right2 ? 'Yes' : 'No'}</td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -215,9 +310,13 @@ export default function PreMarket() {
       {d && (
         <>
           <div className="pm-top">
-            <CallCard d={d} />
+            <div>
+              <Evening e={d.evening} />
+              <CallCard d={d} />
+            </div>
             <Today d={d} />
           </div>
+          <DayMap m={d.day_map} />
           <Board d={d} />
           <Brief d={d} />
           <div className="card small muted">Coming next on this page: verified global news (a story counts only when 2+ independent sources report it) and stocks in focus from overnight filings, results, deals and US-listed shares.</div>
