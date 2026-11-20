@@ -14,7 +14,7 @@ import './styles.css'
 import { polyfillCountryFlagEmojis } from 'country-flag-emoji-polyfill'
 import flagFont from 'country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url'
 import { BottomNav, MarketToggle, SearchBox, SideNav } from './components/ui'
-import { applyTheme, getMarket, getTheme, go, isDesktop, isUS, marketCurrency, parseHash, setCurrency, setMarketLS } from './util'
+import { applyTheme, getMarket, getTheme, go, isDesktop, isUS, marketCurrency, parseHash, setCurrency, setMarketLS, me } from './util'
 import Home from './pages/Home'
 import Stock from './pages/Stock'
 import Rankings from './pages/Rankings'
@@ -23,6 +23,7 @@ import Compare from './pages/Compare'
 import Screener from './pages/Screener'
 import Movers from './pages/Movers'
 import PreMarket from './pages/PreMarket'
+import Account from './pages/Account'
 import Calendar from './pages/Calendar'
 import IndexStrip from './components/IndexStrip'
 import SmartMoney from './pages/SmartMoney'
@@ -70,6 +71,7 @@ function App() {
           {!desk && <MarketToggle market={market} onChange={changeMarket} />}
           {route.page !== 'home' || desk ? <div className="grow"><SearchBox key={market} /></div> : <div className="grow" />}
           {!desk && <button className="theme-btn" title="Light / dark theme" onClick={flipTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>}
+          {!desk && me() && <button className="avatar-btn" title="My account" aria-label="My account" onClick={() => go('account')}>{(me().name || me().email || '?').slice(0, 1).toUpperCase()}</button>}
           {!desk && <button className="star" title="Settings" onClick={() => go('settings')}>⚙️</button>}
           {desk && <div className="small muted" style={{ whiteSpace: 'nowrap' }}>{market === 'US' ? '🇺🇸 US market · $' : '🇮🇳 Indian market · ₹'}</div>}
         </div>
@@ -83,6 +85,7 @@ function App() {
         {route.page === 'screener' && <Screener />}
         {route.page === 'movers' && <Movers />}
         {route.page === 'premarket' && <PreMarket />}
+        {route.page === 'account' && <Account />}
         {route.page === 'calendar' && <Calendar tab={route.tab} />}
         {route.page === 'money' && <SmartMoney tab={route.tab} />}
         {route.page === 'guide' && <Guide />}

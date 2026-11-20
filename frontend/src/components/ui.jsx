@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { UNIVERSES, api, cur, getFno, getMarket, getUniv, go, logoUrl, ok, scoreColor, setFnoLS, setUnivLS } from '../util'
+import { UNIVERSES, api, cur, getFno, getMarket, getUniv, go, logoUrl, ok, scoreColor, setFnoLS, setUnivLS, me } from '../util'
 
 export function ScoreRing({ value, size = 84, label }) {
   const r = 34, c = 2 * Math.PI * r
@@ -191,6 +191,7 @@ export function SideNav({ page, market, onMarket, theme, onTheme }) {
       ))}
       <div className="grow" />
       <button className="sn" onClick={onTheme}><span style={{ width: 22, textAlign: 'center' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
+      {me() && <button className={`sn ${page === 'account' ? 'on' : ''}`} onClick={() => go('account')}><span className="avatar sm" aria-hidden="true">{(me().name || me().email || '?').slice(0, 1).toUpperCase()}</span>{me().name || 'My account'}</button>}
       <button className={`sn ${page === 'settings' ? 'on' : ''}`} onClick={() => go('settings')}><span style={{ width: 22, textAlign: 'center' }}>⚙️</span>Settings</button>
       <div className="small muted" style={{ padding: '10px 12px 0', lineHeight: 1.5 }}>Research aid, not investment advice.</div>
     </aside>

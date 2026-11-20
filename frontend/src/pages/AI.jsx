@@ -1,8 +1,8 @@
 import { marked } from 'marked'
-import { LogsCard, PhoneCard } from '../components/Access'
+import { AccountsCard, LogsCard, PhoneCard } from '../components/Access'
 import { useEffect, useRef, useState } from 'react'
 import { Badge } from '../components/ui'
-import { ago, api, go } from '../util'
+import { ago, api, go, me } from '../util'
 
 marked.setOptions({ gfm: true, breaks: true })
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -277,8 +277,8 @@ export function Settings() {
           : <div className="small t-good" style={{ marginTop: 8 }}>✓ {test.model} replied "{test.reply}" in {test.seconds}s</div>)}
         <p className="small muted" style={{ marginBottom: 0 }}>Keys are stored only on your laptop (backend/data/ai_settings.json, not in Git) and shown masked here.</p>
       </div>
-      <PhoneCard />
-      <LogsCard />
+      <AccountsCard />
+      {(!me() || me().role === 'owner') && <><PhoneCard /><LogsCard /></>}
     </>
   )
 }

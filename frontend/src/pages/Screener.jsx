@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FnoBadge, FnoToggle, Logo, ScoreRing, UniverseChips, useFno, useUniv } from '../components/ui'
 import { ExplainList } from './AI'
-import { api, cr, getMarket, go, inUniv, num, ok, ticker, univLabel } from '../util'
+import { api, cr, getMarket, go, inUniv, num, ok, saveLocal, ticker, univLabel } from '../util'
 
 // key, label, group, unit
 export const FIELDS = [
@@ -111,10 +111,10 @@ export default function Screener() {
   const save = () => {
     if (!name.trim()) return
     const s = [{ name: name.trim(), rules }, ...saved.filter((x) => x.name !== name.trim())]
-    setSaved(s); try { localStorage.setItem('eql_screens', JSON.stringify(s)) } catch { /* ignore */ }
+    setSaved(s); saveLocal('eql_screens', s)
     setActive(name.trim()); setName('')
   }
-  const del = (n) => { const s = saved.filter((x) => x.name !== n); setSaved(s); try { localStorage.setItem('eql_screens', JSON.stringify(s)) } catch { /* ignore */ } }
+  const del = (n) => { const s = saved.filter((x) => x.name !== n); setSaved(s); saveLocal('eql_screens', s) }
   const usePreset = (p) => { setRules(p.rules); setActive(p.name) }
   const showCols = [...new Set(rules.map((r) => r[0]))].filter((k) => F[k]?.unit !== 'bool').slice(0, 4)
 

@@ -7,6 +7,7 @@ import { Badge, DataTable, Loading, Logo, ScoreBar, ScoreRing, Tile } from '../c
 import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import StockChart from './StockChart'
 import EntryCard from '../components/EntryCard'
+import { NotesCard } from './Account'
 import { StockAI } from './AI'
 import { StockMoney, SurveillanceBanner } from './SmartMoney'
 import { KeyPoints, KeyRatios, LatestQuarter, StoryTimeline } from './OverviewExtra'
@@ -144,6 +145,7 @@ function Overview({ d }) {
       </div>
 
       <EntryCard e={a.entry} sym={d.symbol} />
+      <NotesCard symbol={d.symbol} />
 
       <div className="flow">
       <KeyRatios d={d} />

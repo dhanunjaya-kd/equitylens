@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import secrets
 import re
 import logging
 import os
@@ -20,10 +21,11 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 
 from . import universe as universe_mod
-from . import access, ai, brokers, calendars, config, enrich, flows, portfolio, premarket, indices, logos, movers, scraper, service, store, technicals, universe, us
+from . import access, accounts, ai, brokers, calendars, config, enrich, flows, portfolio, premarket, indices, logos, movers, scraper, service, store, technicals, universe, us
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 store.init()
+accounts.init()
 log = logging.getLogger("equitylens")
 
 app = FastAPI(title="EquityLens", version="1.0.0")
@@ -38,15 +40,202 @@ def _background_jobs():
 
 @app.middleware("http")
 async def password_gate(request: Request, call_next):
-    """With EQL_PASSWORD set (cloud), every /api call needs the login cookie."""
-    if access.password() and not access.is_open(request.url.path) and not access.check(request.cookies.get(access.COOKIE)):
+    """Accounts on (any account exists): every /api call needs a signed-in person, and members can't open the
+    owner's private pages. Before that: EQL_PASSWORD, when set, guards every /api call (cloud)."""
+    path = request.url.path
+    if accounts.enabled():
+        u = accounts.user_from_token(request.cookies.get(accounts.COOKIE))
+        tok = accounts.set_current(u)
+        try:
+            if not u and not access.is_open(path):
+                return JSONResponse({"detail": "Please sign in", "login": True, "accounts": True}, status_code=401)
+            if u and not accounts.is_owner(u) and path.startswith(accounts.OWNER_ONLY):
+                return JSONResponse({"detail": "Only the owner of this EquityLens can open this."}, status_code=403)
+            return await call_next(request)
+        finally:
+            accounts._current.reset(tok)
+    if access.password() and not access.is_open(path) and not access.check(request.cookies.get(access.COOKIE)):
         return JSONResponse({"detail": "Please sign in", "login": True}, status_code=401)
     return await call_next(request)
 
 
+def _https(request: Request) -> bool:
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+
+
+def _signed_in(u: dict, request: Request, body: Optional[dict] = None, redirect: Optional[str] = None):
+    token = accounts.new_session(u["id"], request.headers.get("user-agent", ""))
+    r = RedirectResponse(redirect, status_code=303) if redirect else JSONResponse(body or {"ok": True, "user": accounts.public_user(u)})
+    r.set_cookie(accounts.COOKIE, token, max_age=accounts.SESSION_DAYS * 86400, httponly=True, samesite="lax", secure=_https(request))
+    return r
+
+
+def _acc(fn, *a, **kw):
+    try:
+        return fn(*a, **kw)
+    except accounts.AccountError as e:
+        raise HTTPException(e.status, str(e)) from e
+
+
+def _owner() -> dict:
+    u = accounts.current()
+    if not u:
+        raise HTTPException(401, "Please sign in")
+    if not accounts.is_owner(u):
+        raise HTTPException(403, "Only the owner of this EquityLens can do this.")
+    return u
+
+
+def _me() -> dict:
+    u = accounts.current()
+    if not u:
+        raise HTTPException(400, "Sign-in isn't turned on in this EquityLens.")
+    return u
+
+
 @app.get("/api/auth")
 def auth_status(request: Request):
-    return {"required": bool(access.password()), "ok": access.check(request.cookies.get(access.COOKIE))}
+    if accounts.enabled():
+        u = accounts.current()
+        return {"required": True, "ok": bool(u), "accounts": True, "user": accounts.public_user(u),
+                "github": accounts.public_github()["enabled"]}
+    local = access.is_local(request.client.host if request.client else None, request.headers)
+    pw_ok = access.check(request.cookies.get(access.COOKIE))
+    return {"required": bool(access.password()), "ok": pw_ok, "accounts": False, "user": None, "github": False,
+            "can_setup": local or (bool(access.password()) and pw_ok)}
+
+
+@app.post("/api/auth/setup")
+def auth_setup(request: Request, body: dict = Body(...)):
+    """Create the owner account (turns sign-in on). Only from this computer, or after the EQL_PASSWORD sign-in."""
+    local = access.is_local(request.client.host if request.client else None, request.headers)
+    if not (local or (access.password() and access.check(request.cookies.get(access.COOKIE)))):
+        raise HTTPException(403, "Turn on sign-in from the computer running EquityLens.")
+    u = _acc(accounts.setup_owner, body.get("email"), body.get("name"), body.get("password"))
+    log.info("sign-in turned on; owner %s", u["email"])
+    return _signed_in(u, request)
+
+
+@app.post("/api/auth/login")
+def auth_login(request: Request, body: dict = Body(...)):
+    if not accounts.enabled():
+        raise HTTPException(400, "Sign-in isn't turned on yet.")
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "")
+    return _signed_in(_acc(accounts.login, body.get("email"), body.get("password"), ip), request)
+
+
+@app.post("/api/auth/register")
+def auth_register(request: Request, body: dict = Body(...)):
+    if not accounts.enabled():
+        raise HTTPException(400, "Sign-in isn't turned on yet.")
+    return _signed_in(_acc(accounts.register, body.get("email"), body.get("name"), body.get("password")), request)
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    accounts.end_session(request.cookies.get(accounts.COOKIE))
+    r = JSONResponse({"ok": True})
+    r.delete_cookie(accounts.COOKIE)
+    r.delete_cookie(access.COOKIE)
+    return r
+
+
+@app.post("/api/auth/password")
+def auth_password(body: dict = Body(...)):
+    _acc(accounts.change_password, _me(), body.get("old", ""), body.get("new", ""))
+    return {"ok": True}
+
+
+def _callback_url(request: Request) -> str:
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}/api/auth/github/callback"
+
+
+@app.get("/api/auth/github/start")
+def auth_github_start(request: Request):
+    gh = accounts.github_settings()
+    if not accounts.public_github()["enabled"]:
+        raise HTTPException(400, "GitHub sign-in isn't set up. The owner adds it in Settings → Accounts.")
+    state = secrets.token_urlsafe(24)
+    from urllib.parse import urlencode
+    url = "https://github.com/login/oauth/authorize?" + urlencode({"client_id": gh["client_id"], "redirect_uri": _callback_url(request),
+                                                                  "scope": "read:user user:email", "state": state, "allow_signup": "false"})
+    r = RedirectResponse(url, status_code=303)
+    r.set_cookie("eql_gh_state", state, max_age=600, httponly=True, samesite="lax", secure=_https(request))
+    return r
+
+
+@app.get("/api/auth/github/callback")
+def auth_github_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    from urllib.parse import quote as _q
+    expected = request.cookies.get("eql_gh_state") or ""
+    if error or not code or not state or not hmac.compare_digest(state, expected):
+        return RedirectResponse("/#/signin?error=" + _q(error or "GitHub sign-in was cancelled or expired. Try again."), status_code=303)
+    try:
+        gh = accounts.github_user(code, _callback_url(request))
+        u = accounts.github_login(gh, signed_in=accounts.current())
+    except accounts.AccountError as e:
+        return RedirectResponse("/#/signin?error=" + _q(str(e)), status_code=303)
+    except Exception as e:  # noqa: BLE001 - GitHub unreachable
+        log.warning("GitHub sign-in failed: %s", e)
+        return RedirectResponse("/#/signin?error=" + _q("Couldn't reach GitHub. Try again."), status_code=303)
+    r = _signed_in(u, request, redirect="/#/account" if accounts.current() else "/")
+    r.delete_cookie("eql_gh_state")
+    return r
+
+
+@app.get("/api/auth/github/config")
+def auth_github_config_get(request: Request):
+    _owner()
+    return accounts.public_github() | {"callback_url": _callback_url(request)}
+
+
+@app.post("/api/auth/github/config")
+def auth_github_config_save(request: Request, body: dict = Body(...)):
+    _owner()
+    return accounts.save_github_settings(body.get("client_id", ""), body.get("client_secret")) | {"callback_url": _callback_url(request)}
+
+
+@app.get("/api/auth/people")
+def auth_people():
+    _owner()
+    return accounts.people()
+
+
+@app.post("/api/auth/invites")
+def auth_invite(body: dict = Body(...)):
+    u = _owner()
+    return _acc(accounts.invite, body.get("who", ""), u["id"])
+
+
+@app.delete("/api/auth/invites/{who}")
+def auth_uninvite(who: str):
+    _owner()
+    accounts.remove_invite(who)
+    return {"ok": True}
+
+
+@app.delete("/api/auth/users/{uid}")
+def auth_remove_user(uid: int):
+    _acc(accounts.remove_user, uid, _owner())
+    return {"ok": True}
+
+
+@app.get("/api/me/data")
+def me_data():
+    return accounts.get_data(_me()["id"])
+
+
+@app.put("/api/me/data/{key}")
+def me_data_put(key: str, body=Body(...)):
+    _acc(accounts.put_data, _me()["id"], key, body)
+    return {"ok": True}
+
+
+@app.get("/api/me/export")
+def me_export():
+    return accounts.export(_me())
 
 
 @app.post("/api/login")
@@ -63,10 +252,8 @@ def login(request: Request, body: dict = Body(...)):
 
 
 @app.post("/api/logout")
-def logout():
-    r = JSONResponse({"ok": True})
-    r.delete_cookie(access.COOKIE)
-    return r
+def logout(request: Request):
+    return auth_logout(request)
 
 
 @app.post("/api/shutdown")

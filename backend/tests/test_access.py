@@ -17,7 +17,8 @@ from app.main import app  # noqa: E402
 def test_no_password_means_open():
     os.environ.pop("EQL_PASSWORD", None)
     c = TestClient(app)
-    assert c.get("/api/auth").json() == {"required": False, "ok": True}
+    a = c.get("/api/auth").json()
+    assert a["required"] is False and a["ok"] is True and a["accounts"] is False
     assert c.get("/api/brokers").status_code == 200
 
 
@@ -30,7 +31,8 @@ def test_password_gate():
         assert r.status_code == 401 and r.json()["login"] is True
         assert c.get("/api/ai/settings").status_code == 401         # keys are protected
         assert c.get("/").status_code in (200, 404)                  # the page itself loads, then asks to sign in
-        assert c.get("/api/auth").json() == {"required": True, "ok": False}
+        a = c.get("/api/auth").json()
+        assert a["required"] is True and a["ok"] is False and a["accounts"] is False
         assert c.post("/api/login", json={"password": "nope"}).status_code == 401
         r = c.post("/api/login", json={"password": "s3cret-pass"})
         assert r.status_code == 200 and access.COOKIE in r.cookies

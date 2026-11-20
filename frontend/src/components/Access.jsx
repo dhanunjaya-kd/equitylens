@@ -1,19 +1,180 @@
 import { useEffect, useRef, useState } from 'react'
 import qrcode from 'qrcode-generator'
-import { api } from '../util'
+import { ago, api, loadAccountData } from '../util'
 
-// ---------------------------------------------------------------- sign-in (only when EQL_PASSWORD is set)
+// ---------------------------------------------------------------- sign-in
+// Accounts on: every person signs in (GitHub or email + password). Before that: the old EQL_PASSWORD screen, if set.
 export function Gate({ children }) {
-  const [need, setNeed] = useState(null)
+  const [a, setA] = useState(null)
+  const check = () => api('/api/auth')
+    .then(async (x) => { if (x.accounts && x.user) { try { await loadAccountData(x.user) } catch { /* lists stay as they are */ } } setA(x) })
+    .catch(() => setA({ ok: true }))
   useEffect(() => {
-    api('/api/auth').then((a) => setNeed(a.required && !a.ok)).catch(() => setNeed(false))
-    const on = () => setNeed(true)
-    window.addEventListener('eql-login', on)
-    return () => window.removeEventListener('eql-login', on)
+    check()
+    window.addEventListener('eql-login', check)
+    return () => window.removeEventListener('eql-login', check)
   }, [])
-  if (need === null) return null
-  if (need) return <Login onDone={() => { setNeed(false); window.location.reload() }} />
+  if (!a) return null
+  if (a.accounts && !a.ok) return <SignIn github={a.github} />
+  if (!a.accounts && a.required && !a.ok) return <Login onDone={() => window.location.reload()} />
   return children
+}
+
+const postJSON = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+const GitHubIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21" /></svg>
+)
+
+export function SignIn({ github }) {
+  const hashErr = (() => { try { return new URLSearchParams(window.location.hash.split('?')[1] || '').get('error') } catch { return null } })()
+  const [mode, setMode] = useState('in'), [email, setEmail] = useState(''), [name, setName] = useState(''), [pw, setPw] = useState('')
+  const [err, setErr] = useState(hashErr), [busy, setBusy] = useState(false)
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true); setErr(null)
+    try {
+      await postJSON(mode === 'in' ? '/api/auth/login' : '/api/auth/register', { email, password: pw, name })
+      window.location.hash = '#/'; window.location.reload()
+    } catch (er) { setErr(er.message) } finally { setBusy(false) }
+  }
+  return (
+    <div className="login-wrap">
+      <form className="card login signin" onSubmit={submit}>
+        <img src="/icon.svg" alt="" width="52" height="52" />
+        <h2 style={{ margin: '10px 0 2px' }}>{mode === 'in' ? 'Sign in' : 'Create your account'}</h2>
+        <div className="small muted" style={{ marginBottom: 16, lineHeight: 1.5 }}>Your watchlist, saved screens, notes and chart layouts follow you to every device.</div>
+        {github && (
+          <>
+            <a className="btn gh-btn" href="/api/auth/github/start"><GitHubIcon /> Continue with GitHub</a>
+            <div className="or-line small muted"><span />or with your email<span /></div>
+          </>
+        )}
+        {mode === 'up' && (
+          <label className="small muted field">Name
+            <input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
+          </label>
+        )}
+        <label className="small muted field">Email
+          <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+        </label>
+        <label className="small muted field">Password
+          <input type="password" required minLength={mode === 'up' ? 10 : undefined} autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+            value={pw} onChange={(e) => setPw(e.target.value)} placeholder={mode === 'up' ? 'At least 10 characters' : ''} />
+        </label>
+        <button className="btn primary" disabled={!email || !pw || busy} style={{ width: '100%', marginTop: 12, height: 46 }}>
+          {busy ? 'Please wait…' : mode === 'in' ? 'Sign in' : 'Create account'}
+        </button>
+        {err && <div role="alert" className="small t-bad" style={{ marginTop: 10, lineHeight: 1.45 }}>⚠️ {err}</div>}
+        <div className="small" style={{ marginTop: 14 }}>
+          {mode === 'in'
+            ? <>Invited by the owner? <button type="button" className="linkish" onClick={() => { setMode('up'); setErr(null) }}>Create account</button></>
+            : <>Have an account? <button type="button" className="linkish" onClick={() => { setMode('in'); setErr(null) }}>Sign in</button></>}
+        </div>
+        <div className="small muted" style={{ marginTop: 14, lineHeight: 1.5 }}>This EquityLens is invite-only. Passwords are stored only as a salted hash on its server. GitHub shares your username and email, nothing else.</div>
+      </form>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- Settings → Accounts (turn on sign-in, invite people, GitHub)
+export function AccountsCard() {
+  const [a, setA] = useState(null)
+  useEffect(() => { api('/api/auth').then(setA).catch(() => {}) }, [])
+  if (!a) return null
+  if (!a.accounts) return <SetupCard can={a.can_setup} />
+  if (a.user?.role !== 'owner') return null
+  return <><PeopleCard /><GitHubCard /></>
+}
+
+function SetupCard({ can }) {
+  const [f, setF] = useState({ name: '', email: '', password: '', again: '' }), [err, setErr] = useState(null), [busy, setBusy] = useState(false)
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const go2 = async (e) => {
+    e.preventDefault()
+    if (f.password !== f.again) return setErr('The two passwords are different.')
+    setBusy(true); setErr(null)
+    try { await postJSON('/api/auth/setup', f); window.location.hash = '#/account'; window.location.reload() } catch (x) { setErr(x.message) } finally { setBusy(false) }
+  }
+  return (
+    <div className="card">
+      <h3>👤 Accounts and sign-in</h3>
+      <p className="small muted" style={{ lineHeight: 1.5, marginTop: 0 }}>Sign-in is off: anyone who can open this EquityLens uses the same lists. Turn it on to give each person their own watchlist, screens, notes and AI key, and to invite people by email or GitHub username. You become the owner.</p>
+      {!can && <p className="small t-warn">Turn sign-in on from the computer that runs EquityLens.</p>}
+      {can && (
+        <form onSubmit={go2} className="grid2">
+          <label className="small muted field">Your name<input value={f.name} onChange={set('name')} autoComplete="name" /></label>
+          <label className="small muted field">Email<input type="email" required value={f.email} onChange={set('email')} autoComplete="email" /></label>
+          <label className="small muted field">Password (10+ characters)<input type="password" required minLength={10} value={f.password} onChange={set('password')} autoComplete="new-password" /></label>
+          <label className="small muted field">Password again<input type="password" required value={f.again} onChange={set('again')} autoComplete="new-password" /></label>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <button className="btn primary" disabled={busy}>{busy ? 'Turning on…' : 'Turn on sign-in and create my owner account'}</button>
+            {err && <div className="small t-bad" style={{ marginTop: 8 }}>⚠️ {err}</div>}
+            <div className="small muted" style={{ marginTop: 8 }}>After this everyone, including you, signs in. The lists already in this browser can be added to your account in one tap.</div>
+          </div>
+        </form>
+      )}
+    </div>
+  )
+}
+
+function PeopleCard() {
+  const [p, setP] = useState(null), [who, setWho] = useState(''), [err, setErr] = useState(null)
+  const load = () => api('/api/auth/people').then(setP).catch((x) => setErr(x.message))
+  useEffect(() => { load() }, [])
+  const add = async (e) => { e.preventDefault(); setErr(null); try { await postJSON('/api/auth/invites', { who }); setWho(''); load() } catch (x) { setErr(x.message) } }
+  const del = async (path) => { try { await api(path, { method: 'DELETE' }); load() } catch (x) { setErr(x.message) } }
+  return (
+    <div className="card">
+      <h3>👥 People</h3>
+      <form onSubmit={add} className="row" style={{ gap: 8 }}>
+        <input className="grow" aria-label="Invite by email or GitHub username" placeholder="Invite: friend@example.com or a GitHub username" value={who} onChange={(e) => setWho(e.target.value)} />
+        <button className="btn primary" disabled={!who.trim()}>Invite</button>
+      </form>
+      <div className="small muted" style={{ marginTop: 6 }}>Invited people create their account on the sign-in screen (email) or with Continue with GitHub. Send them this EquityLens's address.</div>
+      {err && <div className="small t-bad" style={{ marginTop: 6 }}>⚠️ {err}</div>}
+      {p && (
+        <>
+          <h4>Accounts</h4>
+          {p.users.map((u) => (
+            <div key={u.id} className="row between" style={{ padding: '7px 0', borderTop: '1px solid var(--line)', gap: 8 }}>
+              <span><b>{u.name}</b> <span className="small muted">{u.email || ''}{u.github ? ` · GitHub @${u.github}` : ''} · {u.role}{u.last_login ? ` · last in ${ago(u.last_login)}` : ''}</span></span>
+              {u.role !== 'owner' && <button className="btn small" onClick={() => window.confirm(`Remove ${u.name}? Their saved lists are deleted.`) && del(`/api/auth/users/${u.id}`)}>Remove</button>}
+            </div>
+          ))}
+          <h4>Invites</h4>
+          {!p.invites.length && <div className="small muted">No invites yet.</div>}
+          {p.invites.map((i) => (
+            <div key={i.who} className="row between" style={{ padding: '7px 0', borderTop: '1px solid var(--line)', gap: 8 }}>
+              <span>{i.kind === 'github' ? `GitHub @${i.who}` : i.who} <span className="small muted">· {i.used_by ? 'joined' : 'not joined yet'}</span></span>
+              {!i.used_by && <button className="btn small" onClick={() => del(`/api/auth/invites/${encodeURIComponent(i.who)}`)}>Cancel</button>}
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+function GitHubCard() {
+  const [g, setG] = useState(null), [msg, setMsg] = useState(null)
+  useEffect(() => { api('/api/auth/github/config').then(setG).catch(() => {}) }, [])
+  if (!g) return null
+  const save = async () => { try { setG(await postJSON('/api/auth/github/config', g)); setMsg('Saved ✓') } catch (x) { setMsg(`⚠️ ${x.message}`) } }
+  return (
+    <div className="card">
+      <h3>GitHub sign-in {g.enabled ? <span className="small t-good">· on</span> : <span className="small muted">· off</span>}</h3>
+      <ol className="small" style={{ lineHeight: 1.6, paddingLeft: 18, marginTop: 0 }}>
+        <li>On github.com: your photo → <b>Settings → Developer settings → OAuth Apps → New OAuth App</b>.</li>
+        <li>Application name: <b>EquityLens</b>. Homepage URL: this EquityLens's address. <b>Authorization callback URL</b>: <code style={{ userSelect: 'all' }}>{g.callback_url}</code></li>
+        <li>Register, then <b>Generate a new client secret</b>. Paste the Client ID and the secret below.</li>
+      </ol>
+      <div className="grid2">
+        <label className="small muted field">Client ID<input value={g.client_id} onChange={(e) => setG({ ...g, client_id: e.target.value })} /></label>
+        <label className="small muted field">Client secret<input type="password" value={g.client_secret} onChange={(e) => setG({ ...g, client_secret: e.target.value })} /></label>
+      </div>
+      <div className="row" style={{ gap: 8, marginTop: 10 }}><button className="btn primary" onClick={save}>Save</button>{msg && <span className="small">{msg}</span>}</div>
+      <div className="small muted" style={{ marginTop: 8 }}>The callback URL must match exactly. Opening EquityLens on another address (cloud domain, Tailscale)? Use that address in the OAuth App.</div>
+    </div>
+  )
 }
 
 function Login({ onDone }) {

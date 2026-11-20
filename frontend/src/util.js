@@ -59,9 +59,65 @@ export function ago(ts) {
   return `${Math.round(s / 86400)} d ago`
 }
 
-// --- local lists (stored on this device only)
+// --- saved lists: kept in this browser, and copied to your account when sign-in is on
+// browser key -> account key
+export const SYNC = { eql_watch: 'watchlist', eql_recent: 'recent', eql_screens: 'screens', eql_over2: 'chart_over', eql_panes: 'chart_panes', eql_notes: 'notes' }
+let ME = null
+const timers = {}
+export const me = () => ME
+export const setMe = (u) => { ME = u }
+const push = (k) => {
+  if (!ME || !SYNC[k]) return
+  clearTimeout(timers[k])
+  timers[k] = setTimeout(() => {
+    const v = localStorage.getItem(k)
+    api(`/api/me/data/${SYNC[k]}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: v ?? 'null' }).catch(() => {})
+  }, 700)
+}
+export const saveLocal = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* private mode */ } ; push(k) }
 const read = (k) => { try { return JSON.parse(localStorage.getItem(k) || '[]') } catch { return [] } }
-const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* private mode */ } }
+const write = saveLocal
+
+// After sign-in: the account's copy replaces this browser's. Lists that exist only in this browser are kept aside
+// (eql_device_backup) so My account can offer to add them; nothing is copied without asking.
+export async function loadAccountData(user) {
+  setMe(user)
+  const data = await api('/api/me/data')
+  const backup = {}
+  for (const [k, key] of Object.entries(SYNC)) {
+    const local = localStorage.getItem(k)
+    if (data[key] !== undefined) localStorage.setItem(k, JSON.stringify(data[key]))
+    else if (local && local !== '[]' && local !== '{}') { backup[k] = local; localStorage.removeItem(k) }
+  }
+  const old = JSON.parse(localStorage.getItem('eql_device_backup') || '{}')
+  if (Object.keys(backup).length) localStorage.setItem('eql_device_backup', JSON.stringify({ ...old, ...backup }))
+  window.dispatchEvent(new Event('eql-data'))
+}
+export const deviceBackup = () => { try { return JSON.parse(localStorage.getItem('eql_device_backup') || '{}') } catch { return {} } }
+export async function importDeviceBackup() {
+  const b = deviceBackup()
+  for (const [k, raw] of Object.entries(b)) {
+    let mine, theirs
+    try { mine = JSON.parse(localStorage.getItem(k) || 'null'); theirs = JSON.parse(raw) } catch { continue }
+    let merged = theirs
+    if (Array.isArray(theirs) && Array.isArray(mine)) {          // lists: keep the account's items first, add the new ones
+      const key = (x) => (x && (x.symbol || x.name)) || JSON.stringify(x)
+      const seen = new Set(mine.map(key))
+      merged = [...mine, ...theirs.filter((x) => !seen.has(key(x)))]
+    } else if (mine && typeof mine === 'object' && !Array.isArray(mine)) merged = { ...theirs, ...mine }
+    localStorage.setItem(k, JSON.stringify(merged))
+    push(k)
+  }
+  localStorage.removeItem('eql_device_backup')
+  window.dispatchEvent(new Event('eql-data'))
+}
+export const dropDeviceBackup = () => { localStorage.removeItem('eql_device_backup') }
+export async function signOut() {
+  try { await api('/api/auth/logout', { method: 'POST' }) } catch { /* already signed out */ }
+  for (const k of Object.keys(SYNC)) localStorage.removeItem(k)         // the next person on this device sees none of it
+  window.location.hash = '#/'
+  window.location.reload()
+}
 export const watchlist = {
   all: () => read('eql_watch'),
   has: (s) => read('eql_watch').some((w) => w.symbol === s),
@@ -87,6 +143,7 @@ export function parseHash() {
   if (parts[0] === 'screener') return { page: 'screener' }
   if (parts[0] === 'movers') return { page: 'movers' }
   if (parts[0] === 'premarket') return { page: 'premarket' }
+  if (parts[0] === 'account') return { page: 'account' }
   if (parts[0] === 'guide') return { page: 'guide' }
   if (parts[0] === 'portfolio') return { page: 'portfolio' }
   if (parts[0] === 'money') return { page: 'money', tab: parts[1] }

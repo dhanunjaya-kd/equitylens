@@ -464,3 +464,18 @@ html, body { transition: background-color .2s ease; }
 .pm-table td { padding: 8px 10px 8px 0; border-top: 1px solid var(--line); }
 @media (max-width: 900px) { .pm-top { grid-template-columns: 1fr; } .pm-hits { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .pm-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+
+/* Sign-in and account */
+.login.signin { max-width: 400px; width: 100%; text-align: left; }
+.login.signin > img, .login.signin > h2 { display: block; }
+.gh-btn { display: flex; align-items: center; justify-content: center; gap: 10px; height: 46px; width: 100%; box-sizing: border-box; font-weight: 600; text-decoration: none; color: var(--text); }
+.or-line { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; }
+.or-line span { flex: 1; height: 1px; background: var(--line); }
+.field { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+.field input { width: 100%; box-sizing: border-box; height: 44px; }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--card2); border: 1px solid var(--line); color: var(--accent);
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 800; flex: none; }
+.avatar.sm { width: 22px; height: 22px; font-size: 12px; }
+.avatar-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--card2); color: var(--accent); font-weight: 800; }
+.login.signin input { text-align: left; font-size: 15px; }

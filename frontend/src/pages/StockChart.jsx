@@ -3,7 +3,7 @@ import {
   CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, createChart, createSeriesMarkers,
 } from 'lightweight-charts'
 import { Badge, Loading, Tile } from '../components/ui'
-import { api, cssVar, isDesktop, num, ok, pct, rs, signed } from '../util'
+import { api, cssVar, isDesktop, num, ok, pct, rs, saveLocal, signed } from '../util'
 import { Md } from './AI'
 
 const COL = {
@@ -15,7 +15,7 @@ const OVERLAYS = [['cone', 'Future range'], ['ema20', 'EMA 20'], ['ema50', 'EMA 
 const PANES = [['vol', 'Volume'], ['rsi', 'RSI'], ['macd', 'MACD'], ['adx', 'ADX']]
 const RANGES = { '1d': [['3M', 63], ['6M', 126], ['1Y', 252], ['3Y', 756], ['5Y', 1300]], '1wk': [['1Y', 52], ['3Y', 156], ['5Y', 260], ['10Y', 530]] }
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
-const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* ignore */ } }
+const save = saveLocal
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fmtDay = (d) => { if (!d) return '—'; const [y, m, dd] = d.split('-'); return `${+dd} ${MON[+m - 1]} ${y}` }

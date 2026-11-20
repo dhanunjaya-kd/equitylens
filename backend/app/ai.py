@@ -23,7 +23,7 @@ from typing import Optional
 
 import requests
 
-from . import config, store
+from . import accounts, config, store
 
 SETTINGS_FILE = config.DATA_DIR / "ai_settings.json"
 DEFAULTS = {
@@ -47,7 +47,18 @@ class AIError(Exception):
 
 
 # ------------------------------------------------------------------ settings
+def _member() -> Optional[dict]:
+    """A signed-in person who isn't the owner: they bring their own AI key and never see the owner's."""
+    u = accounts.current()
+    return u if u and not accounts.is_owner(u) else None
+
+
 def load_settings() -> dict:
+    if m := _member():
+        s = {k: ("" if k in SECRET_KEYS else v) for k, v in DEFAULTS.items()}
+        s.update({k: v for k, v in (accounts.get_data(m["id"], "ai_settings") or {}).items() if k in DEFAULTS and v not in (None, "")})
+        s["ollama_url"] = DEFAULTS["ollama_url"]          # members can't point the server at other addresses
+        return s
     s = dict(DEFAULTS)
     if SETTINGS_FILE.exists():
         try:
@@ -58,6 +69,16 @@ def load_settings() -> dict:
 
 
 def save_settings(new: dict) -> dict:
+    if m := _member():
+        cur = accounts.get_data(m["id"], "ai_settings") or {}
+        for k in DEFAULTS:
+            if k in new and k != "ollama_url":
+                v = new[k]
+                if k in SECRET_KEYS and (v is None or "•" in str(v)):
+                    continue
+                cur[k] = v
+        accounts.put_data(m["id"], "ai_settings", cur)
+        return public_settings()
     cur = {}
     if SETTINGS_FILE.exists():
         try:
