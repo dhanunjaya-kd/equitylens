@@ -23,15 +23,38 @@ function heldText(l) {
   return `held ${l.held} of ${l.tests} test${l.tests > 1 ? 's' : ''}${l.tests < 3 ? ' · thin evidence' : ''}`
 }
 
-function Ladder({ lv, cur }) {
+function TrackLine({ tr }) {
+  if (!tr) {
+    return <div className="small" style={{ color: 'var(--warn)', margin: '4px 0 6px' }}>Not tested yet: whether a level's past record predicts its next test. Run <code>tools\levels_backtest.py</code> once; until then the counts are history only.</div>
+  }
+  const side = (k, lab) => {
+    const b = tr.result?.[k]
+    if (!b) return null
+    const st = b.passed === true ? ['var(--good)', 'past record DID predict the next test'] : b.passed === false ? ['var(--bad)', 'past record did NOT predict the next test'] : ['var(--warn)', 'too few tests to say']
+    return <div key={k}>{lab}: all levels held at the next test {b.all.held_pct}% of {b.all.n.toLocaleString('en-IN')} → <b style={{ color: st[0] }}>{st[1]}</b></div>
+  }
+  return (
+    <div className="small" style={{ margin: '4px 0 6px', lineHeight: 1.5 }}>
+      <div className="muted">Backtest, {tr.universe}, {tr.stocks} stocks, {tr.tests?.toLocaleString('en-IN')} level tests (built {tr.built}). Fixed test: {tr.pass_test}</div>
+      {side('support', 'Supports')}{side('resistance', 'Resistances')}
+      {tr.market_note && <div style={{ color: 'var(--warn)' }}>{tr.market_note}</div>}
+    </div>
+  )
+}
+
+function Ladder({ lv, cur, tr }) {
   const row = (l, i) => {
     const res = l.kind === 'resistance'
+    const b = tr?.result?.[l.kind]?.buckets?.[l.bucket]
     return (
       <div key={`${l.kind}${i}`} className="pmap-lv">
         <span className="pmap-kind" style={{ color: res ? 'var(--bad)' : 'var(--good)' }}>{res ? 'RESISTANCE' : 'SUPPORT'}</span>
         <b className="pmap-px">{cur}{n2(l.price)}</b>
         <span className="pmap-dist">{sg(l.dist_pct)}</span>
-        <span className="pmap-what">{l.what}</span>
+        <span className="pmap-what">{l.what}
+          {b && b.n >= 100 && <span className="pmap-bt">Backtest: {l.kind === 'support' ? 'supports' : 'resistances'} with this record ({l.bucket}) held at the next test {b.held_pct}% of {b.n.toLocaleString('en-IN')} times</span>}
+          {b && b.n < 100 && <span className="pmap-bt" style={{ color: 'var(--warn)' }}>Backtest: only {b.n} tests of levels with this record ({l.bucket}), too few for a percentage</span>}
+        </span>
         <span className="pmap-held">{heldText(l)}</span>
       </div>
     )
@@ -39,7 +62,8 @@ function Ladder({ lv, cur }) {
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>Where buyers and sellers stepped in before</h3>
-      <div className="small muted" style={{ marginBottom: 8 }}>Each level comes from this stock's own prices. A test = price came within 1%; held = it moved 3% away before closing 1% through, within 20 sessions.</div>
+      <div className="small muted">Each level comes from this stock's own prices. A test = price came within 1%; held = it moved 3% away before closing 1% through, within 20 sessions.</div>
+      <TrackLine tr={tr} />
       {[...lv.resistance].reverse().map(row)}
       <div className="pmap-lv pmap-now">
         <span className="pmap-kind">NOW</span><b className="pmap-px">{cur}{n2(lv.price)}</b><span className="pmap-dist" /><span className="pmap-what">Last close</span><span className="pmap-held" />
@@ -125,9 +149,13 @@ function Range({ r, cur }) {
   )
 }
 
-function Sector({ s, sym }) {
+function Sector({ s, sym, m }) {
   const ix = s.index
   const rows = []
+  if (m && !m.error) {
+    rows.push([`Market · ${m.name} from its high`, `−${m.fall_pct}% · ${m.stage.toLowerCase()} · ${m.above50 ? 'above' : 'below'} its 50-day, ${m.above200 ? 'above' : 'below'} its 200-day`])
+    if (m.beta) rows.push([`How much ${sym} moves with the market`, `about ${m.beta.beta}× its daily moves (correlation ${m.beta.corr}, ${m.beta.n} days)`])
+  }
   if (ix && !ix.error) {
     rows.push([`${ix.name} (${ix.ticker}) from its high`, `−${ix.fall_pct}% · ${ix.stage.toLowerCase()}`])
     rows.push(['Sector trend', `${ix.above50 ? 'above' : 'below'} its 50-day, ${ix.above200 ? 'above' : 'below'} its 200-day`])
@@ -138,9 +166,11 @@ function Sector({ s, sym }) {
   if (s.vs_sector_3m) rows.push([`${sym} vs ${s.vs_sector_3m.against}, last 3 months`, `${sg(s.vs_sector_3m.stock)} vs ${sg(s.vs_sector_3m.sector)} → ${s.vs_sector_3m.diff >= 0 ? 'stronger' : 'weaker'} by ${Math.abs(s.vs_sector_3m.diff)} pts`])
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Is the whole sector falling, or just this stock?</h3>
-      <p style={{ fontWeight: 600, margin: '0 0 8px' }}>{s.answer}</p>
+      <h3 style={{ marginTop: 0 }}>Is it the market, the sector, or just this stock?</h3>
+      <p style={{ fontWeight: 600, margin: '0 0 2px' }}>{s.layers || s.answer}</p>
+      {s.layers && <p className="small muted" style={{ margin: '0 0 8px' }}>{s.answer}</p>}
       {rows.map(([k, v]) => <div key={k} className="pmap-kv"><span className="muted">{k}</span><b>{v}</b></div>)}
+      {m?.error && <div className="small" style={{ color: 'var(--warn)', marginTop: 6 }}>Market index: {m.error}.</div>}
       {ix?.error && <div className="small" style={{ color: 'var(--warn)', marginTop: 6 }}>Sector index: {ix.error}. Using peers only.</div>}
       {!ix && <div className="small muted" style={{ marginTop: 6 }}>No sector index matches “{(s.path || []).join(' › ')}”, so peers only.</div>}
       {s.peers?.length > 0 && (
@@ -156,6 +186,43 @@ function Sector({ s, sym }) {
         </div>
       )}
       <div className="small muted" style={{ marginTop: 6 }}>India uses the closest NSE sector index; US uses the closest sector fund, matched on the SEC industry.</div>
+    </div>
+  )
+}
+
+function ValueFloor({ v, cur, price }) {
+  const fmtR = (r) => (r.below !== undefined ? `below ${cur}${n2(r.below)}` : r.above !== undefined ? `above ${cur}${n2(r.above)}` : `${cur}${n2(r.from)} – ${cur}${n2(r.to)}`)
+  const pc = (x) => (x === null || x === undefined ? '—' : sg(x))
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>Value floor from its own P/E history</h3>
+      {!v.ranges && <p className="small muted">{v.note}</p>}
+      {v.ranges && (
+        <>
+          <div className="small muted" style={{ marginBottom: 6 }}>{v.how}</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="pm-table" style={{ minWidth: 520 }}>
+              <thead><tr><th>P/E state</th><th>Price range</th>{v.record && <><th>12m vs peers</th><th>24m</th><th>36m</th><th>Stock-months tested</th></>}</tr></thead>
+              <tbody>{v.ranges.map((r) => {
+                const here = r.state === v.pe_state
+                const rec = v.record?.[r.state]
+                return (
+                  <tr key={r.state} style={here ? { background: 'var(--card2)', fontWeight: 700 } : undefined}>
+                    <td>{r.state}{here ? ' ← now' : ''}</td><td>{fmtR(r)}</td>
+                    {v.record && <><td>{pc(rec?.p12)}</td><td>{pc(rec?.p24)}</td><td>{pc(rec?.p36)}</td><td>{rec?.n?.toLocaleString('en-IN') ?? '—'}</td></>}
+                  </tr>)
+              })}</tbody>
+            </table>
+          </div>
+          <div className="small" style={{ marginTop: 6 }}>Now: {cur}{n2(price)}, P/E at the {v.pe_percentile}th percentile of its own history ({v.pe_state}).{v.state && v.state !== v.pe_state ? ` The entry card says ${v.state} because it also uses fair value (${v.fv_state}).` : ''}</div>
+          {v.record ? (
+            <div className="small muted" style={{ marginTop: 4 }}>
+              Record: entry backtest ({v.record_scope}, built {v.record_built}), average return minus same-month peers. {v.record_basis}
+              {v.value_test && <> Fixed value test ({v.value_test.rule}): <b style={{ color: v.value_test.passed ? 'var(--good)' : 'var(--bad)' }}>{v.value_test.passed ? 'passed' : 'not passed'}</b>.</>}
+            </div>
+          ) : <div className="small" style={{ color: 'var(--warn)', marginTop: 4 }}>{v.record_note}</div>}
+        </>
+      )}
     </div>
   )
 }
@@ -297,9 +364,10 @@ export default function PriceMap({ symbol }) {
           s={d.sector.breadth ? `${d.sector.breadth.above50} of ${d.sector.breadth.of} peers above their 50-day` : 'no peer prices'} />
         <Tile k="Business" v={d.business.score !== null && d.business.score !== undefined ? `${Math.round(d.business.score)}/100` : '—'} s={d.business.verdict || ''} />
       </div>
-      <Ladder lv={d.levels} cur={cur} />
+      <Ladder lv={d.levels} cur={cur} tr={d.level_track} />
       <Further f={d.further} w={w} cur={cur} sym={sym} />
-      <Sector s={d.sector} sym={sym} />
+      <Sector s={d.sector} sym={sym} m={d.market} />
+      <ValueFloor v={d.value} cur={cur} price={w.price} />
       <Signals list={d.signals} />
       <Business b={d.business} />
       <PriceMapAI sym={d.symbol} date={w.date} />

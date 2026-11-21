@@ -138,6 +138,85 @@ def test_ai_research_checks_its_numbers():
     assert n == 1 and miss == ["987654.3"]
 
 
+def test_level_buckets():
+    assert pmap.bucket(0, 0) == "untested" and pmap.bucket(2, 2) == "1-2 tests"
+    assert pmap.bucket(4, 1) == "3+ tests, held under 50%" and pmap.bucket(4, 2) == "3+ tests, held 50-74%"
+    assert pmap.bucket(4, 3) == "3+ tests, held 75%+" and pmap.bucket(3, 2) == "3+ tests, held 50-74%"
+
+
+def test_level_samples_use_no_future_and_count_each_test_once():
+    bars = _bars(_walk(2000, seed=11, sd=0.02))
+    rows = pmap.level_samples(bars)
+    assert rows
+    keys = [(r["side"], r["source"], r["date"]) for r in rows]
+    assert len(keys) == len(set(keys))
+    assert all(r["seen"] < r["date"] for r in rows)                 # the test comes after the day the level was seen
+    k = 1500
+    cut = bars[k - 25]["t"]                                         # a test resolves within 20 sessions
+    changed = bars[:k] + [dict(b, c=b["c"] * 0.5, h=b["h"] * 0.5, l=b["l"] * 0.5) for b in bars[k:]]
+    a = [r for r in rows if r["date"] < cut]
+    b = [r for r in pmap.level_samples(changed) if r["date"] < cut]
+    assert a and a == b
+
+
+def _lv(side, bucket, held, date):
+    return {"side": side, "bucket": bucket, "held": held, "date": date, "source": "swing"}
+
+
+def _half(date, strong_pct, weak_pct, other_pct, n=200):
+    out = []
+    for b, p in (("3+ tests, held 75%+", strong_pct), ("3+ tests, held under 50%", weak_pct), ("1-2 tests", other_pct)):
+        out += [_lv("support", b, i < n * p / 100, date) for i in range(n)]
+    return out
+
+
+def test_level_pass_rule_is_the_fixed_one():
+    ok = _half("2019-06-01", 70, 50, 55) + _half("2023-06-01", 68, 52, 55)
+    assert pmap.summarize_levels(ok)["support"]["passed"] is True
+    small_gap = _half("2019-06-01", 70, 62, 55) + _half("2023-06-01", 70, 62, 55)       # only 8 points over weak
+    assert pmap.summarize_levels(small_gap)["support"]["passed"] is False
+    one_half = _half("2019-06-01", 70, 50, 55) + _half("2023-06-01", 55, 50, 55)        # fails in the second half
+    assert pmap.summarize_levels(one_half)["support"]["passed"] is False
+    thin = _half("2019-06-01", 70, 50, 55, n=60) + _half("2023-06-01", 70, 50, 55, n=60)
+    assert pmap.summarize_levels(thin)["support"]["passed"] is None                    # under 100 tests: no verdict
+    assert pmap.summarize_levels(ok)["resistance"]["passed"] is None
+
+
+def test_layers_answer():
+    assert pmap.layers_answer(5, 20, 20).startswith("The stock is 5.0%")
+    assert pmap.layers_answer(15, 12, 11).startswith("Broad fall")
+    assert pmap.layers_answer(15, 12, 3).startswith("Sector fall")
+    assert pmap.layers_answer(15, 4, 12).startswith("Market fall")
+    assert pmap.layers_answer(15, 2, 3).startswith("Mostly this stock")
+    assert pmap.layers_answer(15, None, None).startswith("No sector")
+
+
+def test_value_floor_record_matches_pe_state_only():
+    st = {k: {"n": 120, "p12": {"avg": 1.0}, "p24": {"avg": -2.0}, "p36": {"avg": 3.0}} for k in ("Cheap", "Fair", "Full", "Expensive")}
+    rep = {"market": "IN", "analysis": {"entry": {
+        "checks": {"value": {"state": "Full", "pe_state": "Fair", "fv_state": "Full", "pe_percentile": 44}},
+        "levels": {"value_edges": {"cheap": 90.0, "fair": 110.0, "full": 130.0}},
+        "group": "N500", "track": {"by_state_groups": {"N500": st}, "groups": {"N500": "NIFTY 500"}, "built": "2026-11-17",
+                                   "value_test": {"passed": True, "rule": "r"}}}}}
+    v = pmap.value_floor(rep)
+    assert v["ranges"][0] == {"state": "Cheap", "below": 90.0} and v["ranges"][3] == {"state": "Expensive", "above": 130.0}
+    assert v["record"]["Fair"]["p24"] == -2.0 and v["record"]["Fair"]["n"] == 120 and "P/E state only" in v["record_basis"]
+    rep["analysis"]["entry"]["track"] = None
+    assert pmap.value_floor(rep)["record"] is None
+    rep["analysis"]["entry"]["levels"]["value_edges"] = None
+    assert pmap.value_floor(rep)["ranges"] is None
+
+
+def test_market_layer_and_untested_levels_on_demo():
+    from app import service, technicals
+    rep = service.build_report("TESTCO")
+    bars, _, _ = technicals.get_bars("TESTCO")
+    d = pmap.build(rep, bars, refresh=True)
+    assert d["market"]["name"] == "NIFTY 50" and d["market"]["fall_pct"] is not None and d["sector"]["layers"]
+    assert d["level_track"] is None                                    # nothing invented before the backtest runs
+    assert all(r["bucket"] in pmap.BUCKETS_L for r in d["levels"]["support"] + d["levels"]["resistance"])
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

@@ -1,0 +1,131 @@
+"""Do support/resistance levels that held before hold again? Tests the Price map's levels on NSE stocks.
+
+    python tools\\levels_backtest.py                  (all NSE; reuses the prices saved by the entry backtest)
+    python tools\\levels_backtest.py --universe N500  (NIFTY 500 only)
+    python tools\\levels_backtest.py --limit 40       (quick trial on 40 stocks)
+
+The rules were fixed before any run (21 Nov 2026) and are in app/pricemap.py (LEVEL_* constants):
+  - At every month end, the nearest support and the nearest resistance are built exactly like the Price map,
+    from prices up to that day only. Their record so far puts them in a bucket:
+    untested · 1-2 tests · 3+ tests held under 50% · 3+ tests held 50-74% · 3+ tests held 75%+.
+  - The outcome is the NEXT test of that level after that day: held (a 3% move away before a close 1% through,
+    within 20 sessions) or broken. Untested within 252 sessions, or unresolved, is not counted.
+    Each test is counted once.
+  - PASS (per side): "3+ tests, held 75%+" held again 10+ points more often than "3+ tests, held under 50%"
+    and 5+ points more often than all levels, in both halves (tests before 2021 / from 2021), with 100+ tests
+    in each of those two buckets in each half.
+  - A month end is skipped when the stock was illiquid (median daily traded value over the previous 3 months
+    under Rs 1 crore), same as the entry backtest.
+
+Saves the result to the app (it appears on every Price map) and to data/levels_track.json.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from collections import defaultdict
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app import config, pricemap, store, technicals, universe  # noqa: E402
+
+MIN_TRADED_VALUE = 1e7
+LIQ_DAYS = 63
+UNIVERSES = {"ALL": "All NSE stocks", "N500": "NIFTY 500 stocks"}
+
+
+def liquid(bars, i):
+    vals = sorted(b["c"] * (b.get("v") or 0) for b in bars[max(0, i - LIQ_DAYS + 1):i + 1])
+    return vals[len(vals) // 2] >= MIN_TRADED_VALUE
+
+
+def work(args):
+    sym, bars = args
+    try:
+        return sym, [dict(r, sym=sym) for r in pricemap.level_samples(bars, liquid)], None
+    except Exception as e:  # noqa: BLE001 - one bad stock must not stop the run
+        return sym, [], f"{type(e).__name__}"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--universe", choices=list(UNIVERSES), default="ALL")
+    a = ap.parse_args()
+    if config.DEMO:
+        sys.exit("Turn demo mode off first.")
+    store.init()
+    n500 = {u["symbol"] for u in universe.index_list("N500")}
+    syms = [u["symbol"] for u in universe.index_list(a.universe)]
+    if a.universe == "ALL" and len(syms) <= len(n500):
+        sys.exit("Could not download NSE's full list of stocks (EQUITY_L.csv). Try again in a few minutes.")
+    if a.limit:
+        syms = syms[: a.limit]
+    print(f"{len(syms)} stocks ({UNIVERSES[a.universe]}) · level rules v{pricemap.LEVEL_RULES_VERSION}")
+    skipped, t0 = defaultdict(int), time.time()
+    rows: list = []
+    done = 0
+
+    def jobs():
+        for sym in syms:
+            try:
+                bars, _, ohlc = technicals.get_bars(sym)
+            except Exception as e:  # noqa: BLE001
+                skipped[f"fetch failed: {type(e).__name__}"] += 1
+                continue
+            if not ohlc or len(bars) < pricemap.SWING_BARS + 300:
+                skipped["short or close-only price history"] += 1
+                continue
+            if not any(b.get("v") for b in bars[-LIQ_DAYS:]):
+                skipped["no volume data"] += 1
+                continue
+            yield sym, bars
+
+    def take(got_list):
+        nonlocal rows, done
+        for sym, got, err in got_list:
+            done += 1
+            if err:
+                skipped[f"error: {err}"] += 1
+            for r in got:
+                r["group"] = "N500" if sym in n500 else "OTHER"
+            rows += got
+            if done % 25 == 0:
+                print(f"  {done} stocks · {len(rows)} level tests · {(time.time() - t0) / 60:.1f} min")
+
+    for job in jobs():
+        take([work(job)])
+
+    res = pricemap.summarize_levels(rows)
+    groups = {g: pricemap.summarize_levels([r for r in rows if r["group"] == g]) for g in ("N500", "OTHER")}
+    result = {"built": time.strftime("%Y-%m-%d"), "rules_version": pricemap.LEVEL_RULES_VERSION,
+              "universe": a.universe, "universe_label": UNIVERSES[a.universe],
+              "stocks": len({r["sym"] for r in rows}), "skipped": dict(skipped), "tests": len(rows), "split": pricemap.LEVEL_SPLIT,
+              "result": res, "groups": groups,
+              "pass_test": "Per side: levels that held 75%+ of 3+ earlier tests held again 10+ points more often than levels "
+                           "that held under 50%, and 5+ points more often than all levels, in both halves (before 2021 / "
+                           "from 2021), with 100+ tests in each of those buckets in each half. Fixed before any run.",
+              "note": "Stocks listed today only (delisted companies are missing). Price history from about 2016, and a level "
+                      "needs 2 years of prices first, so the first half is roughly 2018-2020. Tests of the same stock are "
+                      "not independent, so the count overstates how sure this is."}
+    store.put_company("LEVELS_TRACK::IN", result)
+    (config.DATA_DIR / "levels_track.json").write_text(json.dumps(result, indent=1))
+
+    pc = lambda x: "  n/a" if x is None else f"{x:5.1f}%"
+    print(f"\nDone in {(time.time() - t0) / 60:.1f} min · {result['tests']} level tests on {result['stocks']} stocks · skipped {dict(skipped)}")
+    for side in ("support", "resistance"):
+        b = res[side]
+        print(f"\n{side.upper()}: all levels held at the next test {pc(b['all']['held_pct'])} (n={b['all']['n']}) · "
+              f"before 2021 {pc(b['halves']['first_half']['held_pct'])} · from 2021 {pc(b['halves']['second_half']['held_pct'])}")
+        print(f"  {'record before the test':28} {'n':>7} {'held next':>9} {'before 2021':>12} {'from 2021':>10}")
+        for k in pricemap.BUCKETS_L:
+            x = b["buckets"][k]
+            print(f"  {k:28} {x['n']:7} {pc(x['held_pct']):>9} {pc(x['first_half']['held_pct']):>12} {pc(x['second_half']['held_pct']):>10}")
+        print("  by kind of level: " + " · ".join(f"{s} {pc(v['held_pct'])} (n={v['n']})" for s, v in b["sources"].items()))
+        print(f"  PASSED: {'YES' if b['passed'] else 'NO' if b['passed'] is False else 'n/a (too few tests)'}")
+
+
+if __name__ == "__main__":
+    main()

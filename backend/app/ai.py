@@ -468,10 +468,13 @@ stock's own daily prices, its sector index and its peers (rules in price_map.rul
 
 Work through, in this order:
 1. Where it stands: price_map.where (fall from the 52-week high, stage, days since the high).
-2. Stock or sector: price_map.sector (index fall and trend, peers above their 50-day, stock vs sector over 3 months,
-   beta). Answer plainly whether the fall is this stock, the sector, or both.
+2. Market, sector or stock: price_map.market (NIFTY 50 / S&P 500) and price_map.sector (index fall and trend, peers
+   above their 50-day, stock vs sector over 3 months, beta, layers). Answer plainly which it is.
 3. The levels that matter most: price_map.levels. Prefer levels with more tests and a better held record; say how
-   often each held ("held X of Y tests"). A level with 0-2 tests is weak evidence: say so.
+   often each held ("held X of Y tests"). A level with 0-2 tests is weak evidence: say so. price_map.level_track is
+   the all-NSE backtest of whether a past record predicts the next test: if it is null, say that this has not been
+   tested; if a side did not pass, say past hold rates did not predict the next test, whatever a level's record.
+   price_map.value gives the P/E-history value ranges and, if present, their backtested record (P/E state only).
 4. How much further it could fall: price_map.further. Use the stock's own cases; if own.enough is false, say there
    are too few cases and list them, then use the peer cases (peers) if those are enough. History, not a forecast.
 5. Turn signals: price_map.signals. For each that matters, its state now and its record vs any day in a fall

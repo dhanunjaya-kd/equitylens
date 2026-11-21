@@ -33,7 +33,7 @@ from typing import Optional
 
 from . import config, store, technicals
 
-VERSION = 1
+VERSION = 2
 LOOK = 252            # 52-week high
 SWING_K = 5
 SWING_BARS = 500
@@ -217,11 +217,11 @@ def level_ladder(bars: list[dict]) -> dict:
         cands.append({"price": g["price"], "what": f"Swing low from {_month(t[g['last']])}" + (f" · {g['touches']} touches" if g["touches"] > 1 else ""),
                       "touches": g["touches"], "start": g["first"] + SWING_K + 1, "src": "swing"})
     s50, s200 = technicals.sma(c, 50), technicals.sma(c, 200)
-    for name, ma in (("50-day average", s50), ("200-day average", s200)):
+    for name, ma, mn in (("50-day average", s50, 50), ("200-day average", s200, 200)):
         if ma[-1] is None:
             continue
         slope = "rising" if ma[-21] is not None and ma[-1] > ma[-21] else "falling"
-        cands.append({"price": ma[-1], "what": f"{name}, {slope}", "touches": 0, "start": win0, "src": "ma", "ma": ma})
+        cands.append({"price": ma[-1], "what": f"{name}, {slope}", "touches": 0, "start": win0, "src": "ma", "ma": ma, "ma_n": mn})
     s = max(0, n - LOOK)
     i_hi = max(range(s, n), key=lambda i: h[i])
     i_lo = min(range(s, n), key=lambda i: l[i])
@@ -259,7 +259,8 @@ def level_ladder(bars: list[dict]) -> dict:
         ts = tests(h, l, c, m.get("ma", m["price"]), side, max(m["start"], win0))
         row = {"kind": side, "price": round(m["price"], 2), "dist_pct": round((m["price"] / px - 1) * 100, 1),
                "what": m["what"] + (" · heavy-trading zone" if in_zone(m["price"]) and m["src"] != "volume" else ""),
-               "held": ts["held"], "tests": ts["tests"], "source": m["src"],
+               "held": ts["held"], "tests": ts["tests"], "source": m["src"], "ma_n": m.get("ma_n"),
+               "bucket": bucket(ts["tests"], ts["held"]),
                "last_test": t[ts["events"][-1][0]] if ts["events"] else None}
         (out_r if side == "resistance" else out_s).append(row)
     out_r.sort(key=lambda x: x["price"])
@@ -641,12 +642,197 @@ def business(rep: dict) -> dict:
             "verdict": (a.get("verdict") or {}).get("label")}
 
 
+# ------------------------------------------------------------------ do past hold rates predict the next test?
+# Fixed before any run (21 Nov 2026), used by tools/levels_backtest.py and shown on the tab:
+#   At every month end, the nearest support and nearest resistance are built from prices up to that day only.
+#   Their record so far puts them in one bucket (below). The outcome is the NEXT test after that day
+#   (same held / broken definition, within 252 sessions; untested or unresolved = not counted).
+#   Each test is counted once (the first month end that saw it).
+#   PASS for a side (support / resistance): the "3+ tests, held 75%+" bucket held again at least 10 points more
+#   often than the "3+ tests, held under 50%" bucket AND at least 5 points more often than all levels of that
+#   side, in BOTH halves (tests before 2021 / from 2021), with at least 100 tests in each of those buckets in
+#   each half. Otherwise past hold rates are reported as NOT predictive.
+LEVEL_RULES_VERSION = 1
+BUCKETS_L = ["untested", "1-2 tests", "3+ tests, held under 50%", "3+ tests, held 50-74%", "3+ tests, held 75%+"]
+LEVEL_SPLIT = "2021-01-01"
+LEVEL_MIN_N = 100
+LEVEL_EDGE_WEAK = 10.0
+LEVEL_EDGE_ALL = 5.0
+
+
+def bucket(tests_n: int, held: int) -> str:
+    if not tests_n:
+        return BUCKETS_L[0]
+    if tests_n < 3:
+        return BUCKETS_L[1]
+    r = held / tests_n
+    return BUCKETS_L[2] if r < 0.5 else (BUCKETS_L[3] if r < 0.75 else BUCKETS_L[4])
+
+
+def month_ends(bars, start="2016-01-01"):
+    return [k for k in range(len(bars) - 1) if bars[k]["t"] >= start and bars[k]["t"][:7] != bars[k + 1]["t"][:7]]
+
+
+def level_samples(bars: list[dict], liquid=None) -> list[dict]:
+    """One stock: at each month end, the nearest support and resistance (from prices up to that day only),
+    their bucket, and how their NEXT test ended."""
+    t = [b["t"] for b in bars]
+    h = [b["h"] for b in bars]
+    l = [b["l"] for b in bars]
+    c = [b["c"] for b in bars]
+    n = len(c)
+    mas = {50: technicals.sma(c, 50), 200: technicals.sma(c, 200)}
+    seen, out = set(), []
+    for i in month_ends(bars):
+        if i < SWING_BARS + 20 or (liquid and not liquid(bars, i)):
+            continue
+        lad = level_ladder(bars[:i + 1])
+        for row in lad["support"][:1] + lad["resistance"][:1]:
+            lv = mas[row["ma_n"]] if row.get("ma_n") else row["price"]
+            r = tests(h, l, c, lv, row["kind"], i + 1, min(n, i + 1 + LOOK))
+            if not r["events"]:
+                continue
+            j, outcome = r["events"][0]
+            key = (row["kind"], row["source"], j)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"date": t[j], "seen": t[i], "side": row["kind"], "source": row["source"],
+                        "bucket": row["bucket"], "held": outcome == "held"})
+    return out
+
+
+def _rate(rows):
+    return {"n": len(rows), "held_pct": _r(100 * sum(r["held"] for r in rows) / len(rows)) if rows else None}
+
+
+def summarize_levels(rows: list[dict]) -> dict:
+    out = {}
+    for side in ("support", "resistance"):
+        sub = [r for r in rows if r["side"] == side]
+        halves = {"first_half": [r for r in sub if r["date"] < LEVEL_SPLIT], "second_half": [r for r in sub if r["date"] >= LEVEL_SPLIT]}
+        blk = {"all": _rate(sub), "halves": {k: _rate(v) for k, v in halves.items()}, "buckets": {}, "sources": {}}
+        for b in BUCKETS_L:
+            bb = [r for r in sub if r["bucket"] == b]
+            blk["buckets"][b] = dict(_rate(bb), **{k: _rate([r for r in v if r["bucket"] == b]) for k, v in halves.items()})
+        for src in sorted({r["source"] for r in sub}):
+            blk["sources"][src] = _rate([r for r in sub if r["source"] == src])
+        verdicts = []
+        for k, hv in halves.items():
+            strong = blk["buckets"][BUCKETS_L[4]][k]
+            weak = blk["buckets"][BUCKETS_L[2]][k]
+            al = blk["halves"][k]
+            if strong["n"] < LEVEL_MIN_N or weak["n"] < LEVEL_MIN_N:
+                verdicts.append(None)
+                continue
+            verdicts.append(strong["held_pct"] - weak["held_pct"] >= LEVEL_EDGE_WEAK and strong["held_pct"] - al["held_pct"] >= LEVEL_EDGE_ALL)
+        blk["passed"] = None if None in verdicts else all(verdicts)
+        out[side] = blk
+    return out
+
+
+def level_track(market: str) -> Optional[dict]:
+    hit = store.get_company("LEVELS_TRACK::IN")
+    if not hit:
+        return None
+    t = hit[1]
+    return {"built": t.get("built"), "universe": t.get("universe_label"), "stocks": t.get("stocks"), "tests": t.get("tests"),
+            "result": t.get("result"), "pass_test": t.get("pass_test"), "note": t.get("note"),
+            "market_note": "Tested on NSE stocks only; not tested on US stocks." if market == "US" else None}
+
+
+# ------------------------------------------------------------------ market layer and value floor
+MARKET_INDEX = {"IN": ("^NSEI", "NIFTY 50"), "US": ("^GSPC", "S&P 500")}
+
+
+def market_check(market: str, bars: list[dict]) -> dict:
+    tick, name = MARKET_INDEX.get(market, MARKET_INDEX["IN"])
+    out = {"ticker": tick, "name": name}
+    try:
+        mb = _sector_bars(tick)
+    except Exception as e:  # noqa: BLE001
+        out["error"] = f"could not load {tick}: {e}"
+        return out
+    if not mb or len(mb) <= LOOK:
+        out["error"] = f"no price history for {tick}"
+        return out
+    mc = [b["c"] for b in mb]
+    dd = -drawdowns(mc)[-1] * 100
+    s50, s200 = technicals.sma(mc, 50)[-1], technicals.sma(mc, 200)[-1]
+    out.update({"last_date": mb[-1]["t"], "fall_pct": _r(dd), "stage": stage(dd), "above50": mc[-1] > s50 if s50 else None,
+                "above200": mc[-1] > s200 if s200 else None, "ret_3m": _r(_ret(mb)), "beta": beta(bars, mb)})
+    return out
+
+
+def layers_answer(stock_fall: float, sector_fall: Optional[float], market_fall: Optional[float]) -> str:
+    """Fixed wording from the same bands as the stage: 10%+ = falling."""
+    if stock_fall < 10:
+        return f"The stock is {stock_fall:.1f}% off its high: not a 10%+ fall."
+    if sector_fall is None and market_fall is None:
+        return "No sector or market data to compare with."
+    mk = market_fall is not None and market_fall >= 10
+    sc = sector_fall is not None and sector_fall >= 10
+    if mk and sc:
+        return "Broad fall: the market and the sector are both 10%+ off their highs too."
+    if sc:
+        return "Sector fall: the sector is 10%+ off its high, the market is not."
+    if mk:
+        return "Market fall: the market is 10%+ off its high; the sector less so."
+    if sector_fall is not None and sector_fall < 5 and (market_fall is None or market_fall < 5):
+        return "Mostly this stock: the sector and the market are within 5% of their highs."
+    return "Mostly this stock: the sector and the market are down less than 10%."
+
+
+def value_floor(rep: dict) -> dict:
+    """Price ranges where today's P/E would sit in each band of its own history, with the backtested record."""
+    ent = (rep.get("analysis") or {}).get("entry") or {}
+    val = (ent.get("checks") or {}).get("value") or {}
+    edges = (ent.get("levels") or {}).get("value_edges")
+    out = {"state": val.get("state"), "pe_state": val.get("pe_state"), "fv_state": val.get("fv_state"),
+           "pe_percentile": val.get("pe_percentile"), "ranges": None}
+    if not edges:
+        out["note"] = "Not enough P/E history (about 3 years needed), or no positive earnings."
+        return out
+    out["ranges"] = [{"state": "Cheap", "below": edges["cheap"]},
+                     {"state": "Fair", "from": edges["cheap"], "to": edges["fair"]},
+                     {"state": "Full", "from": edges["fair"], "to": edges["full"]},
+                     {"state": "Expensive", "above": edges["full"]}]
+    out["how"] = ("Price at which today's P/E would be at the 30th, 60th and 85th percentile of its own P/E history, "
+                  "at today's earnings. It moves when earnings change.")
+    tr = ent.get("track") or {}
+    g = ent.get("group")
+    bs = ((tr.get("by_state_groups") or {}).get(g) or {}) if g else {}
+    if not bs:
+        bs = tr.get("by_state") or {}
+    if bs:
+        rec = {}
+        for st in ("Cheap", "Fair", "Full", "Expensive"):
+            b = bs.get(st) or {}
+            rec[st] = {k: (b.get(k) or {}).get("avg") for k in ("p12", "p24", "p36")}
+            rec[st]["n"] = b.get("n")
+        out["record"] = rec
+        out["record_scope"] = ((tr.get("groups") or {}).get(g) if g and tr.get("by_state_groups") else tr.get("universe_label"))
+        out["record_built"] = tr.get("built")
+        out["value_test"] = tr.get("value_test")
+        out["record_basis"] = ("The record groups each past month by its P/E state only (past fair values are not "
+                               "available), so it matches the P/E ranges above, not the entry card's combined state.")
+    else:
+        out["record"] = None
+        out["record_note"] = ("Not tested on this install yet: run tools/entry_backtest.py." if rep.get("market") != "US"
+                              else "The value record is from NSE stocks only; not tested on US stocks.")
+    return out
+
+
 # ------------------------------------------------------------------ build
 def build(rep: dict, bars: list[dict], refresh: bool = False) -> dict:
     sym = rep.get("symbol")
     key = f"PRICEMAP::{sym}"
     hit = store.get_company(key)
-    if hit and not refresh and time.time() - hit[0] < TTL and hit[1].get("v") == VERSION and hit[1].get("last") == bars[-1]["t"]:
+    lt = store.get_company("LEVELS_TRACK::IN")
+    et = store.get_company("ENTRY_TRACK::IN")
+    stamp = f"{lt[0] if lt else 0}:{et[0] if et else 0}"     # a new backtest result refreshes the map
+    if (hit and not refresh and time.time() - hit[0] < TTL and hit[1].get("v") == VERSION
+            and hit[1].get("last") == bars[-1]["t"] and hit[1].get("stamp") == stamp):
         return hit[1]["data"]
     c = [b["c"] for b in bars]
     if len(c) < LOOK + 30:
@@ -659,6 +845,11 @@ def build(rep: dict, bars: list[dict], refresh: bool = False) -> dict:
              "high": round(c[i_hi], 2), "high_date": bars[i_hi]["t"], "fall_pct": _r(fall * 100),
              "days_since_high": len(c) - 1 - i_hi, "stage": stage(fall * 100)}
     sector, sb, peer_bars = sector_check(rep, bars, fall)
+    mkt = market_check(rep.get("market") or "IN", bars)
+    sec_fall = (sector.get("index") or {}).get("fall_pct")
+    if sec_fall is None:
+        sec_fall = sector.get("peer_median_fall")
+    sector["layers"] = layers_answer(fall * 100, sec_fall, mkt.get("fall_pct"))
     depth = max(fall, FALL_MIN)
     own = fall_cases(bars, depth) if fall >= FALL_MIN else []
     pooled = []
@@ -677,8 +868,9 @@ def build(rep: dict, bars: list[dict], refresh: bool = False) -> dict:
                         "record": book.record(k) if on is not None or k != "sector_up" else {"n": 0, "verdict": "too_few"}})
     data = {"symbol": sym, "name": (rep.get("company") or {}).get("name"), "market": rep.get("market") or "IN",
             "currency": (rep.get("currency") or {}).get("symbol") or "₹", "where": where,
-            "levels": level_ladder(bars), "further": further, "sector": sector, "signals": signals,
+            "levels": level_ladder(bars), "level_track": level_track(rep.get("market") or "IN"),
+            "market": mkt, "value": value_floor(rep), "further": further, "sector": sector, "signals": signals,
             "business": business(rep), "rules": __doc__.split("\n\n", 2)[2].strip(), "version": VERSION,
             "bars_from": bars[0]["t"], "bars_n": len(bars)}
-    store.put_company(key, {"v": VERSION, "last": bars[-1]["t"], "data": data})
+    store.put_company(key, {"v": VERSION, "last": bars[-1]["t"], "stamp": stamp, "data": data})
     return data

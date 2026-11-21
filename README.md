@@ -238,6 +238,14 @@ REM or NIFTY 500 only
 venv\Scripts\python tools\entry_backtest.py --universe N500
 ```
 
+Test the Price map's support and resistance levels (about 10–30 minutes for all NSE: the test itself is quick, most of the time is downloading fresh prices):
+```cmd
+cd backend
+venv\Scripts\python tools\levels_backtest.py
+REM quick trial first
+venv\Scripts\python tools\levels_backtest.py --limit 40
+```
+
 ### 🌅 Pre-market — how is NIFTY likely to open?
 
 Open **Pre-market** (side menu, or the card on the home page). From 08:20 to 09:15 IST it rebuilds every 10 minutes by itself:
@@ -258,8 +266,10 @@ Open any stock (Indian or US) → **📍 Price map** tab. Everything is measured
 
 - **Where it stands**: fall from the highest close of the last 52 weeks, sessions since that high, and the stage (pullback < 10% · correction 10–20% · bear > 20%).
 - **Support and resistance ladder**: swing highs and lows from the last 2 years (pivots within 1.5% are one level), the 50- and 200-day averages, the 52-week high and low, and heavy-trading zones (volume by price). Each level shows **how often it held**: a test = price came within 1%; held = it moved 3% away before closing 1% through, within 20 sessions.
+- **Do these levels really work? (tested, not assumed)**: `tools\levels_backtest.py` checks on NSE stocks whether a level's past record predicts its NEXT test. At every month end since 2018 it builds the nearest support and resistance from prices up to that day only, groups them by their record so far (untested · 1–2 tests · 3+ tests held under 50% / 50–74% / 75%+), and records how the next test ended. Fixed before any run: it **passes** only if levels that held 75%+ held again 10+ points more often than levels that held under 50%, and 5+ points more often than all levels, in both halves (before 2021 / from 2021), with 100+ tests in each bucket and half. Every level on the tab then shows how levels with the same record did. Until the backtest is run, the tab says "not tested yet" and shows no such figure. US stocks: not tested.
 - **How much further could it fall?** Every earlier time the stock first fell this far from its 52-week high, what happened next, up to its next 52-week high: half the time it fell less than X% more, 3 times in 4 less than Y%, the worst case, sessions to the low and how often it was back to that price within 3 months. The same cases for its sector peers (more cases), and its normal 1-month move. The fall still running is never counted.
-- **Is the sector falling too?** The closest NSE sector index (India, e.g. NIFTY IT for TCS) or sector fund (US, e.g. SMH for NVIDIA, matched on the SEC industry): its fall and trend, how many peers are above their 50-day average, the stock vs the sector over 3 months, and how much the stock moves with it. A peer table shows how each sector stock is moving. If the index can't be loaded, the page says so and uses peers only.
+- **Market, sector or just this stock?** NIFTY 50 (or the S&P 500 for US stocks), then the closest NSE sector index (e.g. NIFTY IT for TCS) or sector fund (US, e.g. SMH for NVIDIA, matched on the SEC industry): each one's fall from its high and trend, how many peers are above their 50-day average, the stock vs the sector over 3 months, and how much the stock moves with each. One fixed-rule answer: broad fall, sector fall, market fall or mostly this stock. A peer table shows how each sector stock is moving. If an index can't be loaded, the page says so.
+- **Value floor from its own P/E history**: the price at which today's P/E would be Cheap, Fair, Full or Expensive against the stock's own P/E history (30th / 60th / 85th percentiles, at today's earnings), with how each P/E state did in the entry backtest (12, 24 and 36 months vs same-month peers, and how many stock-months). The backtest grades P/E state only, so the page says so when the entry card's combined state differs.
 - **Signs of a turn**: five fixed signals (close back above the 20-day average, a higher low after a new low, RSI back above 30, selling volume drying up, the sector back above its 20-day average). Each shows whether it is on now and its **record on this stock**: how often the price was higher a month later after it switched on during past 10%+ falls, against any day in such a fall. It says plainly when a signal did **worse** or no better. No date for a turn is predicted.
 - **Business positives and negatives** from the EquityLens analysis (strengths, red flags, value vs its own history, weak scores).
 - **AI research** (with an AI key): is the fall the stock or the sector, which levels matter and why, what history says about further falls, which signals to watch, and what the business numbers say. Every figure is checked against the data ("Numbers checked: x of y"). There is no news in EquityLens data, so the AI is told not to invent news-driven reasons.
@@ -613,7 +623,7 @@ cd backend
 python run_tests.py
 ```
 
-137 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+143 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -630,7 +640,7 @@ python run_tests.py
 | `test_access.py` | Password sign-in, protected keys, shutdown only from this computer, phone addresses, log viewer |
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys; entry research parsing, retry, caching and flagging of invented numbers |
 | `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
-| `test_pricemap.py` | Hold-rate maths (held, broken, unresolved), the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
+| `test_pricemap.py` | Hold-rate maths (held, broken, unresolved), the level backtest uses no future prices and counts each test once, its pass rule at the edges, market / sector / stock answer, value ranges tied to P/E state, the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |
 
