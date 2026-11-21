@@ -29,12 +29,15 @@ US_SECTOR_FUND = {
 
 
 def slim(r: dict, tf: str, shares: Optional[dict] = None) -> dict:
-    """mcap: the EquityLens scan's market cap, else NSE issued shares x last close (both real); else None."""
+    """mcap: the EquityLens scan's market cap, else the exchange's / SEC's shares x last close (both real); else None.
+    Units as everywhere in the app: Rs crore (India), $ million (US)."""
     f = r.get("fund") or {}
     mcap, src = f.get("market_cap"), ("scan" if f.get("market_cap") else None)
     n = (shares or {}).get(r["symbol"])
     if not mcap and n and r.get("price"):
-        mcap, src = round(n * r["price"] / 1e7, 0), "nse_shares"
+        us_stock = str(r["symbol"]).startswith("US:")
+        mcap = round(n * r["price"] / (1e6 if us_stock else 1e7), 0)
+        src = "sec_shares" if us_stock else "nse_shares"
     return {"symbol": r["symbol"], "name": r["name"], "sector": r["sector"], "price": r["price"], "date": r.get("date"),
             "ret": r["ret"], "from_hi": r.get("from_hi"), "above50": r.get("above50"), "above200": r.get("above200"),
             "rvol": r.get("rvol"), "value": (r.get("turnover") or {}).get(tf), "mcap": mcap, "mcap_src": src,
@@ -45,9 +48,14 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
     d = movers.get(market, tf, which)
     tf = d["tf"]
     sh = {}
+    us_fetch = None
     if d["market"] == "IN":
         from . import sectors as nse_sectors
         sh = nse_sectors.shares()
+    else:
+        from . import usshares
+        sh = usshares.by_ticker([r["symbol"] for r in d["rows"]])
+        us_fetch = usshares.status()
     rows = [slim(r, tf, sh) for r in d["rows"]]
     by: dict[str, list] = {}
     for r in rows:
@@ -71,7 +79,7 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
     return {"market": d["market"], "tf": tf, "rows": rows, "sectors": sectors, "updated": d["updated"],
             "session": d["session"], "live": d["live"], "status": d["status"], "universe": d["universe"],
             "count": len(rows), "no_mcap": sum(1 for r in rows if not r["mcap"]), "scanned": d["scanned"],
-            "sector_fill": fill}
+            "sector_fill": fill, "us_shares": us_fetch}
 
 
 def sector_index(market: str, sector: str) -> Optional[dict]:

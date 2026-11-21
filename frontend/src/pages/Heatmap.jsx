@@ -78,14 +78,15 @@ const sym = (s) => String(s).replace(/^US:/, '')
 function Tile({ t, tf, onPick, onHover }) {
   const v = t.r.ret?.[tf]
   const s = sym(t.r.symbol)
-  const showLogo = t.w >= 74 && t.h >= 74
+  const showLogo = t.w >= 44 && t.h >= 50
+  const logo = Math.round(Math.max(16, Math.min(36, Math.min(t.w, t.h) / 3.2)))
   const showSym = t.w >= 30 && t.h >= 16
-  const showPct = t.w >= 40 && t.h >= (showLogo ? 70 : 32)
-  const fs = Math.max(9, Math.min(showLogo ? 16 : 13, (t.w - 8) / (s.length * 0.62)))
+  const showPct = t.w >= 40 && t.h >= (showLogo ? logo + 40 : 32)
+  const fs = Math.max(9, Math.min(showLogo && logo > 24 ? 16 : 13, (t.w - 8) / (s.length * 0.62)))
   return (
     <div className="hm-tile" style={{ left: t.x, top: t.y, width: t.w, height: t.h, background: colour(v, tf) }}
       onClick={(e) => { e.stopPropagation(); onPick(t.r, e) }} onMouseEnter={(e) => onHover?.(t.r, e)} onMouseLeave={() => onHover?.(null)} title={`${t.r.name} · ${signed(v, 2, '%')}`}>
-      {showLogo && <Logo sym={t.r.symbol} name={t.r.name} size={Math.min(36, Math.max(24, Math.min(t.w, t.h) / 4))} />}
+      {showLogo && <Logo sym={t.r.symbol} name={t.r.name} size={logo} />}
       {showSym && <div className="hm-sym" style={{ fontSize: fs }}>{s}</div>}
       {showPct && <div className="hm-pct" style={{ fontSize: Math.max(9, fs - 2) }}>{v === null || v === undefined ? 'no price' : signed(v, 2, '%')}</div>}
     </div>
@@ -108,7 +109,7 @@ function Details({ r, tf, phone, onClose, pos }) {
         {TFS.map((k) => <div key={k} style={k === tf ? { color: 'var(--accent)' } : undefined}><div className="muted">{k}</div><b style={{ color: (r.ret?.[k] ?? 0) >= 0 ? 'var(--good)' : 'var(--bad)' }}>{signed(r.ret?.[k], 1, '%')}</b></div>)}
       </div>
       <div className="small" style={{ marginTop: 8, lineHeight: 1.5 }}>
-        Market cap {r.mcap ? <>{cr(r.mcap)}{r.mcap_src === 'nse_shares' ? <span className="muted"> (NSE issued shares × last close)</span> : null}</> : <span className="muted">not known yet</span>}
+        Market cap {r.mcap ? <>{cr(r.mcap)}{r.mcap_src === 'nse_shares' ? <span className="muted"> (NSE issued shares × last close)</span> : r.mcap_src === 'sec_shares' ? <span className="muted"> (shares from its SEC filing × last close)</span> : null}</> : <span className="muted">not known yet</span>}
         {r.from_hi !== null && r.from_hi !== undefined && <> · {Math.abs(r.from_hi).toFixed(1)}% below its 52-week high</>}
         {r.above200 !== null && r.above200 !== undefined && <> · {r.above200 ? 'above' : 'below'} its 200-day</>}
         {r.score !== null && r.score !== undefined && <> · EquityLens score {Math.round(r.score)}</>}
@@ -324,7 +325,7 @@ export default function Heatmap({ sector }) {
   const poll = useRef(null)
   const load = () => api(`/api/heatmap?market=${mk}&tf=${tf}${mk === 'IN' ? `&universe=${univ}` : ''}`).then(setD).catch(() => setD({ rows: [], sectors: [], status: {} }))
   useEffect(() => { load() }, [mk, tf, univ]) // eslint-disable-line react-hooks/exhaustive-deps
-  const filling = !!d?.sector_fill?.running
+  const filling = !!d?.sector_fill?.running || !!d?.us_shares?.running
   useEffect(() => {
     clearInterval(poll.current)
     if (d?.status?.running) poll.current = setInterval(load, 4000)
@@ -369,7 +370,9 @@ export default function Heatmap({ sector }) {
           <div className="small" style={{ marginTop: 8 }}>Prices are loaded for the NIFTY 500 only. <button className="btn small primary" onClick={async () => { await api('/api/movers/refresh?market=IN&universe=ALL', { method: 'POST' }); load() }}>Load all NSE stocks</button> <span className="muted">(about 10–15 min in the background)</span></div>
         )}
         {st.running && <><div className="small" style={{ marginTop: 8 }}>Loading prices {st.done}/{st.total}…</div><div className="progress"><div style={{ width: `${st.total ? (st.done / st.total) * 100 : 0}%` }} /></div></>}
-        {filling && (
+        {d?.us_shares?.running && <div className="small" style={{ marginTop: 8 }}>Getting shares outstanding from SEC filings for every company (one time, about a minute) so boxes can be sized by market cap…</div>}
+        {d?.us_shares && !d.us_shares.running && d.us_shares.error && d.no_mcap > d.rows.length / 2 && <div className="small" style={{ marginTop: 8, color: 'var(--warn)' }}>Could not get shares from SEC ({d.us_shares.error}). Use <b>Box size → Traded value</b> meanwhile.</div>}
+        {d?.sector_fill?.running && (
           <>
             <div className="small" style={{ marginTop: 8 }}>Getting each stock's NSE sector and issued shares (for market cap): {d.sector_fill.done.toLocaleString('en-IN')} of {d.sector_fill.total.toLocaleString('en-IN')} · one time only, about {Math.max(1, Math.round((d.sector_fill.total - d.sector_fill.done) / 60))} min left in the background · the map fills in as it goes</div>
             <div className="progress"><div style={{ width: `${d.sector_fill.total ? (d.sector_fill.done / d.sector_fill.total) * 100 : 0}%` }} /></div>
@@ -385,7 +388,7 @@ export default function Heatmap({ sector }) {
         ? <SectorView name={sector} d={d} tf={tf} size={size} phone={phone} width={width} />
         : phone ? <MapPhone rows={d.rows} sectors={d.sectors} tf={tf} size={size} width={width} />
           : <MapWeb rows={d.rows} sectors={d.sectors} tf={tf} size={size} width={width} />)}
-      <p className="disclaimer">Box size = {SIZES.find((x) => x[0] === size)[1].toLowerCase()} · colour = % change over {tf} (full colour at ±{SCALE[tf]}%) · grey = no price. Prices: Yahoo Finance via Market Movers; sectors: NSE's own classification; market cap: the EquityLens scan, or NSE issued shares × last close; score: the EquityLens scan; logos: the company's own logo, or its initials when none is found.</p>
+      <p className="disclaimer">Box size = {SIZES.find((x) => x[0] === size)[1].toLowerCase()} · colour = % change over {tf} (full colour at ±{SCALE[tf]}%) · grey = no price. Prices: Yahoo Finance via Market Movers; sectors: NSE's own classification; market cap: the EquityLens scan, or the shares from NSE (India) or the company's SEC filing (US) × last close; score: the EquityLens scan; logos: the company's own logo, or its initials when none is found.</p>
     </div>
   )
 }

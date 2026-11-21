@@ -140,7 +140,7 @@ def compute_row(sym: str, name: str, sector: str, bars: list[dict], market: str)
 
 # ------------------------------------------------------------------ refresh
 def _key(market: str) -> str:
-    return f"MOVERS::{market}"
+    return f"MOVERS::v2::{market}"     # v2: US dates on New York's clock (v1 had a duplicate "Saturday" close)
 
 
 def refresh(market: str, block: bool = False, which: str = "") -> dict:

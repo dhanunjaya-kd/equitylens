@@ -41,7 +41,7 @@ from typing import Optional
 
 from . import config, store, technicals
 
-VERSION = 3
+VERSION = 4
 LOOK = 252            # 52-week high
 SWING_BARS = 500     # history needed before the first level backtest sample
 RESOLVE = 20

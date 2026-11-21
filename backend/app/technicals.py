@@ -52,7 +52,7 @@ def _market_open(now: float) -> bool:
     return n.weekday() < 5 and dt.time(9, 15) <= n.time() <= dt.time(15, 35)
 
 
-CACHE_VERSION = 2   # bump when the way candles are fetched changes, so old saved charts are thrown away
+CACHE_VERSION = 3   # 3: US dates on New York time (a Friday close had been dated Saturday). Bump when the way candles are fetched changes, so old saved charts are thrown away
 
 
 def expected_last_session(now: float) -> str:
@@ -73,6 +73,19 @@ def is_stale(fetched_at: float, now: float, us: bool = False) -> bool:
 
 
 # ------------------------------------------------------------------ data
+def _offset(meta: dict) -> int:
+    """The exchange's own UTC offset in seconds (Yahoo's gmtoffset); India's if Yahoo gives none.
+    A US close (4 pm New York) is already the next morning in India, so dates must use the exchange's clock."""
+    try:
+        return int(meta.get("gmtoffset"))
+    except (TypeError, ValueError):
+        return 19800
+
+
+def _day(ts: int, off: int) -> str:
+    return dt.datetime.fromtimestamp(ts + off, dt.timezone.utc).date().isoformat()
+
+
 def _yahoo(sym: str, rng: str = "10y", with_meta: bool = False):
     r = requests.get(YAHOO.format(sym=quote(sym)), params={"range": rng, "interval": "1d", "includePrePost": "false"},
                      headers=_UA, timeout=config.REQUEST_TIMEOUT)
@@ -84,12 +97,13 @@ def _yahoo(sym: str, rng: str = "10y", with_meta: bool = False):
     res = res[0]
     ts = res.get("timestamp") or []
     q = (res.get("indicators") or {}).get("quote", [{}])[0]
+    off = _offset(res.get("meta") or {})
     out = []
     for i, t in enumerate(ts):
         o, h, l, c, v = (q.get(k, [None] * len(ts))[i] for k in ("open", "high", "low", "close", "volume"))
         if None in (o, h, l, c) or c <= 0:
             continue
-        day = (dt.datetime.fromtimestamp(t, dt.timezone.utc) + dt.timedelta(hours=5, minutes=30)).date().isoformat()
+        day = _day(t, off)
         if out and out[-1]["t"] == day:
             out[-1] = {"t": day, "o": o, "h": h, "l": l, "c": c, "v": v or 0}
         else:
@@ -116,7 +130,7 @@ def apply_meta(out: list[dict], meta: dict) -> list[dict]:
     """Add the latest session from Yahoo's quote 'meta' when the candle list doesn't have it yet."""
     px, ts = meta.get("regularMarketPrice"), meta.get("regularMarketTime")
     if px and ts and px > 0:
-        day = (dt.datetime.fromtimestamp(ts, dt.timezone.utc) + dt.timedelta(hours=5, minutes=30)).date().isoformat()
+        day = _day(ts, _offset(meta))
         if not out or day > out[-1]["t"]:
             hi = meta.get("regularMarketDayHigh") or px
             lo = meta.get("regularMarketDayLow") or px

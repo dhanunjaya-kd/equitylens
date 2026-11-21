@@ -299,7 +299,7 @@ Also on the page: a **market mood gauge** (extreme fear ↔ extreme greed) with 
 
 Sidebar → **Heatmap** (on a phone: Market Movers → 🗺️ Heatmap). Every NIFTY 500 stock (or all NSE stocks, or the S&P 500 in the US view) as a box with its company logo, grouped by sector.
 
-- **Box size** = market cap (or traded value, or all equal). Market cap comes from the EquityLens scan, or for any other stock from NSE's issued shares × last close. A stock with neither is shown at the smallest size and counted above the map, never given a guessed size.
+- **Box size** = market cap (or traded value, or all equal). Market cap comes from the EquityLens scan, or for any other stock from its shares × last close: NSE's issued shares (India) or the shares on the company's latest SEC filing cover page (US; companies that report shares only per share class, or have two tickers in the list, are left without one rather than counted wrong). A stock with neither is shown at the smallest size and counted above the map, never given a guessed size.
 - **Colour** = % change over 1D / 1W / 1M / 3M / 1Y, from red to green; the scale widens for longer periods (full colour at ±3% for a day up to ±40% for a year). Grey = no price.
 - **Web:** the whole market on one map. Hover a box for a quick look, click it for the details card (% for every period, market cap, distance from the 52-week high, 200-day trend, EquityLens score, Open stock / Price map).
 - **Phone:** one card per sector with its biggest stocks; tap a box for a details sheet from the bottom.
@@ -632,7 +632,7 @@ cd backend
 python run_tests.py
 ```
 
-161 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+163 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -650,7 +650,7 @@ python run_tests.py
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys; entry research parsing, retry, caching and flagging of invented numbers |
 | `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
 | `test_pricemap.py` | ZigZag keeps only major swings and never the one still forming, volume profile, unfilled gaps, today's low is not a level, hold-rate maths on each stock's own ATR scale (held, broken, unresolved, 5 days apart), random-price zones (same width, never on a real zone, repeatable, kept out of the real figures, compared at the same distance so distance can't fake an edge), in-app run status, the level backtest uses no future prices and counts each test once, its pass rule at the edges, market / sector / stock answer, value ranges tied to P/E state, the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
-| `test_heatmap.py` | Heatmap rows carry every period and never a guessed market cap, market cap from NSE issued shares only when there is no scan, reading NSE's sector and shares, which stocks still need a lookup, sector totals add up, sector index mapping (India and US) |
+| `test_heatmap.py` | Heatmap rows carry every period and never a guessed market cap, market cap from NSE issued shares only when there is no scan, reading NSE's sector and shares, which stocks still need a lookup, sector totals add up, sector index mapping (India and US), US closes dated on New York time, US shares from SEC |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |
 
@@ -690,6 +690,7 @@ equitylens/
 │   │   ├── jobs.py           runs the long backtests from the app, with progress
 │   │   ├── heatmap.py        heatmap rows by sector and each sector's index
 │   │   ├── sectors.py        NSE sector and issued shares for every stock (looked up once, saved)
+│   │   ├── usshares.py       US shares outstanding from SEC filings (all companies in a few requests)
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
 │   │   ├── brokers.py        read-only holdings from 8 brokers + CSV / Excel import
 │   │   ├── portfolio.py      portfolio X-ray: merge, score, warnings, mix
