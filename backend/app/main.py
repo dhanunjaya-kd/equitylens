@@ -408,6 +408,30 @@ def ai_premarket(market: str = "IN", refresh: bool = False):
     return _ai(ai.premarket_brief, premarket.build(market), refresh)
 
 
+@app.get("/api/pricemap/{symbol}")
+def pricemap_get(symbol: str, refresh: bool = False):
+    from . import pricemap
+    try:
+        rep = service.build_report(symbol)
+        bars, src, ohlc = technicals.get_bars(rep["symbol"])
+    except scraper.NotFound:
+        raise HTTPException(404, f"'{symbol}' not found.")
+    except (scraper.FetchError, us.USFetchError) as e:
+        raise HTTPException(502, str(e))
+    try:
+        out = pricemap.build(rep, bars, refresh)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {**out, "price_source": src, "real_ohlc": ohlc}
+
+
+@app.post("/api/ai/pricemap/{symbol}")
+def ai_pricemap(symbol: str, refresh: bool = False):
+    pm = pricemap_get(symbol)
+    rep, _ = _report_and_tech(symbol)
+    return _ai(ai.pricemap_research, rep, pm, refresh)
+
+
 @app.post("/api/ai/entry/{symbol}")
 def ai_entry(symbol: str, refresh: bool = False):
     rep, tech = _report_and_tech(symbol)

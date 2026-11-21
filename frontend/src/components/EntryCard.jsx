@@ -104,16 +104,16 @@ function Edge({ t, e }) {
 }
 
 // ------------------------------------------------------------------ AI research on the entry
-const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+export const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
 const STANCE = { agrees: ['good', 'Agrees with the engine'], partly: ['ok', 'Partly agrees'], disagrees: ['warn', 'Disagrees · verdict unchanged'] }
 const SRC = { quarters: 'Quarters', profit_loss: 'P&L', balance_sheet: 'Balance sheet', cash_flow: 'Cash flow', valuation: 'Valuation', forensics: 'Forensics',
   peers: 'Peers', shareholding: 'Shareholding', technicals: 'Technicals', track_record: 'Track record', entry: 'Entry card' }
-const CONF = { high: 'var(--good)', medium: 'var(--text)', low: 'var(--warn)' }
+export const CONF = { high: 'var(--good)', medium: 'var(--text)', low: 'var(--warn)' }
 
-function Busy({ text }) {
+export function Busy({ text }) {
   return <div className="row small muted" style={{ padding: '10px 0' }}><div className="spinner" style={{ width: 18, height: 18, margin: 0, borderWidth: 2 }} />{text}</div>
 }
-function Unverified({ list }) {
+export function Unverified({ list }) {
   return list?.length ? <div className="small" style={{ color: 'var(--warn)', marginTop: 2 }}>⚠ not found in EquityLens data: {list.join(', ')}</div> : null
 }
 

@@ -252,6 +252,18 @@ Open **Pre-market** (side menu, or the card on the home page). From 08:20 to 09:
 - **GIFT Nifty** has no free official feed or price history, so EquityLens can't read or test it; the page says so. Check it in your broker app.
 - Coming next: verified global news (a story counts only when 2+ independent sources report it), stocks in focus from overnight filings, results, deals and US-listed shares, and a US pre-market page.
 
+### 📍 Price map — where are the floors and ceilings, and how far could it fall?
+
+Open any stock (Indian or US) → **📍 Price map** tab. Everything is measured on real daily prices of the stock, its sector index and its peers, with rules fixed before looking at any result (not tuned). Every claim shows how many cases it rests on; with fewer than 10 cases it lists the cases one by one and gives no percentages.
+
+- **Where it stands**: fall from the highest close of the last 52 weeks, sessions since that high, and the stage (pullback < 10% · correction 10–20% · bear > 20%).
+- **Support and resistance ladder**: swing highs and lows from the last 2 years (pivots within 1.5% are one level), the 50- and 200-day averages, the 52-week high and low, and heavy-trading zones (volume by price). Each level shows **how often it held**: a test = price came within 1%; held = it moved 3% away before closing 1% through, within 20 sessions.
+- **How much further could it fall?** Every earlier time the stock first fell this far from its 52-week high, what happened next, up to its next 52-week high: half the time it fell less than X% more, 3 times in 4 less than Y%, the worst case, sessions to the low and how often it was back to that price within 3 months. The same cases for its sector peers (more cases), and its normal 1-month move. The fall still running is never counted.
+- **Is the sector falling too?** The closest NSE sector index (India, e.g. NIFTY IT for TCS) or sector fund (US, e.g. SMH for NVIDIA, matched on the SEC industry): its fall and trend, how many peers are above their 50-day average, the stock vs the sector over 3 months, and how much the stock moves with it. A peer table shows how each sector stock is moving. If the index can't be loaded, the page says so and uses peers only.
+- **Signs of a turn**: five fixed signals (close back above the 20-day average, a higher low after a new low, RSI back above 30, selling volume drying up, the sector back above its 20-day average). Each shows whether it is on now and its **record on this stock**: how often the price was higher a month later after it switched on during past 10%+ falls, against any day in such a fall. It says plainly when a signal did **worse** or no better. No date for a turn is predicted.
+- **Business positives and negatives** from the EquityLens analysis (strengths, red flags, value vs its own history, weak scores).
+- **AI research** (with an AI key): is the fall the stock or the sector, which levels matter and why, what history says about further falls, which signals to watch, and what the business numbers say. Every figure is checked against the data ("Numbers checked: x of y"). There is no news in EquityLens data, so the AI is told not to invent news-driven reasons.
+
 ### 📊 Market dashboard
 
 **Index card** — always at the top of the page, refreshed every minute:
@@ -601,7 +613,7 @@ cd backend
 python run_tests.py
 ```
 
-125 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+137 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -618,6 +630,7 @@ python run_tests.py
 | `test_access.py` | Password sign-in, protected keys, shutdown only from this computer, phone addresses, log viewer |
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys; entry research parsing, retry, caching and flagging of invented numbers |
 | `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
+| `test_pricemap.py` | Hold-rate maths (held, broken, unresolved), the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |
 
@@ -653,6 +666,7 @@ equitylens/
 │   │   ├── entry.py          entry decision rules (Enter / Avoid), live and in the backtest
 │   │   ├── premarket.py      overnight board, NIFTY opening call, its backtest and frozen live calls
 │   │   ├── nextday.py        08:45 check (and its test), day map, evening preview
+│   │   ├── pricemap.py       price map: levels and hold rates, fall cases, sector check, turn signals
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
 │   │   ├── brokers.py        read-only holdings from 8 brokers + CSV / Excel import
 │   │   ├── portfolio.py      portfolio X-ray: merge, score, warnings, mix
@@ -682,6 +696,7 @@ equitylens/
 | `GET /api/calendar/earnings` · `economy` · `next/{symbol}` | Calendars and next results date |
 | `POST /api/ai/{note,chat,guidance,debate,doc,chart}/{symbol}` | AI features for a stock (`chat` takes `focus: "entry"` for questions about the entry card) |
 | `GET /api/premarket?market=IN&refresh=` · `POST /api/premarket/backtest` · `POST /api/ai/premarket` | Pre-market board, opening call, backtest, AI brief |
+| `GET /api/pricemap/{symbol}?refresh=` · `POST /api/ai/pricemap/{symbol}` | Price map for one stock, AI research on it |
 | `POST /api/ai/entry/{symbol}?refresh=` | AI research on the entry decision: structured, sourced, numbers checked |
 | `POST /api/ai/{picks,movers,calendar}` | AI explanations of lists, moves and the week |
 | `GET /api/fno` | F&O stocks and lot sizes |

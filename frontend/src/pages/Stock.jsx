@@ -7,6 +7,7 @@ import { Badge, DataTable, Loading, Logo, ScoreBar, ScoreRing, Tile } from '../c
 import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import StockChart from './StockChart'
 import EntryCard from '../components/EntryCard'
+import PriceMap from '../components/PriceMap'
 import { NotesCard } from './Account'
 import { StockAI } from './AI'
 import { StockMoney, SurveillanceBanner } from './SmartMoney'
@@ -14,7 +15,7 @@ import { KeyPoints, KeyRatios, LatestQuarter, StoryTimeline } from './OverviewEx
 import { ago, api, cr, cur, flag, go, isUS, num, ok, pct, recent, rs, scoreColor, setCurrency, signed, ticker, unitLabel, unitWords, watchlist, x } from '../util'
 
 const TABS = [
-  ['overview', 'Overview'], ['ai', '✨ AI'], ['chart', 'Chart'], ['future', 'Future 3·5·10y'], ['valuation', 'Valuation Lab'], ['forensics', 'Forensics'],
+  ['overview', 'Overview'], ['ai', '✨ AI'], ['chart', 'Chart'], ['pricemap', '📍 Price map'], ['future', 'Future 3·5·10y'], ['valuation', 'Valuation Lab'], ['forensics', 'Forensics'],
   ['financials', 'Financials'], ['quality', 'Quality'], ['ownership', 'Ownership'], ['money', '🧭 Smart money'], ['price', 'Price'], ['documents', 'Reports'],
 ]
 const C = { a: '#2dd4bf', b: '#38bdf8', c: '#a78bfa', d: '#f59e0b', e: '#f472b6', good: '#22c55e', bad: '#ef4444', grid: 'var(--grid)', muted: 'var(--muted)' }
@@ -109,6 +110,7 @@ export default function Stock({ symbol, tab }) {
       {tab === 'overview' && <Overview d={d} />}
       {tab === 'ai' && <StockAI d={d} />}
       {tab === 'chart' && <StockChart symbol={d.symbol} />}
+      {tab === 'pricemap' && <PriceMap symbol={d.symbol} />}
       {tab === 'future' && <Future d={d} />}
       {tab === 'financials' && <Financials d={d} />}
       {tab === 'quality' && <Quality d={d} />}

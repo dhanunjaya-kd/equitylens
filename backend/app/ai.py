@@ -462,6 +462,108 @@ def entry_research(report: dict, tech: Optional[dict], refresh: bool = False) ->
     return out
 
 
+PRICEMAP_PROMPT = """PRICEMAP_RESEARCH
+Research where this stock stands after its move, from the data only. price_map holds measured facts from the
+stock's own daily prices, its sector index and its peers (rules in price_map.rules). The rest is the business data.
+
+Work through, in this order:
+1. Where it stands: price_map.where (fall from the 52-week high, stage, days since the high).
+2. Stock or sector: price_map.sector (index fall and trend, peers above their 50-day, stock vs sector over 3 months,
+   beta). Answer plainly whether the fall is this stock, the sector, or both.
+3. The levels that matter most: price_map.levels. Prefer levels with more tests and a better held record; say how
+   often each held ("held X of Y tests"). A level with 0-2 tests is weak evidence: say so.
+4. How much further it could fall: price_map.further. Use the stock's own cases; if own.enough is false, say there
+   are too few cases and list them, then use the peer cases (peers) if those are enough. History, not a forecast.
+5. Turn signals: price_map.signals. For each that matters, its state now and its record vs any day in a fall
+   (verdict better / same / worse / too_few). If a signal has not helped on this stock, say so.
+6. Why it may have fallen: only what the data shows (last 8 quarters, margins, valuation vs its history, red flags,
+   ownership changes, the sector). There is NO news in this data: do not name news, events or reasons not in it;
+   if the data cannot explain the fall, say that.
+
+Reply with ONE JSON object and nothing else (no code fence), exactly these keys:
+{"headline": "one sentence: where it stands and the single most useful fact",
+ "stock_or_sector": {"answer": "stock" | "sector" | "both" | "unclear", "why": "2 sentences with numbers"},
+ "levels": [{"kind": "support" | "resistance", "price": "a level price from price_map.levels", "evidence": "what it is and held X of Y tests", "why": "why it matters now"}],
+ "fall_risk": {"summary": "2-3 sentences from price_map.further with the case counts", "caveat": "what limits this evidence"},
+ "turn_watch": [{"signal": "name from price_map.signals", "now": "its state", "record": "its record with n", "meaning": "what it would and would not tell you"}],
+ "why_it_fell": [{"point": "...", "evidence": "the exact figures", "source": "quarters|profit_loss|balance_sheet|cash_flow|valuation|forensics|shareholding|sector|price_map"}],
+ "business": {"plus": ["short point with figures"], "minus": ["short point with figures"]},
+ "confidence": {"level": "low" | "medium" | "high", "why": "...", "data_gaps": ["what is missing, stale or too thin"]}}
+levels: 2-4 (both sides). turn_watch: 2-4. why_it_fell: 1-4. business: 2-4 each.
+Rules: every number copied from the data (same figure, same units); no new price levels, no targets, no dates
+for a turn; no buy/sell advice; describe the past as the past."""
+
+
+def pricemap_trim(pm: dict) -> dict:
+    """What the AI sees of the price map: everything measured, minus long lists it does not need."""
+    out = {k: v for k, v in pm.items() if k not in ("price_source", "real_ohlc", "bars_from", "bars_n", "version")}
+    sec = dict(out.get("sector") or {})
+    sec["peers"] = (sec.get("peers") or [])[:12]
+    out["sector"] = sec
+    return out
+
+
+def pricemap_research(report: dict, pm: dict, refresh: bool = False) -> dict:
+    """AI research on the price map: structured, and every quoted figure checked against the data."""
+    s = load_settings()
+    key = f"AI::PRICEMAP::{report['symbol']}::{model_label(s)}::{(pm.get('where') or {}).get('date')}"
+    if not refresh and (hit := _cache_get(key, 12 * 3600)):
+        return hit
+    ctx = json.loads(build_context(report, None))
+    ctx["price_map"] = pricemap_trim(pm)
+    data = json.dumps(ctx, default=str)
+    system = f"{_rules(report)}\nAnswer in JSON as asked; the Markdown rule does not apply here.\n<data>\n{data}\n</data>"
+    text = complete(system, [{"role": "user", "content": PRICEMAP_PROMPT}], max_tokens=5000, s=s)
+    parsed = _parse_json(text)
+    if parsed is None:
+        text = complete(system, [{"role": "user", "content": PRICEMAP_PROMPT}, {"role": "assistant", "content": text[:4000]},
+                                 {"role": "user", "content": "That was not a single valid JSON object. Send only the JSON object, same keys."}],
+                        max_tokens=5000, s=s)
+        parsed = _parse_json(text)
+    out = {"model": model_label(s), "created": time.time(), "date": (pm.get("where") or {}).get("date")}
+    if parsed is None:
+        out.update(text=text, structured=False)
+        store.put_company(key, out)
+        return out
+
+    def rows(items, keys, k=4):
+        return [{x: str(it.get(x, "")) for x in keys} for it in (items or []) if isinstance(it, dict)][:k]
+
+    def strs(items, k=4):
+        return [str(x) for x in (items or []) if isinstance(x, (str, int, float))][:k]
+    sos = parsed.get("stock_or_sector") or {}
+    fr = parsed.get("fall_risk") or {}
+    bz = parsed.get("business") or {}
+    cf = parsed.get("confidence") or {}
+    r = {"headline": str(parsed.get("headline", "")),
+         "stock_or_sector": {"answer": str(sos.get("answer", "unclear")).lower(), "why": str(sos.get("why", ""))},
+         "levels": rows(parsed.get("levels"), ("kind", "price", "evidence", "why")),
+         "fall_risk": {"summary": str(fr.get("summary", "")), "caveat": str(fr.get("caveat", ""))},
+         "turn_watch": rows(parsed.get("turn_watch"), ("signal", "now", "record", "meaning")),
+         "why_it_fell": rows(parsed.get("why_it_fell"), ("point", "evidence", "source")),
+         "business": {"plus": strs(bz.get("plus")), "minus": strs(bz.get("minus"))},
+         "confidence": {"level": str(cf.get("level", "medium")).lower(), "why": str(cf.get("why", "")),
+                        "data_gaps": strs(cf.get("data_gaps"), 5)}}
+    if r["stock_or_sector"]["answer"] not in ("stock", "sector", "both", "unclear"):
+        r["stock_or_sector"]["answer"] = "unclear"
+    total, missing = 0, []
+
+    def check(txt):
+        nonlocal total, missing
+        n, miss = verify_numbers(txt, data)
+        total, missing = total + n, missing + miss
+        return miss
+    for group in ("levels", "turn_watch", "why_it_fell"):
+        for item in r[group]:
+            item["unverified"] = check(" ".join(item.values()))
+    r["unverified_top"] = check(" ".join([r["headline"], r["stock_or_sector"]["why"], r["fall_risk"]["summary"], r["fall_risk"]["caveat"]]))
+    r["business"]["unverified"] = check(" ".join(r["business"]["plus"] + r["business"]["minus"]))
+    r["numbers"] = {"checked": total, "found": total - len(missing), "not_found": missing[:12]}
+    out.update(r, structured=True)
+    store.put_company(key, out)
+    return out
+
+
 PREMARKET_PROMPT = """PREMARKET_BRIEF
 Write this morning's pre-market brief for the Indian market from the data only, in Markdown, 150-220 words:
 1. One bold line: the opening call (call.label, score) and the two factors that drive it most (largest |contrib|),
@@ -725,6 +827,24 @@ def _demo_answer(system: str, messages: list[dict]) -> str:
         why = " and ".join(f"{f['name']} {f['ret']}%" for f in top if f.get("ret") is not None)
         return (f"**{c.get('label')} (score {c.get('score')}), driven by {why}.** Demo brief: add an AI key in Settings for "
                 "a real one. GIFT Nifty is not in EquityLens's data.")
+    if "PRICEMAP_RESEARCH" in q or ("single valid JSON" in q and "price_map" in d):
+        pm = d.get("price_map") or {}
+        w = pm.get("where") or {}
+        lv = pm.get("levels") or {}
+        sup = (lv.get("support") or [{}])[0]
+        res = (lv.get("resistance") or [{}])[0]
+        fo = (pm.get("further") or {}).get("own") or {}
+        sec = pm.get("sector") or {}
+        return json.dumps({
+            "headline": f"Down {w.get('fall_pct')}% from its high ({w.get('stage')}) — demo research from EquityLens data.",
+            "stock_or_sector": {"answer": "unclear", "why": sec.get("answer", "")},
+            "levels": [{"kind": "support", "price": str(sup.get("price")), "evidence": f"{sup.get('what')}; held {sup.get('held')} of {sup.get('tests')} tests", "why": "nearest support"},
+                       {"kind": "resistance", "price": str(res.get("price")), "evidence": f"{res.get('what')}; held {res.get('held')} of {res.get('tests')} tests", "why": "nearest resistance"}],
+            "fall_risk": {"summary": f"{fo.get('n')} earlier cases on this stock at this depth.", "caveat": "History, not a forecast."},
+            "turn_watch": [{"signal": g.get("name"), "now": g.get("state"), "record": str((g.get("record") or {}).get("verdict")), "meaning": "see its record"} for g in (pm.get("signals") or [])[:2]],
+            "why_it_fell": [{"point": "Not explained by this data", "evidence": "demo mode", "source": "price_map"}],
+            "business": {"plus": (pm.get("business") or {}).get("plus", [])[:2], "minus": (pm.get("business") or {}).get("minus", [])[:2]},
+            "confidence": {"level": "low", "why": "Demo mode: no real AI was asked.", "data_gaps": ["add an AI key in Settings"]}})
     if "ENTRY_RESEARCH" in q or "single valid JSON" in q:
         e = d.get("entry_decision") or {}
         lv = e.get("levels") or {}
