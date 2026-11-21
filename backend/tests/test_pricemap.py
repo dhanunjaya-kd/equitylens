@@ -358,6 +358,29 @@ def test_distance_alone_cannot_fake_an_edge():
     assert b["edge_pts"] < 5 and b["beats_chance"] is False                             # but not at the same distance
 
 
+def test_small_samples_are_not_called_better():
+    lo, hi = pmap.wilson(8, 10)                    # KPIT's RSI signal: 8 of 10 higher a month later
+    assert lo * 100 < 58 < hi * 100                 # against 58% on any day in a fall: not clearly different
+    lo, hi = pmap.wilson(160, 200)                  # the same 80% on 200 cases is clearly above 58%
+    assert lo * 100 > 58
+    assert pmap.wilson(0, 0) == (0.0, 1.0)
+
+
+def test_recent_results_from_the_tables():
+    rep = {"currency": {"symbol": "₹", "unit": "Cr"}, "company": {"tables": {
+        "quarters": {"columns": ["Sep 2025", "Dec 2025", "Mar 2026", "Jun 2026", "Sep 2026"],
+                     "rows": {"Net Profit": [245, 230, 210, 150, 121], "Sales": [1000, 1010, 1020, 1030, 1050],
+                              "OPM %": [21.0, 20.0, 19.0, 17.0, 16.0]}},
+        "profit_loss": {"columns": ["Mar 2025", "Mar 2026", "TTM"], "rows": {"Net Profit": [840, 637, 600]}}}}}
+    got = pmap.recent_results(rep)
+    texts = [t for _, t in got]
+    assert (False, "Quarterly profit down 51% on a year ago (₹121 Cr in Sep 2026 vs ₹245 Cr in Sep 2025)") in got
+    assert not any(t.startswith("Quarterly sales") for t in texts)          # +5%: under the 10% bar
+    assert (False, "Operating margin 16.0% in Sep 2026 vs 21.0% a year earlier") in got
+    assert (False, "Yearly profit down 24% (₹637 Cr in Mar 2026 vs ₹840 Cr in Mar 2025)") in got   # TTM ignored
+    assert pmap.recent_results({"company": {"tables": {}}}) == []
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

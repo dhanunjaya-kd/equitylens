@@ -472,15 +472,16 @@ Work through, in this order:
    above their 50-day, stock vs sector over 3 months, beta, layers). Answer plainly which it is.
 3. The zones that matter: price_map.levels (zones with lo-hi, distance in % and in days' move). Name the nearest
    support and resistance and what makes each (its kinds). price_map.level_track is the all-NSE reliability check:
-   if it is null or stale, say zones have not been checked yet. beats_chance says whether real zones held more often
-   than random prices of the same width and distance: if false or null, say the zones are a map only and did not
-   clearly beat chance. passed says whether a zone's own record predicts its next test: if false, say "held X of Y"
+   if it is null or stale, say zones have not been checked yet. If has_chance is false or beats_chance is null, say
+   zones have NOT YET been compared with random prices (never say they failed). If beats_chance is false, say real
+   zones did not clearly beat random prices, so they are a map only. If true, say they beat random prices by edge_pts. passed says whether a zone's own record predicts its next test: if false, say "held X of Y"
    is history only and do not rank zones by it. A zone with 0-2 tests is thin evidence either way.
    price_map.value gives the P/E-history value ranges and, if present, their backtested record (P/E state only).
 4. How much further it could fall: price_map.further. Use the stock's own cases; if own.enough is false, say there
    are too few cases and list them, then use the peer cases (peers) if those are enough. History, not a forecast.
-5. Turn signals: price_map.signals. For each that matters, its state now and its record vs any day in a fall
-   (verdict better / same / worse / too_few). If a signal has not helped on this stock, say so.
+5. Turn signals: price_map.signals. For each that matters, use its name (not its key), its state now and its record
+   vs any day in a fall (verdict better / same / worse / too_few, with n and its 90% range). "same" means not clearly
+   different. If a signal has not helped on this stock, say so.
 6. Why it may have fallen: only what the data shows (last 8 quarters, margins, valuation vs its history, red flags,
    ownership changes, the sector). There is NO news in this data: do not name news, events or reasons not in it;
    if the data cannot explain the fall, say that.
@@ -488,14 +489,15 @@ Work through, in this order:
 Reply with ONE JSON object and nothing else (no code fence), exactly these keys:
 {"headline": "one sentence: where it stands and the single most useful fact",
  "stock_or_sector": {"answer": "stock" | "sector" | "both" | "unclear", "why": "2 sentences with numbers"},
- "levels": [{"kind": "support" | "resistance", "price": "a level price from price_map.levels", "evidence": "what it is and held X of Y tests", "why": "why it matters now"}],
+ "levels": [{"kind": "support" | "resistance", "price": "the zone as lo-hi from price_map.levels", "evidence": "what it is and held X of Y tests", "why": "why it matters now"}],
  "fall_risk": {"summary": "2-3 sentences from price_map.further with the case counts", "caveat": "what limits this evidence"},
  "turn_watch": [{"signal": "name from price_map.signals", "now": "its state", "record": "its record with n", "meaning": "what it would and would not tell you"}],
  "why_it_fell": [{"point": "...", "evidence": "the exact figures", "source": "quarters|profit_loss|balance_sheet|cash_flow|valuation|forensics|shareholding|sector|price_map"}],
  "business": {"plus": ["short point with figures"], "minus": ["short point with figures"]},
  "confidence": {"level": "low" | "medium" | "high", "why": "...", "data_gaps": ["what is missing, stale or too thin"]}}
 levels: 2-4 (both sides). turn_watch: 2-4. why_it_fell: 1-4. business: 2-4 each.
-Rules: every number copied from the data (same figure, same units); no new price levels, no targets, no dates
+Rules: every number copied from the data (same figure, same units; money from the tables is in the report's
+currency and unit, e.g. Rs crore, so write the unit); no new price levels, no targets, no dates
 for a turn; no buy/sell advice; describe the past as the past. Levels are zones (lo-hi): quote them as the data
 gives them. Do not call a level strong, major, reliable, key or psychological unless it has 10+ tests in the data,
 and never say what clearing or losing a level "would signal" unless a turn signal's record in the data shows it."""
@@ -524,7 +526,7 @@ def pricemap_research(report: dict, pm: dict, refresh: bool = False) -> dict:
     s = load_settings()
     lt = pm.get("level_track") or {}
     key = (f"AI::PRICEMAP::{report['symbol']}::{model_label(s)}::{(pm.get('where') or {}).get('date')}"
-           f"::{lt.get('built')}:{lt.get('has_chance')}")
+           f"::{lt.get('built')}:{lt.get('has_chance')}::p2")
     if not refresh and (hit := _cache_get(key, 12 * 3600)):
         return hit
     ctx = json.loads(build_context(report, None))

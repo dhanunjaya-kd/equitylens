@@ -215,7 +215,7 @@ function Further({ f, w, cur, sym }) {
       <div className="small muted" style={{ marginBottom: 10 }}>Not a forecast. This is what happened every earlier time a stock first fell {f.depth_pct}% from its 52-week high, up to its next 52-week high. The fall still running is left out.</div>
       <div className="grid2">
         <div className="tile">
-          <div className="k">{sym}'s own history · {f.own.n} cases since {f.since?.slice(0, 4)}</div>
+          <div className="k">{sym}'s own history · {f.own.n} case{f.own.n === 1 ? '' : 's'} since {f.since?.slice(0, 4)}</div>
           <CaseStats s={f.own} who={sym} />
           {f.own.n > 0 && <Buckets s={f.own} />}
           {f.own.n > 0 && !f.own.enough && (
@@ -226,7 +226,7 @@ function Further({ f, w, cur, sym }) {
           )}
         </div>
         <div className="tile">
-          <div className="k">Its sector peers at the same depth · {f.peers.n} cases from {f.peer_count} stocks</div>
+          <div className="k">Its sector peers at the same depth · {f.peers.n} case{f.peers.n === 1 ? '' : 's'} from {f.peer_count} stocks</div>
           <CaseStats s={f.peers} who="these peers" />
           {f.peers.n > 0 && <Buckets s={f.peers} />}
         </div>
@@ -263,8 +263,7 @@ function Sector({ s, sym, m }) {
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>Is it the market, the sector, or just this stock?</h3>
-      <p style={{ fontWeight: 600, margin: '0 0 2px' }}>{s.layers || s.answer}</p>
-      {s.layers && <p className="small muted" style={{ margin: '0 0 8px' }}>{s.answer}</p>}
+      <p style={{ fontWeight: 600, margin: '0 0 8px' }}>{s.layers || s.answer}</p>
       {rows.map(([k, v]) => <div key={k} className="pmap-kv"><span className="muted">{k}</span><b>{v}</b></div>)}
       {m?.error && <div className="small" style={{ color: 'var(--warn)', marginTop: 6 }}>Market index: {m.error}.</div>}
       {ix?.error && <div className="small" style={{ color: 'var(--warn)', marginTop: 6 }}>Sector index: {ix.error}. Using peers only.</div>}
@@ -328,7 +327,7 @@ function ValueFloor({ v, cur, price }) {
   )
 }
 
-const VERDICT = { better: ['var(--good)', 'better than any day in a fall'], same: ['var(--muted)', 'about the same as any day in a fall'], worse: ['var(--bad)', 'worse than any day in a fall'] }
+const VERDICT = { better: ['var(--good)', 'clearly better than any day in a fall'], same: ['var(--muted)', 'not clearly different from any day in a fall'], worse: ['var(--bad)', 'clearly worse than any day in a fall'] }
 
 function recordText(r) {
   if (!r || r.verdict === 'too_few') {
@@ -337,7 +336,7 @@ function recordText(r) {
   }
   const [c, t] = VERDICT[r.verdict]
   return (
-    <span>After it switched on in past falls: higher a month later <b>{r.up_pct}%</b> of the time (median {sg(r.median_pct)}) vs {r.base_up_pct}% on any day in a fall · {r.n} cases → <b style={{ color: c }}>{t}</b></span>
+    <span>After it switched on in past falls: higher a month later <b>{r.up_pct}%</b> of the time (median {sg(r.median_pct)}) vs {r.base_up_pct}% on any day in a fall · {r.n} cases{r.range ? `, so the true rate is likely ${r.range[0]}–${r.range[1]}%` : ''} → <b style={{ color: c }}>{t}</b></span>
   )
 }
 
@@ -345,7 +344,7 @@ function Signals({ list }) {
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>Signs of a turn</h3>
-      <div className="small muted" style={{ marginBottom: 8 }}>Five fixed signals, each with its record on this stock during falls of 10% or more. No date for a turn is predicted.</div>
+      <div className="small muted" style={{ marginBottom: 8 }}>Five fixed signals, each with its record on this stock during falls of 10% or more. A signal is called better or worse only when its likely range (90%) is wholly above or below the any-day figure; with few cases it rarely is. No date for a turn is predicted.</div>
       {list.map((g) => (
         <div key={g.key} className="pmap-sig">
           <span className="pmap-mark" style={{ color: g.on === null ? 'var(--muted)' : g.on ? 'var(--good)' : 'var(--bad)' }}>{g.on === null ? '–' : g.on ? '✓' : '✕'}</span>
@@ -374,6 +373,8 @@ function Business({ b }) {
 }
 
 const SOS = { stock: ['warn', 'Mostly this stock'], sector: ['ok', 'Mostly the sector'], both: ['warn', 'Stock and sector'], unclear: ['ok', 'Unclear'] }
+
+const SIG_NAME = { above20: 'Closes back above its 20-day average', higher_low: 'Higher low after a new low', rsi_back: 'RSI back above 30 after being oversold', dry_volume: 'Selling volume drying up', sector_up: 'Sector back above its 20-day average' }
 
 function PriceMapAI({ sym, date }) {
   const settings = useAISettings()
@@ -418,7 +419,7 @@ function PriceMapAI({ sym, date }) {
           {r.turn_watch.length > 0 && (
             <div className="tile" style={{ marginTop: 10 }}><div className="k">Turn signals to watch</div>
               {r.turn_watch.map((t, i) => (
-                <div key={i} style={{ marginTop: 8 }} className="small"><b>{t.signal}</b> · now: {t.now}<div className="muted">{t.record}</div><div>{t.meaning}</div><Unverified list={t.unverified} /></div>))}
+                <div key={i} style={{ marginTop: 8 }} className="small"><b>{SIG_NAME[t.signal] || t.signal}</b> · now: {t.now}<div className="muted">{t.record}</div><div>{t.meaning}</div><Unverified list={t.unverified} /></div>))}
             </div>
           )}
           {r.why_it_fell.length > 0 && (

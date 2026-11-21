@@ -24,7 +24,9 @@ not tuned:
                          the case ends at the next 52-week high. The fall still in progress is excluded.
   Turn signals           five fixed signals; record = 21-session return after each time a signal
                          switched on while the stock was 10%+ below its 52-week high (events at
-                         least 10 sessions apart), against every day in such a fall.
+                         least 10 sessions apart), against every day in such a fall. Called better
+                         or worse only when the 90% range of its hit rate (Wilson) is wholly above
+                         or below the any-day figure; otherwise "not clearly different".
   Too few cases          fewer than 10 cases: the cases are listed one by one, no percentages.
 """
 from __future__ import annotations
@@ -48,7 +50,6 @@ IN_A_FALL = 0.10      # signal records are measured during falls of 10%+
 FWD = 21              # "a month later"
 GAP = 10              # signal events at least 10 sessions apart
 MIN_CASES = 10
-CLEAR_EDGE = 5.0      # points vs the baseline before a signal is called better or worse
 MAX_PEERS = 25
 TTL = 3600
 
@@ -437,6 +438,17 @@ SIGNAL_RULES = {
 }
 
 
+def wilson(k: int, n: int, z: float = 1.645) -> tuple[float, float]:
+    """90% range for a hit rate of k out of n (Wilson). With few cases the range is wide."""
+    if n <= 0:
+        return 0.0, 1.0
+    p = k / n
+    den = 1 + z * z / n
+    mid = (p + z * z / (2 * n)) / den
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den
+    return max(0.0, mid - half), min(1.0, mid + half)
+
+
 class SignalBook:
     def __init__(self, bars: list[dict], sector: Optional[list[dict]] = None):
         self.t = [b["t"] for b in bars]
@@ -534,9 +546,11 @@ class SignalBook:
                "base_up_pct": _r(100 * sum(1 for x in base if x > 0) / len(base), 0) if base else None}
         if len(events) >= MIN_CASES:
             ups = sum(1 for _, x in events if x > 0)
-            out.update({"up_pct": _r(100 * ups / len(events), 0), "median_pct": _r(100 * _pct([x for _, x in events], 0.5))})
-            d = out["up_pct"] - (out["base_up_pct"] or 0)
-            out["verdict"] = "better" if d >= CLEAR_EDGE else ("worse" if d <= -CLEAR_EDGE else "same")
+            lo, hi = wilson(ups, len(events))
+            out.update({"up_pct": _r(100 * ups / len(events), 0), "median_pct": _r(100 * _pct([x for _, x in events], 0.5)),
+                        "range": [_r(lo * 100, 0), _r(hi * 100, 0)]})
+            base = out["base_up_pct"] or 0
+            out["verdict"] = "better" if lo * 100 > base else ("worse" if hi * 100 < base else "same")
         else:
             out["verdict"] = "too_few"
             out["cases"] = [{"date": d, "fwd_pct": _r(x * 100)} for d, x in events[-9:]]
@@ -711,10 +725,50 @@ def sector_check(rep: dict, bars: list[dict], depth: float) -> dict:
 
 
 # ------------------------------------------------------------------ business
+RESULT_MOVE = 10.0      # % change in profit or sales that is reported
+MARGIN_MOVE = 3.0       # points of operating margin that are reported
+
+
+def recent_results(rep: dict) -> list[tuple[bool, str]]:
+    """Latest quarter vs the same quarter a year earlier, and the latest full year vs the one before,
+    straight from the company's tables. Only moves of 10%+ (3+ margin points) are reported."""
+    tabs = (rep.get("company") or {}).get("tables") or {}
+    cur = rep.get("currency") or {}
+    sym, unit = cur.get("symbol") or "₹", cur.get("unit") or "Cr"
+    money = lambda v: f"{sym}{v:,.0f} {unit}" if unit != "M" else f"{sym}{v:,.0f}M"
+    out: list[tuple[bool, str]] = []
+
+    def pair(table, row, back):
+        cols = table.get("columns") or []
+        vals = (table.get("rows") or {}).get(row) or []
+        idx = [k for k, c in enumerate(cols) if c != "TTM" and k < len(vals) and vals[k] is not None]
+        if len(idx) <= back:
+            return None
+        a, b = idx[-1], idx[-1 - back]
+        return cols[a], vals[a], cols[b], vals[b]
+
+    q = tabs.get("quarters") or {}
+    for row, label in (("Net Profit", "Quarterly profit"), ("Sales", "Quarterly sales")):
+        x = pair(q, row, 4)
+        if x and x[3] and x[3] > 0:
+            ch = (x[1] / x[3] - 1) * 100
+            if abs(ch) >= RESULT_MOVE:
+                out.append((ch > 0, f"{label} {'up' if ch > 0 else 'down'} {abs(ch):.0f}% on a year ago ({money(x[1])} in {x[0]} vs {money(x[3])} in {x[2]})"))
+    x = pair(q, "OPM %", 4)
+    if x and abs(x[1] - x[3]) >= MARGIN_MOVE:
+        out.append((x[1] > x[3], f"Operating margin {x[1]:.1f}% in {x[0]} vs {x[3]:.1f}% a year earlier"))
+    x = pair(tabs.get("profit_loss") or {}, "Net Profit", 1)
+    if x and x[3] and x[3] > 0:
+        ch = (x[1] / x[3] - 1) * 100
+        if abs(ch) >= RESULT_MOVE:
+            out.append((ch > 0, f"Yearly profit {'up' if ch > 0 else 'down'} {abs(ch):.0f}% ({money(x[1])} in {x[0]} vs {money(x[3])} in {x[2]})"))
+    return out
+
+
 def business(rep: dict) -> dict:
     a = rep.get("analysis") or {}
     sc = a.get("scores") or {}
-    plus = list((a.get("strengths") or [])[:5])
+    plus = list((a.get("strengths") or [])[:4])
     minus = [f["text"] for f in (a.get("flags") or []) if f.get("severity") in ("high", "medium")][:5]
     val = ((a.get("entry") or {}).get("checks") or {}).get("value") or {}
     vt = (val.get("text") or "").split(" Shown for information")[0].rstrip(".")
@@ -722,6 +776,8 @@ def business(rep: dict) -> dict:
         minus.append(f"Price vs value: {vt}")
     elif val.get("state") in ("Cheap", "Fair") and vt:
         plus.append(f"Price vs value: {vt}")
+    for good, text in recent_results(rep):
+        (plus if good else minus).append(text)
     names = {"growth": "Growth", "quality": "Quality", "strength": "Balance sheet", "cash": "Cash flow"}
     for k, lab in names.items():
         x = sc.get(k)
