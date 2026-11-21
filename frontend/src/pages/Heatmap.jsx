@@ -60,7 +60,7 @@ export function colour(v, tf) {
   return `rgb(${r},${g},${b})`
 }
 
-function useWidth() {
+export function useWidth() {
   const ref = useRef(null)
   const [w, setW] = useState(0)
   useLayoutEffect(() => {
@@ -75,7 +75,7 @@ function useWidth() {
 const sym = (s) => String(s).replace(/^US:/, '')
 
 // ---------------------------------------------------------------- one box
-function Tile({ t, tf, onPick, onHover }) {
+export function Tile({ t, tf, onPick, onHover }) {
   const v = t.r.ret?.[tf]
   const s = sym(t.r.symbol)
   const showLogo = t.w >= 44 && t.h >= 50

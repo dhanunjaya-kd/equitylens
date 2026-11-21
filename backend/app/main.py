@@ -509,6 +509,29 @@ def movers_get(market: str = "IN", tf: str = "1D", universe: str = ""):
     return movers.get(market, tf, universe.upper())
 
 
+@app.get("/api/watch/quotes")
+def watch_quotes(symbols: str = ""):
+    """Last close, 1D/1W/1M change and distance from the 52-week high for each stock in a watchlist (daily bars,
+    the same cached prices as the stock pages)."""
+    from concurrent.futures import ThreadPoolExecutor
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()][:150]
+
+    def one(sym):
+        try:
+            bars, src, _ = technicals.get_bars(sym)
+        except Exception as e:  # noqa: BLE001 - one stock failing must not hide the rest
+            return {"symbol": sym, "error": str(e)[:120]}
+        if not bars:
+            return {"symbol": sym, "error": "no prices"}
+        c = [b["c"] for b in bars]
+        ret = lambda k: round((c[-1] / c[-1 - k] - 1) * 100, 2) if len(c) > k else None
+        hi = max(b["h"] for b in bars[-252:])
+        return {"symbol": sym, "price": round(c[-1], 2), "date": bars[-1]["t"], "ret": {"1D": ret(1), "1W": ret(5), "1M": ret(21)},
+                "from_hi": round((c[-1] / hi - 1) * 100, 1) if hi else None, "source": src}
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        return {"rows": list(ex.map(one, syms))}
+
+
 @app.get("/api/heatmap")
 def heatmap_get(market: str = "IN", tf: str = "1D", universe: str = ""):
     from . import heatmap

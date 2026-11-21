@@ -3,7 +3,8 @@ import { api, deviceBackup, dropDeviceBackup, go, importDeviceBackup, me, saveLo
 import { Badge } from '../components/ui'
 
 // My account: who is signed in, what is saved with the account, lists found only in this browser, security.
-const count = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return Array.isArray(v) ? v.length : v && typeof v === 'object' ? Object.keys(v).length : 0 } catch { return 0 } }
+const size = (k, v) => (k === 'eql_watch' && v && v.v === 2 ? v.lists.reduce((a, l) => a + l.items.length, 0) : Array.isArray(v) ? v.length : v && typeof v === 'object' ? Object.keys(v).length : 0)
+const count = (k) => { try { return size(k, JSON.parse(localStorage.getItem(k) || 'null')) } catch { return 0 } }
 const LABEL = { eql_watch: 'watchlist stocks', eql_screens: 'saved screens', eql_notes: 'stock notes', eql_recent: 'recent stocks', eql_over2: 'chart layout', eql_panes: 'chart panels' }
 const postJSON = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
 
@@ -24,7 +25,7 @@ export default function Account() {
   }
   const u = a.user || me() || {}
   const backup = deviceBackup()
-  const backupItems = Object.entries(backup).map(([k, raw]) => { let n = 0; try { const v = JSON.parse(raw); n = Array.isArray(v) ? v.length : Object.keys(v || {}).length } catch { /* skip */ } return [k, n] }).filter(([, n]) => n)
+  const backupItems = Object.entries(backup).map(([k, raw]) => { let n = 0; try { n = size(k, JSON.parse(raw)) } catch { /* skip */ } return [k, n] }).filter(([, n]) => n)
   const rows = [
     ['Watchlist', `${count('eql_watch')} stocks`, 'watch'],
     ['Saved screens', `${count('eql_screens')}`, 'screener'],

@@ -92,6 +92,15 @@ def test_us_shares_from_sec_frames():
     assert got["mcap"] == 10000.0 and got["mcap_src"] == "sec_shares"                       # $10,000 M = $10 B
 
 
+def test_watchlist_quotes():
+    from app import main
+    rows = main.watch_quotes("TESTCO, us:tstus")["rows"]
+    assert [r["symbol"] for r in rows] == ["TESTCO", "US:TSTUS"]
+    for r in rows:
+        assert r["price"] > 0 and set(r["ret"]) == {"1D", "1W", "1M"} and r["from_hi"] <= 0
+    assert main.watch_quotes("")["rows"] == []
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

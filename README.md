@@ -399,6 +399,8 @@ Bring in what you actually own, then let EquityLens check it the same way it che
 - **Top Picks** scans the whole NIFTY 500 or S&P 500 and ranks every company by the same rules; ✨ *explain this list* with AI
 - **Watchlist** and **Compare** up to 4 stocks side by side
 
+**⭐ Watchlists (up to 10, named by you).** Make lists like "Long term", "Swing ideas" or "IT stocks" (＋ New list, ✎ Rename, 🗑 Delete). The ☆ on any stock page opens a menu with a tick box for every list, so a stock can sit in several. Each list shows the logo, price, 1D / 1W / 1M change, distance from the 52-week high, **% since added** (from the price saved the moment you added it; older entries show —), and the EquityLens score. Drag rows to reorder, ⇄ to move or copy to another list, pick up to 4 to compare, see the list as a heatmap, or download it as CSV. On a phone: swipe a stock left to move or remove it. Indian and US stocks can share a list. Your old watchlist becomes the first list, "My watchlist". With sign-in on, the lists follow you to every device (lists with the same name are joined when a device's lists are added).
+
 ### ✨ AI analyst
 
 | Agent | What it does |
@@ -632,7 +634,7 @@ cd backend
 python run_tests.py
 ```
 
-163 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+164 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -650,7 +652,7 @@ python run_tests.py
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys; entry research parsing, retry, caching and flagging of invented numbers |
 | `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
 | `test_pricemap.py` | ZigZag keeps only major swings and never the one still forming, volume profile, unfilled gaps, today's low is not a level, hold-rate maths on each stock's own ATR scale (held, broken, unresolved, 5 days apart), random-price zones (same width, never on a real zone, repeatable, kept out of the real figures, compared at the same distance so distance can't fake an edge), in-app run status, the level backtest uses no future prices and counts each test once, its pass rule at the edges, market / sector / stock answer, value ranges tied to P/E state, the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
-| `test_heatmap.py` | Heatmap rows carry every period and never a guessed market cap, market cap from NSE issued shares only when there is no scan, reading NSE's sector and shares, which stocks still need a lookup, sector totals add up, sector index mapping (India and US), US closes dated on New York time, US shares from SEC |
+| `test_heatmap.py` | Heatmap rows carry every period and never a guessed market cap, market cap from NSE issued shares only when there is no scan, reading NSE's sector and shares, which stocks still need a lookup, sector totals add up, sector index mapping (India and US), US closes dated on New York time, US shares from SEC, watchlist prices |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |
 
@@ -720,6 +722,7 @@ equitylens/
 | `GET /api/calendar/earnings` · `economy` · `next/{symbol}` | Calendars and next results date |
 | `POST /api/ai/{note,chat,guidance,debate,doc,chart}/{symbol}` | AI features for a stock (`chat` takes `focus: "entry"` for questions about the entry card) |
 | `GET /api/premarket?market=IN&refresh=` · `POST /api/premarket/backtest` · `POST /api/ai/premarket` | Pre-market board, opening call, backtest, AI brief |
+| `GET /api/watch/quotes?symbols=A,B,US:C` | Last close, 1D/1W/1M and distance from the 52-week high for watchlist stocks |
 | `GET /api/heatmap?market=&tf=&universe=` · `GET /api/heatmap/sector?market=&sector=` | Heatmap data, and one sector's index |
 | `GET /api/pricemap/{symbol}?refresh=` · `POST /api/ai/pricemap/{symbol}` | Price map for one stock, AI research on it |
 | `GET /api/jobs/{levels\|entry}` · `POST /api/jobs/{levels\|entry}/start` | Run the level test or the entry backtest from the app (owner only), with progress |

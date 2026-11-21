@@ -8,11 +8,12 @@ import { Documents, Forensics, ValuationLab } from './StockAdvanced'
 import StockChart from './StockChart'
 import EntryCard from '../components/EntryCard'
 import PriceMap from '../components/PriceMap'
+import WatchPicker from '../components/WatchPicker'
 import { NotesCard } from './Account'
 import { StockAI } from './AI'
 import { StockMoney, SurveillanceBanner } from './SmartMoney'
 import { KeyPoints, KeyRatios, LatestQuarter, StoryTimeline } from './OverviewExtra'
-import { ago, api, cr, cur, flag, go, isUS, num, ok, pct, recent, rs, scoreColor, setCurrency, signed, ticker, unitLabel, unitWords, watchlist, x } from '../util'
+import { ago, api, cr, cur, flag, go, isUS, num, ok, pct, recent, rs, scoreColor, setCurrency, signed, ticker, unitLabel, unitWords, x } from '../util'
 
 const TABS = [
   ['overview', 'Overview'], ['ai', '✨ AI'], ['chart', 'Chart'], ['pricemap', '📍 Price map'], ['future', 'Future 3·5·10y'], ['valuation', 'Valuation Lab'], ['forensics', 'Forensics'],
@@ -43,7 +44,6 @@ export default function Stock({ symbol, tab }) {
   const [d, setD] = useState(null)
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [star, setStar] = useState(watchlist.has(symbol))
   const [nextRes, setNextRes] = useState(null)
   const [money, setMoney] = useState(null)
   useEffect(() => { setMoney(null); api(`/api/flows/stock/${encodeURIComponent(symbol)}`).then(setMoney).catch(() => setMoney({ symbol, errors: { all: 'not available' } })) }, [symbol])
@@ -85,7 +85,7 @@ export default function Stock({ symbol, tab }) {
               return <span className="chip res-chip" onClick={() => go('calendar/results')}>📅 Results {new Date(nextRes.date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}{t} · {when}{ok(nextRes.eps_estimate) ? ` · EPS est. $${nextRes.eps_estimate}` : ''}</span>
             })()}
           </div>
-          <button className={`star ${star ? 'on' : ''}`} onClick={() => { watchlist.toggle(d.symbol, c.name); setStar(!star) }}>{star ? '★' : '☆'}</button>
+          <WatchPicker symbol={d.symbol} name={c.name} price={m.price} />
         </div>
         <div className="row wrapflex" style={{ gap: 18, marginTop: 6 }}>
           <div><div className="price">{rs(m.price, 2)}</div>

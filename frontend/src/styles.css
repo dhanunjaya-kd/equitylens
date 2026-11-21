@@ -535,3 +535,30 @@ html, body { transition: background-color .2s ease; }
 .hm-prow { display: flex; gap: 10px; align-items: center; background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
 .hm-ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 760px) { .hm-kpis { grid-template-columns: 1fr 1fr; } .hm-legend { width: 110px; } }
+
+/* Watchlists */
+.input { background: var(--card2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 14px; min-width: 0; }
+.wl-tabs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.wl-tab { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; }
+.wl-tab span { opacity: .65; font-weight: 500; margin-left: 2px; }
+.wl-tab.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.wl-add { border-style: dashed; border-color: var(--accent); color: var(--accent); }
+.wl-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.wl-btns { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.wl-table { min-width: 980px; margin: 0; }
+.wl-table td, .wl-table th { padding-left: 12px; }
+.wl-grip { color: var(--muted); cursor: grab; font-size: 12px; letter-spacing: -2px; }
+.wl-drag { opacity: .45; }
+.wl-menu { position: absolute; right: 0; top: 100%; z-index: 20; min-width: 200px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.35); display: flex; flex-direction: column; }
+.wl-menu button { text-align: left; background: none; border: 0; color: var(--text); padding: 7px 8px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13.5px; }
+.wl-menu button:hover { background: var(--card2); }
+.hm-sheet .wl-menu { position: static; box-shadow: none; border: 0; padding: 6px 0 0; }
+.wl-swipe { position: relative; overflow: hidden; border-radius: 12px; }
+.wl-actions { position: absolute; inset: 0; display: flex; justify-content: flex-end; }
+.wl-actions button { width: 85px; border: 0; font: inherit; font-weight: 700; color: #fff; background: #2563eb; }
+.wl-actions button.bad { background: #dc2626; }
+.wl-card { position: relative; transition: transform .15s; touch-action: pan-y; }
+.wp-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 270px; background: var(--card); border: 1px solid var(--accent); border-radius: 12px; padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.4); text-align: left; }
+.wp-row { display: flex; gap: 10px; align-items: center; padding: 7px 2px; cursor: pointer; font-size: 14px; }
+.wp-row input { width: 17px; height: 17px; accent-color: var(--accent); }
+.wp-new { background: none; border: 0; color: var(--accent); font: inherit; font-size: 14px; padding: 8px 2px 2px; cursor: pointer; }

@@ -100,7 +100,8 @@ export async function importDeviceBackup() {
     let mine, theirs
     try { mine = JSON.parse(localStorage.getItem(k) || 'null'); theirs = JSON.parse(raw) } catch { continue }
     let merged = theirs
-    if (Array.isArray(theirs) && Array.isArray(mine)) {          // lists: keep the account's items first, add the new ones
+    if (k === 'eql_watch') merged = mergeWatch(mine, theirs)
+    else if (Array.isArray(theirs) && Array.isArray(mine)) {          // lists: keep the account's items first, add the new ones
       const key = (x) => (x && (x.symbol || x.name)) || JSON.stringify(x)
       const seen = new Set(mine.map(key))
       merged = [...mine, ...theirs.filter((x) => !seen.has(key(x)))]
@@ -118,13 +119,73 @@ export async function signOut() {
   window.location.hash = '#/'
   window.location.reload()
 }
+// Watchlists: up to 10 named lists. Stored as { v: 2, active, lists: [{ id, name, items: [{ symbol, name, added, price }] }] }.
+// The old single list (an array) becomes the first list, "My watchlist".
+export const MAX_LISTS = 10
+export const normWatch = (raw) => {
+  if (Array.isArray(raw)) return { v: 2, active: 'w1', lists: [{ id: 'w1', name: 'My watchlist', items: raw.filter((x) => x && x.symbol) }] }
+  if (raw && raw.v === 2 && Array.isArray(raw.lists) && raw.lists.length) return raw
+  return { v: 2, active: 'w1', lists: [{ id: 'w1', name: 'My watchlist', items: [] }] }
+}
+const wget = () => { try { return normWatch(JSON.parse(localStorage.getItem('eql_watch') || '[]')) } catch { return normWatch([]) } }
+const wset = (d) => { write('eql_watch', d); window.dispatchEvent(new Event('eql-watch')) }
+const wedit = (fn) => { const d = wget(); fn(d); wset(d); return d }
+const today = () => new Date().toISOString().slice(0, 10)
 export const watchlist = {
-  all: () => read('eql_watch'),
-  has: (s) => read('eql_watch').some((w) => w.symbol === s),
-  toggle: (s, name) => {
-    const w = read('eql_watch')
-    write('eql_watch', w.some((i) => i.symbol === s) ? w.filter((i) => i.symbol !== s) : [{ symbol: s, name }, ...w])
+  data: wget,
+  lists: () => wget().lists,
+  active: () => { const d = wget(); return d.lists.find((l) => l.id === d.active) || d.lists[0] },
+  setActive: (id) => wedit((d) => { d.active = id }),
+  // every stock in any list, once, in list order (used by Calendar, Smart Money, ...)
+  all: () => { const seen = new Set(); const out = []; wget().lists.forEach((l) => l.items.forEach((i) => { if (!seen.has(i.symbol)) { seen.add(i.symbol); out.push(i) } })); return out },
+  has: (s) => wget().lists.some((l) => l.items.some((i) => i.symbol === s)),
+  listsWith: (s) => wget().lists.filter((l) => l.items.some((i) => i.symbol === s)).map((l) => l.id),
+  create: (name) => {
+    let id = null
+    wedit((d) => {
+      if (d.lists.length >= MAX_LISTS) return
+      id = `w${Date.now().toString(36)}`
+      d.lists.push({ id, name: String(name || 'New list').trim().slice(0, 40) || 'New list', items: [] })
+      d.active = id
+    })
+    return id
   },
+  rename: (id, name) => wedit((d) => { const l = d.lists.find((x) => x.id === id); if (l && String(name).trim()) l.name = String(name).trim().slice(0, 40) }),
+  remove: (id) => wedit((d) => {
+    d.lists = d.lists.filter((l) => l.id !== id)
+    if (!d.lists.length) d.lists = normWatch([]).lists
+    if (!d.lists.some((l) => l.id === d.active)) d.active = d.lists[0].id
+  }),
+  add: (id, s, name, price) => wedit((d) => {
+    const l = d.lists.find((x) => x.id === id)
+    if (l && !l.items.some((i) => i.symbol === s)) l.items.unshift({ symbol: s, name, added: today(), price: price ?? null })
+  }),
+  drop: (id, s) => wedit((d) => { const l = d.lists.find((x) => x.id === id); if (l) l.items = l.items.filter((i) => i.symbol !== s) }),
+  moveTo: (from, to, s, copy = false) => wedit((d) => {
+    const a = d.lists.find((x) => x.id === from), b = d.lists.find((x) => x.id === to)
+    const it = a?.items.find((i) => i.symbol === s)
+    if (!a || !b || !it || a === b) return
+    if (!b.items.some((i) => i.symbol === s)) b.items.unshift({ ...it })
+    if (!copy) a.items = a.items.filter((i) => i.symbol !== s)
+  }),
+  reorder: (id, from, to) => wedit((d) => {
+    const l = d.lists.find((x) => x.id === id)
+    if (!l || from === to || from < 0 || to < 0 || from >= l.items.length || to >= l.items.length) return
+    const [x] = l.items.splice(from, 1)
+    l.items.splice(to, 0, x)
+  }),
+  // old one-tap star: add to / remove from the active list
+  toggle: (s, name, price) => { const a = watchlist.active(); if (a.items.some((i) => i.symbol === s)) watchlist.drop(a.id, s); else watchlist.add(a.id, s, name, price) },
+}
+// merge two watchlist stores (device + account): lists with the same name are joined, the rest added (max 10)
+export const mergeWatch = (mine, theirs) => {
+  const a = normWatch(mine), b = normWatch(theirs)
+  b.lists.forEach((l) => {
+    const same = a.lists.find((x) => x.name.toLowerCase() === l.name.toLowerCase())
+    if (same) { const have = new Set(same.items.map((i) => i.symbol)); same.items.push(...l.items.filter((i) => !have.has(i.symbol))) }
+    else if (a.lists.length < MAX_LISTS) a.lists.push({ ...l, id: a.lists.some((x) => x.id === l.id) ? `w${Date.now().toString(36)}${a.lists.length}` : l.id })
+  })
+  return a
 }
 export const recent = {
   all: () => read('eql_recent'),
