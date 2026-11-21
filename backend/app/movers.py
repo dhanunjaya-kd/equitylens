@@ -251,9 +251,12 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
     rows = data["rows"] if data else []
     loaded = (data or {}).get("universe") or ("N500" if market == "IN" else "SP500")
     if market == "IN":
+        from . import sectors
         member = universe.membership()
+        smap = sectors.sector_map()
         for r in rows:
             r["idx"] = member.get(r["symbol"], [])
+            r["sector"] = smap.get(r["symbol"]) or (r["sector"] if r["sector"] not in ("", "Other") else sectors.UNKNOWN)
         if which in ("N50", "N100", "N500"):
             rows = [r for r in rows if which in r["idx"]]
     ranks = {r["symbol"]: r for r in store.all_rankings() if r.get("market", "IN") == market}

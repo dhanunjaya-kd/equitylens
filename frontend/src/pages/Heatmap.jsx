@@ -108,7 +108,7 @@ function Details({ r, tf, phone, onClose, pos }) {
         {TFS.map((k) => <div key={k} style={k === tf ? { color: 'var(--accent)' } : undefined}><div className="muted">{k}</div><b style={{ color: (r.ret?.[k] ?? 0) >= 0 ? 'var(--good)' : 'var(--bad)' }}>{signed(r.ret?.[k], 1, '%')}</b></div>)}
       </div>
       <div className="small" style={{ marginTop: 8, lineHeight: 1.5 }}>
-        Market cap {r.mcap ? cr(r.mcap) : <span className="muted">not known yet (stock not scanned)</span>}
+        Market cap {r.mcap ? <>{cr(r.mcap)}{r.mcap_src === 'nse_shares' ? <span className="muted"> (NSE issued shares × last close)</span> : null}</> : <span className="muted">not known yet</span>}
         {r.from_hi !== null && r.from_hi !== undefined && <> · {Math.abs(r.from_hi).toFixed(1)}% below its 52-week high</>}
         {r.above200 !== null && r.above200 !== undefined && <> · {r.above200 ? 'above' : 'below'} its 200-day</>}
         {r.score !== null && r.score !== undefined && <> · EquityLens score {Math.round(r.score)}</>}
@@ -324,11 +324,13 @@ export default function Heatmap({ sector }) {
   const poll = useRef(null)
   const load = () => api(`/api/heatmap?market=${mk}&tf=${tf}${mk === 'IN' ? `&universe=${univ}` : ''}`).then(setD).catch(() => setD({ rows: [], sectors: [], status: {} }))
   useEffect(() => { load() }, [mk, tf, univ]) // eslint-disable-line react-hooks/exhaustive-deps
+  const filling = !!d?.sector_fill?.running
   useEffect(() => {
     clearInterval(poll.current)
     if (d?.status?.running) poll.current = setInterval(load, 4000)
+    else if (filling) poll.current = setInterval(load, 20000)
     return () => clearInterval(poll.current)
-  }, [d?.status?.running]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [d?.status?.running, filling]) // eslint-disable-line react-hooks/exhaustive-deps
   const phone = width > 0 && width < PHONE
   const st = d?.status || {}
   const noMcapAll = d && d.rows.length > 0 && d.no_mcap === d.rows.length
@@ -367,8 +369,15 @@ export default function Heatmap({ sector }) {
           <div className="small" style={{ marginTop: 8 }}>Prices are loaded for the NIFTY 500 only. <button className="btn small primary" onClick={async () => { await api('/api/movers/refresh?market=IN&universe=ALL', { method: 'POST' }); load() }}>Load all NSE stocks</button> <span className="muted">(about 10–15 min in the background)</span></div>
         )}
         {st.running && <><div className="small" style={{ marginTop: 8 }}>Loading prices {st.done}/{st.total}…</div><div className="progress"><div style={{ width: `${st.total ? (st.done / st.total) * 100 : 0}%` }} /></div></>}
-        {size === 'mcap' && d?.no_mcap > 0 && !noMcapAll && <div className="small muted" style={{ marginTop: 8 }}>{d.no_mcap} stock{d.no_mcap === 1 ? '' : 's'} not scanned yet have no market cap: shown at the smallest size, not a guessed one.</div>}
-        {size === 'mcap' && noMcapAll && <div className="small" style={{ marginTop: 8, color: 'var(--warn)' }}>No market caps yet (no stocks scanned), so every box is the same size. Use <b>Box size → Traded value</b>, or run a scan from Top Picks.</div>}
+        {filling && (
+          <>
+            <div className="small" style={{ marginTop: 8 }}>Getting each stock's NSE sector and issued shares (for market cap): {d.sector_fill.done.toLocaleString('en-IN')} of {d.sector_fill.total.toLocaleString('en-IN')} · one time only, about {Math.max(1, Math.round((d.sector_fill.total - d.sector_fill.done) / 60))} min left in the background · the map fills in as it goes</div>
+            <div className="progress"><div style={{ width: `${d.sector_fill.total ? (d.sector_fill.done / d.sector_fill.total) * 100 : 0}%` }} /></div>
+          </>
+        )}
+        {size === 'mcap' && d?.no_mcap > 0 && !noMcapAll && <div className="small muted" style={{ marginTop: 8 }}>{d.no_mcap.toLocaleString('en-IN')} stock{d.no_mcap === 1 ? '' : 's'} with no market cap yet: shown at the smallest size, not a guessed one.</div>}
+        {size === 'mcap' && noMcapAll && <div className="small" style={{ marginTop: 8, color: 'var(--warn)' }}>No market caps yet{filling ? ' (being fetched from NSE)' : ''}, so every box is the same size for now. <b>Box size → Traded value</b> works straight away.</div>}
+        {d?.sector_fill?.unknown > 0 && !filling && <div className="small muted" style={{ marginTop: 4 }}>{d.sector_fill.unknown} stock{d.sector_fill.unknown === 1 ? '' : 's'} NSE gives no sector for are grouped as "Sector not known yet".</div>}
       </div>
       {!d && <div className="card empty">Loading…</div>}
       {d && !d.rows.length && <div className="card empty">{st.running ? 'Fetching prices for the whole list. The first load takes 1–3 minutes, after that it’s instant.' : 'No prices yet.'}</div>}
@@ -376,7 +385,7 @@ export default function Heatmap({ sector }) {
         ? <SectorView name={sector} d={d} tf={tf} size={size} phone={phone} width={width} />
         : phone ? <MapPhone rows={d.rows} sectors={d.sectors} tf={tf} size={size} width={width} />
           : <MapWeb rows={d.rows} sectors={d.sectors} tf={tf} size={size} width={width} />)}
-      <p className="disclaimer">Box size = {SIZES.find((x) => x[0] === size)[1].toLowerCase()} · colour = % change over {tf} (full colour at ±{SCALE[tf]}%) · grey = no price. Prices: Yahoo Finance via Market Movers; market cap and score: the EquityLens scan; logos: the company's own logo, or its initials when none is found.</p>
+      <p className="disclaimer">Box size = {SIZES.find((x) => x[0] === size)[1].toLowerCase()} · colour = % change over {tf} (full colour at ±{SCALE[tf]}%) · grey = no price. Prices: Yahoo Finance via Market Movers; sectors: NSE's own classification; market cap: the EquityLens scan, or NSE issued shares × last close; score: the EquityLens scan; logos: the company's own logo, or its initials when none is found.</p>
     </div>
   )
 }

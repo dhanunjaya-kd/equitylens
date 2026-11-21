@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Optional
 
 from . import movers, pricemap, technicals
+from .sectors import UNKNOWN
 
 TFS = list(movers.TF)
 # S&P 500 sectors (GICS) -> the official Select Sector SPDR fund for that sector
@@ -27,18 +28,27 @@ US_SECTOR_FUND = {
 }
 
 
-def slim(r: dict, tf: str) -> dict:
+def slim(r: dict, tf: str, shares: Optional[dict] = None) -> dict:
+    """mcap: the EquityLens scan's market cap, else NSE issued shares x last close (both real); else None."""
     f = r.get("fund") or {}
+    mcap, src = f.get("market_cap"), ("scan" if f.get("market_cap") else None)
+    n = (shares or {}).get(r["symbol"])
+    if not mcap and n and r.get("price"):
+        mcap, src = round(n * r["price"] / 1e7, 0), "nse_shares"
     return {"symbol": r["symbol"], "name": r["name"], "sector": r["sector"], "price": r["price"], "date": r.get("date"),
             "ret": r["ret"], "from_hi": r.get("from_hi"), "above50": r.get("above50"), "above200": r.get("above200"),
-            "rvol": r.get("rvol"), "value": (r.get("turnover") or {}).get(tf), "mcap": f.get("market_cap"),
+            "rvol": r.get("rvol"), "value": (r.get("turnover") or {}).get(tf), "mcap": mcap, "mcap_src": src,
             "score": f.get("overall"), "verdict": f.get("verdict"), "tone": f.get("tone"), "fno": r.get("fno")}
 
 
 def get(market: str, tf: str = "1D", which: str = "") -> dict:
     d = movers.get(market, tf, which)
     tf = d["tf"]
-    rows = [slim(r, tf) for r in d["rows"]]
+    sh = {}
+    if d["market"] == "IN":
+        from . import sectors as nse_sectors
+        sh = nse_sectors.shares()
+    rows = [slim(r, tf, sh) for r in d["rows"]]
     by: dict[str, list] = {}
     for r in rows:
         by.setdefault(r["sector"], []).append(r)
@@ -50,14 +60,24 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
                         "up": sum(1 for x in vals if x > 0), "down": sum(1 for x in vals if x < 0),
                         "mcap": sum(r["mcap"] or 0 for r in rs), "no_mcap": sum(1 for r in rs if not r["mcap"]),
                         "value": sum(r["value"] or 0 for r in rs)})
-    sectors.sort(key=lambda s: -(s["mcap"] or s["value"] or s["count"]))
+    sectors.sort(key=lambda s: (s["sector"] == UNKNOWN, -(s["mcap"] or s["value"] or s["count"])))
+    fill = None
+    if d["market"] == "IN":
+        from . import sectors as nse_sectors
+        unknown = [r["symbol"] for r in rows if r["sector"] == UNKNOWN]
+        by_size = [r["symbol"] for r in sorted(rows, key=lambda r: -(r["value"] or 0))]   # biggest names first
+        nse_sectors.start_fill(by_size)
+        fill = dict(nse_sectors.status(), unknown=len(unknown))
     return {"market": d["market"], "tf": tf, "rows": rows, "sectors": sectors, "updated": d["updated"],
             "session": d["session"], "live": d["live"], "status": d["status"], "universe": d["universe"],
-            "count": len(rows), "no_mcap": sum(1 for r in rows if not r["mcap"]), "scanned": d["scanned"]}
+            "count": len(rows), "no_mcap": sum(1 for r in rows if not r["mcap"]), "scanned": d["scanned"],
+            "sector_fill": fill}
 
 
 def sector_index(market: str, sector: str) -> Optional[dict]:
     """The closest sector index (India) or the sector's SPDR fund (US), with its fall from the 52-week high."""
+    if sector == UNKNOWN:
+        return {"index": None, "note": "These stocks have no NSE sector yet."}
     if market == "US":
         m = US_SECTOR_FUND.get(sector)
         st = {"ticker": m[0], "name": m[1]} if m else None

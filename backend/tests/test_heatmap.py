@@ -7,7 +7,7 @@ from pathlib import Path
 os.environ["EQL_DEMO"] = "1"
 os.environ.setdefault("EQL_DATA_DIR", tempfile.mkdtemp())
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app import heatmap, movers, store  # noqa: E402
+from app import heatmap, movers, sectors, store  # noqa: E402
 
 store.init()
 movers.refresh("IN", block=True)
@@ -40,6 +40,33 @@ def test_sector_index_mapping():
     assert heatmap.sector_index("US", "Unknown")["index"] is None
     ix = heatmap.sector_index("IN", "Information Technology")["index"]
     assert ix["fall_pct"] >= 0 and set(ix["ret"]) == set(movers.TF)
+
+
+def test_nse_quote_gives_sector_and_shares():
+    q = '{"industryInfo": {"macro": "Financial Services", "sector": "Financial Services", "industry": "Banks"}, "securityInfo": {"issuedSize": 7651780468}}'
+    assert sectors.parse_quote(q) == ("Financial Services", 7651780468.0)
+    assert sectors.parse_quote('{"industryInfo": {"sector": "NA"}, "securityInfo": {"issuedSize": 0}}') == (None, None)
+    assert sectors.parse_quote("<html>blocked</html>") == (None, None)
+
+
+def test_market_cap_from_nse_shares_only_when_no_scan():
+    r = {"symbol": "ABC", "name": "Abc", "sector": "Power", "price": 250.0, "ret": {}, "turnover": {"1D": 5.0}}
+    assert heatmap.slim(r, "1D", {"ABC": 4e8})["mcap"] == 10000.0            # 40 cr shares x Rs 250 = Rs 10,000 Cr
+    assert heatmap.slim(r, "1D", {"ABC": 4e8})["mcap_src"] == "nse_shares"
+    assert heatmap.slim(r, "1D", {})["mcap"] is None                          # no shares, no scan: no market cap
+    scanned = dict(r, fund={"market_cap": 12345})
+    assert heatmap.slim(scanned, "1D", {"ABC": 4e8})["mcap"] == 12345          # the scan wins
+
+
+def test_which_stocks_still_need_a_lookup():
+    import time
+    store.put_company(sectors.KEY, {"sectors": {"AAA": "Power"}, "asked": {"CCC": time.time()},
+                                    "shares": {"AAA": {"n": 1e8, "t": time.time()}, "BBB": {"n": 1e8, "t": 0}}})
+    need = sectors.missing(["AAA", "BBB", "CCC", "DDD"])
+    assert "AAA" not in need                    # sector and fresh shares known
+    assert "BBB" in need and "DDD" in need      # no sector / stale shares; never asked
+    assert "CCC" not in need                    # asked recently and NSE had nothing: not asked again for a month
+    assert sectors.sector_map()["AAA"] == "Power"
 
 
 if __name__ == "__main__":
