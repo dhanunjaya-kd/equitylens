@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, ago, go } from '../util'
 import { Badge, Loading } from './ui'
 import { Md, useAISettings } from '../pages/AI'
@@ -18,114 +18,154 @@ function Tile({ k, v, s, tone }) {
   )
 }
 
-function heldText(l) {
-  if (!l.tests) return 'not tested in the last 3 years'
-  return `held ${l.held} of ${l.tests} test${l.tests > 1 ? 's' : ''}${l.tests < 3 ? ' · thin evidence' : ''}`
-}
-
-function JobRunner({ name, what, howLong, onDone, compact }) {
-  const [st, setSt] = useState(null), [denied, setDenied] = useState(false), [busy, setBusy] = useState(false)
-  const wasRunning = useRef(false)
-  const check = () => api(`/api/jobs/${name}`).then((x) => {
-    if (wasRunning.current && !x.running && x.finished) onDone?.()
-    wasRunning.current = x.running
-    setSt(x)
-  }).catch((e) => { if (String(e.message).match(/owner|403|forbidden/i)) setDenied(true) })
-  useEffect(() => { check() }, [name]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!st?.running) return undefined
-    const t = setInterval(check, 5000)
-    return () => clearInterval(t)
-  }, [st?.running]) // eslint-disable-line react-hooks/exhaustive-deps
-  const start = async () => { setBusy(true); try { const x = await post(`/api/jobs/${name}/start`); wasRunning.current = x.running; setSt(x) } finally { setBusy(false) } }
-  if (denied) return <div className="small muted">Only the owner of this EquityLens can run this test.</div>
-  if (!st) return null
-  if (st.running) {
-    const p = st.progress, pctDone = p?.total ? Math.round((p.done / p.total) * 100) : 0
-    return (
-      <div className="pmap-job">
-        <div className="small"><b>{st.label}: running</b> · {p ? `${p.done.toLocaleString('en-IN')} of ${p.total.toLocaleString('en-IN')} stocks` : 'starting…'}{st.started ? ` · started ${ago(st.started)}` : ''} · you can keep using the app</div>
-        <div className="pmap-prog"><div style={{ width: `${pctDone}%` }} /></div>
-        {st.last_lines?.length > 0 && <div className="small muted" style={{ fontFamily: 'monospace', fontSize: 11 }}>{st.last_lines[st.last_lines.length - 1]}</div>}
-      </div>
-    )
-  }
-  return (
-    <div className="pmap-job">
-      {st.failed && (
-        <div className="small" style={{ color: 'var(--bad)', marginBottom: 6 }}>The last run stopped before finishing:
-          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, margin: '4px 0' }}>{st.last_lines.slice(-4).join('\n')}</pre>
-        </div>
-      )}
-      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-        <button className={compact ? 'btn small' : 'btn primary small'} disabled={busy} onClick={start}>{st.result_built ? '↻ Run again' : '▶ Run the test now'}</button>
-        <span className="small muted">{what} · {howLong} · runs in the background{st.result_built ? ` · last result ${st.result_built}` : ''}</span>
-      </div>
-    </div>
-  )
-}
-
-function TrackLine({ tr, onDone }) {
-  const job = (compact) => <JobRunner name="levels" what="All NSE stocks, rules fixed before the run" howLong="about 20–40 min" onDone={onDone} compact={compact} />
-  if (!tr || tr.stale) {
-    return (
-      <div style={{ margin: '6px 0' }}>
-        <div className="small" style={{ color: 'var(--warn)', marginBottom: 6 }}>{tr?.stale ? `The level test result (${tr.built}) is for older level rules (v${tr.rules_version}); run it again for these rules.` : "Not tested yet: whether a zone's past record predicts its next test. Until the test runs, the counts below are history only."}</div>
-        {job(false)}
-      </div>
-    )
-  }
-  const side = (k, lab) => {
-    const b = tr.result?.[k]
-    if (!b) return null
-    const st = b.passed === true ? ['var(--good)', 'past record DID predict the next test'] : b.passed === false ? ['var(--bad)', 'past record did NOT predict the next test'] : ['var(--warn)', 'too few tests to say']
-    return <div key={k}>{lab}: all levels held at the next test {b.all.held_pct}% of {b.all.n.toLocaleString('en-IN')} → <b style={{ color: st[0] }}>{st[1]}</b></div>
-  }
-  return (
-    <div className="small" style={{ margin: '4px 0 6px', lineHeight: 1.5 }}>
-      <div className="muted">Backtest, {tr.universe}, {tr.stocks} stocks, {tr.tests?.toLocaleString('en-IN')} level tests (built {tr.built}). Fixed test: {tr.pass_test}</div>
-      {side('support', 'Supports')}{side('resistance', 'Resistances')}
-      {tr.market_note && <div style={{ color: 'var(--warn)' }}>{tr.market_note}</div>}
-      <div style={{ marginTop: 6 }}>{job(true)}</div>
-    </div>
-  )
-}
-
-const SRC_L = { zigzag: 'major swing', gap: 'gap', volume: 'volume', fib: 'Fibonacci', ma: 'average', '52w': '52-week' }
+const SRC_L = { zigzag: 'Major swing', gap: 'Unfilled gap', volume: 'Volume profile', fib: 'Fibonacci', ma: 'Moving average', '52w': '52-week high/low' }
 const zoneTxt = (z, cur) => (z.lo === z.hi ? `${cur}${n2(z.lo)}` : `${cur}${n2(z.lo)} – ${n2(z.hi)}`)
+const pct = (x) => (x === null || x === undefined ? '—' : `${(+x).toFixed(1)}%`)
+const num = (x) => (x === null || x === undefined ? '—' : (+x).toLocaleString('en-IN'))
+const SIDE = { support: { title: 'Support zones', verb: 'price bounced', more: 'moved up' }, resistance: { title: 'Resistance zones', verb: 'price turned down', more: 'moved down' } }
 
-function Ladder({ lv, cur, tr, onDone, range }) {
-  const beyond = (l) => range && (l.kind === 'support' ? l.hi < range.lo : l.lo > range.hi)
-  const row = (l, i) => {
-    const res = l.kind === 'resistance'
-    const b = tr?.result?.[l.kind]?.buckets?.[l.bucket]
+function SettingsLink({ text }) {
+  return <button className="btn small" onClick={() => go('settings')}>{text}</button>
+}
+
+function ZoneEvidence({ tr }) {
+  const [open, setOpen] = useState(false)
+  if (!tr) {
     return (
-      <div key={`${l.kind}${i}`} className="pmap-lv">
-        <span className="pmap-kind" style={{ color: res ? 'var(--bad)' : 'var(--good)' }}>{res ? 'RESISTANCE' : 'SUPPORT'}</span>
-        <b className="pmap-px">{zoneTxt(l, cur)}</b>
-        <span className="pmap-dist">{sg(l.dist_pct)}<br /><span style={{ fontSize: 11 }}>{Math.abs(l.dist_atr)} days' range{beyond(l) ? ' · beyond a normal month' : ''}</span></span>
-        <span className="pmap-what">{(l.parts || [l.what]).map((p) => <span key={p} style={{ display: 'block' }}>{p}</span>)}
-          {l.sources?.length > 1 && <span className="pmap-bt" style={{ color: 'var(--text)' }}>{l.sources.length} kinds of level meet here: {l.sources.map((x) => SRC_L[x] || x).join(', ')}</span>}
-          {b && b.n >= 100 && <span className="pmap-bt">Backtest: {l.kind === 'support' ? 'supports' : 'resistances'} with this record ({l.bucket}) held at the next test {b.held_pct}% of {b.n.toLocaleString('en-IN')} times</span>}
-          {b && b.n < 100 && <span className="pmap-bt" style={{ color: 'var(--warn)' }}>Backtest: only {b.n} tests of levels with this record ({l.bucket}), too few for a percentage</span>}
-        </span>
-        <span className="pmap-held">{heldText(l)}</span>
+      <div className="pmap-ev">
+        <b>Reliability check: not run yet.</b> These zones come from this stock's own history. Whether zones like these usually hold has not been checked yet, so treat them as a map only.
+        <div style={{ marginTop: 6 }}><SettingsLink text="Run it in Settings → Data checks" /></div>
       </div>
     )
   }
+  if (tr.stale) {
+    return (
+      <div className="pmap-ev">
+        <b>Reliability check is out of date</b> (it was run on older zone rules, {tr.built}). Run it again to check the zones shown here.
+        <div style={{ marginTop: 6 }}><SettingsLink text="Run it in Settings → Data checks" /></div>
+      </div>
+    )
+  }
+  const line = (side) => {
+    const b = tr.result?.[side]
+    if (!b) return null
+    const S = SIDE[side]
+    let chance
+    if (!tr.has_chance) chance = <span className="muted"> Not yet compared with random prices: run the check again in Settings.</span>
+    else if (b.beats_chance === true) chance = <> At random prices of the same width and distance it was {pct(b.random?.held_pct)}: <b style={{ color: 'var(--good)' }}>real zones beat chance by {b.edge_pts} points</b>.</>
+    else if (b.beats_chance === false) chance = <> At random prices of the same width and distance it was {pct(b.random?.held_pct)}: <b style={{ color: 'var(--bad)' }}>real zones did not clearly beat chance</b> ({b.edge_pts} points).</>
+    else chance = <span className="muted"> Too few tests to compare with random prices.</span>
+    return <div style={{ marginTop: 4 }}><b>{S.title}:</b> {S.verb} {pct(b.all.held_pct)} of the time ({num(b.all.n)} tests).{chance}</div>
+  }
+  const rec = ['support', 'resistance'].map((k) => tr.result?.[k]?.passed)
+  return (
+    <div className="pmap-ev">
+      <div className="muted">Reliability check on {num(tr.stocks)} NSE stocks, built {tr.built}. "Held" = price then moved two days' normal move away from the zone before closing half a day's move through it.</div>
+      {line('support')}{line('resistance')}
+      <div style={{ marginTop: 4 }}>
+        {rec.every((x) => x === false) && <>A zone's own past record ("held X of Y") <b>did not</b> predict its next test, so those counts below are history only.</>}
+        {rec.every((x) => x === true) && <>A zone's own past record ("held X of Y") <b>did</b> predict its next test.</>}
+        {!rec.every((x) => x === false) && !rec.every((x) => x === true) && <>Whether a zone's own record predicts its next test: supports {rec[0] === true ? 'yes' : rec[0] === false ? 'no' : 'too few tests'}, resistances {rec[1] === true ? 'yes' : rec[1] === false ? 'no' : 'too few tests'}.</>}
+      </div>
+      {tr.market_note && <div style={{ color: 'var(--warn)', marginTop: 4 }}>{tr.market_note}</div>}
+      <button className="btn small" style={{ marginTop: 8 }} onClick={() => setOpen(!open)}>{open ? 'Hide the evidence' : 'See the evidence'}</button>
+      {open && <EvidenceTable tr={tr} />}
+    </div>
+  )
+}
+
+function EvidenceTable({ tr }) {
+  const R = tr.result || {}
+  const rows = (side) => {
+    const b = R[side]
+    if (!b) return []
+    const out = [['All zones', b.all, b.halves?.first_half, b.halves?.second_half, true]]
+    if (b.random) out.push(['Random prices (same width)', b.random, b.random.halves?.first_half, b.random.halves?.second_half, true])
+    out.push(['— by the zone\'s own record —'])
+    Object.entries(b.buckets || {}).forEach(([k, v]) => out.push([k, v, v.first_half, v.second_half]))
+    out.push(['— by kind of level —'])
+    Object.entries(b.sources || {}).forEach(([k, v]) => out.push([SRC_L[k] || k, v, v.first_half, v.second_half]))
+    if (b.confluence) Object.entries(b.confluence).forEach(([k, v]) => out.push([`Zones with ${k}`, v]))
+    return out
+  }
+  const cell = (x) => (x ? `${pct(x.held_pct)} · ${num(x.n)}` : '')
+  return (
+    <div style={{ overflowX: 'auto', marginTop: 8 }}>
+      {['support', 'resistance'].map((side) => (
+        <div key={side} style={{ marginBottom: 12 }}>
+          <b>{SIDE[side].title}: held at the next test (% · number of tests)</b>
+          <table className="pm-table" style={{ minWidth: 520 }}>
+            <thead><tr><th /><th>All years</th><th>Before {tr.split?.slice(0, 4) || '2021'}</th><th>From {tr.split?.slice(0, 4) || '2021'}</th></tr></thead>
+            <tbody>{rows(side).map(([k, a, f, s2, strong]) => (k.startsWith('—')
+              ? <tr key={k}><td colSpan={4} className="muted small">{k}</td></tr>
+              : <tr key={k} style={strong ? { fontWeight: 700 } : undefined}><td>{k}</td><td>{cell(a)}</td><td>{cell(f)}</td><td>{cell(s2)}</td></tr>))}</tbody>
+          </table>
+          {R[side]?.bands?.length > 0 && (
+            <table className="pm-table" style={{ minWidth: 520, marginTop: 6 }}>
+              <thead><tr><th>Distance from price (days' move)</th><th>Real zones</th><th>Random prices</th></tr></thead>
+              <tbody>{R[side].bands.map((bd) => <tr key={bd.band}><td>{bd.band}</td><td>{cell(bd.real)}</td><td>{cell(bd.random)}</td></tr>)}</tbody>
+            </table>
+          )}
+          {R[side]?.random_placed?.tried > 0 && (
+            <div className="small muted">A random zone could be placed (a free price with no real zone near it) for {R[side].random_placed.pct}% of {num(R[side].random_placed.tried)} real zones; the rest had zones all around and no random partner.</div>
+          )}
+          {R[side]?.edge_by_half && Object.keys(R[side].edge_by_half).length > 0 && (
+            <div className="small muted">Edge over random prices at the same distance: before {tr.split?.slice(0, 4) || '2021'} {R[side].edge_by_half.first_half ?? '—'} pts · from {tr.split?.slice(0, 4) || '2021'} {R[side].edge_by_half.second_half ?? '—'} pts · all years {R[side].edge_pts ?? '—'} pts</div>
+          )}
+        </div>
+      ))}
+      <div className="small muted" style={{ lineHeight: 1.5 }}>
+        <div>Tests fixed before the run. Record: {tr.pass_test}</div>
+        {tr.chance_test && <div>Chance: {tr.chance_test}</div>}
+        {tr.skipped && Object.keys(tr.skipped).length > 0 && <div>Stocks left out: {Object.entries(tr.skipped).map(([k, v]) => `${k} (${v})`).join(' · ')}</div>}
+        {tr.note && <div>{tr.note}</div>}
+      </div>
+    </div>
+  )
+}
+
+function ZoneRow({ l, cur, tr, beyond }) {
+  const [open, setOpen] = useState(false)
+  const res = l.kind === 'resistance'
+  const kinds = l.sources || [l.source]
+  const ks = tr && !tr.stale ? tr.result?.[l.kind]?.sources?.[l.source] : null
+  return (
+    <div className="pmap-lv pmap-click" onClick={() => setOpen(!open)}>
+      <span className="pmap-kind" style={{ color: res ? 'var(--bad)' : 'var(--good)' }}>{res ? 'RESISTANCE' : 'SUPPORT'}</span>
+      <b className="pmap-px">{zoneTxt(l, cur)}</b>
+      <span className="pmap-dist">{sg(l.dist_pct)} · {Math.abs(l.dist_atr)} days' move{beyond ? <><br /><span style={{ fontSize: 11 }}>beyond a normal month</span></> : ''}</span>
+      <span className="pmap-what">
+        {kinds.map((k) => <span key={k} className="pmap-chip">{SRC_L[k] || k}</span>)}
+        <span className="muted small"> {open ? '▴' : '▾ details'}</span>
+        {open && (
+          <span style={{ display: 'block', marginTop: 6 }} className="small">
+            {(l.parts || [l.what]).map((p) => <span key={p} style={{ display: 'block' }}>• {p}</span>)}
+            {ks && ks.n > 0 && <span className="pmap-bt" style={{ color: 'var(--muted)' }}>Reliability check: zones led by this kind ({SRC_L[l.source] || l.source}) held at the next test {pct(ks.held_pct)} of {num(ks.n)} times.</span>}
+            {l.last_test && <span className="pmap-bt" style={{ color: 'var(--muted)' }}>Last test here: {l.last_test}</span>}
+          </span>
+        )}
+      </span>
+      <span className="pmap-held">{l.tests ? `held ${l.held} of ${l.tests}` : 'not tested in 3 years'}<br /><span style={{ fontSize: 11 }}>{l.tests ? 'history only' : ''}</span></span>
+    </div>
+  )
+}
+
+function Ladder({ lv, cur, tr, range, sym }) {
+  const beyond = (l) => !!range && (l.kind === 'support' ? l.hi < range.lo : l.lo > range.hi)
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Where buyers and sellers stepped in before</h3>
-      <div className="small muted">Zones from this stock's own prices: major swings (ZigZag), volume profile, unfilled gaps, Fibonacci, 50/200-day averages, 52-week high/low. Everything is scaled to its normal daily range (ATR {cur}{n2(lv.atr)} = {lv.atr_pct}%). A test = price came within ¼ of a day's range; held = it then moved 2 days' range away before closing ½ a day's range through.</div>
-      <TrackLine tr={tr} onDone={onDone} />
-      {[...lv.resistance].reverse().map(row)}
+      <h3 style={{ marginTop: 0 }}>Support and resistance zones</h3>
+      <div className="small muted">From {sym}'s own price history: major swing highs and lows, the most-traded prices of the last year, unfilled gaps, Fibonacci levels, 50/200-day averages and the 52-week high/low. {sym} usually moves about {cur}{n2(lv.atr)} ({lv.atr_pct}%) a day; distances are shown in % and in days of that move. Tap a zone for details.</div>
+      <ZoneEvidence tr={tr} />
+      {[...lv.resistance].reverse().map((l, i) => <ZoneRow key={`r${i}`} l={l} cur={cur} tr={tr} beyond={beyond(l)} />)}
       <div className="pmap-lv pmap-now">
         <span className="pmap-kind">NOW</span><b className="pmap-px">{cur}{n2(lv.price)}</b><span className="pmap-dist" />
-        <span className="pmap-what">Last close{lv.inside?.length > 0 && lv.inside.map((z) => <span key={z.lo} className="pmap-bt" style={{ color: 'var(--warn)' }}>Price is inside a zone right now ({zoneTxt(z, cur)}): {z.what}</span>)}</span><span className="pmap-held" />
+        <span className="pmap-what">Last close{lv.inside?.length > 0 && lv.inside.map((z) => <span key={z.lo} className="pmap-bt" style={{ color: 'var(--warn)' }}>Sitting inside a zone: {zoneTxt(z, cur)} ({(z.sources || []).map((k) => SRC_L[k] || k).join(', ')})</span>)}</span>
+        <span className="pmap-held" />
       </div>
-      {lv.support.map(row)}
-      {!lv.support.length && <div className="small muted" style={{ padding: 8 }}>No support zone below today's price within half of it.</div>}
-      {!lv.resistance.length && <div className="small muted" style={{ padding: 8 }}>No resistance zone above (it is at or near its highs).</div>}
+      {lv.support.map((l, i) => <ZoneRow key={`s${i}`} l={l} cur={cur} tr={tr} beyond={beyond(l)} />)}
+      {!lv.support.length && <div className="small muted" style={{ padding: 8 }}>No support zone below today's price (down to half of it).</div>}
+      {!lv.resistance.length && <div className="small muted" style={{ padding: 8 }}>No resistance zone above (up to twice today's price).</div>}
     </div>
   )
 }
@@ -246,7 +286,7 @@ function Sector({ s, sym, m }) {
   )
 }
 
-function ValueFloor({ v, cur, price, onDone }) {
+function ValueFloor({ v, cur, price }) {
   const fmtR = (r) => (r.below !== undefined ? `below ${cur}${n2(r.below)}` : r.above !== undefined ? `above ${cur}${n2(r.above)}` : `${cur}${n2(r.from)} – ${cur}${n2(r.to)}`)
   const pc = (x) => (x === null || x === undefined ? '—' : sg(x))
   return (
@@ -279,7 +319,7 @@ function ValueFloor({ v, cur, price, onDone }) {
           ) : (
             <div style={{ marginTop: 6 }}>
               <div className="small" style={{ color: 'var(--warn)', marginBottom: 6 }}>{v.record_note}</div>
-              {v.record_note?.includes('Not tested') && <JobRunner name="entry" what="Entry backtest on all NSE stocks" howLong="2–3 hours the first time (downloads P/E history), faster after" onDone={onDone} />}
+              {v.record_note?.includes('Not tested') && <SettingsLink text="Run it in Settings → Data checks" />}
             </div>
           )}
         </>
@@ -425,10 +465,10 @@ export default function PriceMap({ symbol }) {
           s={d.sector.breadth ? `${d.sector.breadth.above50} of ${d.sector.breadth.of} peers above their 50-day` : 'no peer prices'} />
         <Tile k="Business" v={d.business.score !== null && d.business.score !== undefined ? `${Math.round(d.business.score)}/100` : '—'} s={d.business.verdict || ''} />
       </div>
-      <Ladder lv={d.levels} cur={cur} tr={d.level_track} onDone={() => load(true)} range={d.further.range_1m} />
+      <Ladder lv={d.levels} cur={cur} tr={d.level_track} range={d.further.range_1m} sym={sym} />
       <Further f={d.further} w={w} cur={cur} sym={sym} />
       <Sector s={d.sector} sym={sym} m={d.market} />
-      <ValueFloor v={d.value} cur={cur} price={w.price} onDone={() => load(true)} />
+      <ValueFloor v={d.value} cur={cur} price={w.price} />
       <Signals list={d.signals} />
       <Business b={d.business} />
       <PriceMapAI sym={d.symbol} date={w.date} />

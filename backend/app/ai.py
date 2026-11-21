@@ -470,10 +470,12 @@ Work through, in this order:
 1. Where it stands: price_map.where (fall from the 52-week high, stage, days since the high).
 2. Market, sector or stock: price_map.market (NIFTY 50 / S&P 500) and price_map.sector (index fall and trend, peers
    above their 50-day, stock vs sector over 3 months, beta, layers). Answer plainly which it is.
-3. The levels that matter most: price_map.levels. Prefer levels with more tests and a better held record; say how
-   often each held ("held X of Y tests"). A level with 0-2 tests is weak evidence: say so. price_map.level_track is
-   the all-NSE backtest of whether a past record predicts the next test: if it is null, say that this has not been
-   tested; if a side did not pass, say past hold rates did not predict the next test, whatever a level's record.
+3. The zones that matter: price_map.levels (zones with lo-hi, distance in % and in days' move). Name the nearest
+   support and resistance and what makes each (its kinds). price_map.level_track is the all-NSE reliability check:
+   if it is null or stale, say zones have not been checked yet. beats_chance says whether real zones held more often
+   than random prices of the same width and distance: if false or null, say the zones are a map only and did not
+   clearly beat chance. passed says whether a zone's own record predicts its next test: if false, say "held X of Y"
+   is history only and do not rank zones by it. A zone with 0-2 tests is thin evidence either way.
    price_map.value gives the P/E-history value ranges and, if present, their backtested record (P/E state only).
 4. How much further it could fall: price_map.further. Use the stock's own cases; if own.enough is false, say there
    are too few cases and list them, then use the peer cases (peers) if those are enough. History, not a forecast.
@@ -502,6 +504,15 @@ and never say what clearing or losing a level "would signal" unless a turn signa
 def pricemap_trim(pm: dict) -> dict:
     """What the AI sees of the price map: everything measured, minus long lists it does not need."""
     out = {k: v for k, v in pm.items() if k not in ("price_source", "real_ohlc", "bars_from", "bars_n", "version")}
+    lt = out.get("level_track")
+    if lt and lt.get("result"):
+        keep = ("all", "random", "passed", "beats_chance", "edge_pts", "sources")
+        out["level_track"] = {**{k: v for k, v in lt.items() if k != "result"},
+                              "result": {side: {k: b.get(k) for k in keep} for side, b in lt["result"].items()}}
+        for b in out["level_track"]["result"].values():
+            if b.get("random"):
+                b["random"] = {k: b["random"].get(k) for k in ("n", "held_pct")}
+            b["sources"] = {k: {"n": v.get("n"), "held_pct": v.get("held_pct")} for k, v in (b.get("sources") or {}).items()}
     sec = dict(out.get("sector") or {})
     sec["peers"] = (sec.get("peers") or [])[:12]
     out["sector"] = sec
@@ -511,7 +522,9 @@ def pricemap_trim(pm: dict) -> dict:
 def pricemap_research(report: dict, pm: dict, refresh: bool = False) -> dict:
     """AI research on the price map: structured, and every quoted figure checked against the data."""
     s = load_settings()
-    key = f"AI::PRICEMAP::{report['symbol']}::{model_label(s)}::{(pm.get('where') or {}).get('date')}"
+    lt = pm.get("level_track") or {}
+    key = (f"AI::PRICEMAP::{report['symbol']}::{model_label(s)}::{(pm.get('where') or {}).get('date')}"
+           f"::{lt.get('built')}:{lt.get('has_chance')}")
     if not refresh and (hit := _cache_get(key, 12 * 3600)):
         return hit
     ctx = json.loads(build_context(report, None))

@@ -742,6 +742,18 @@ def business(rep: dict) -> dict:
 #   side, in BOTH halves (tests before 2021 / from 2021), with at least 100 tests in each of those buckets in
 #   each half. Otherwise past hold rates are reported as NOT predictive.
 LEVEL_RULES_VERSION = 2
+# Chance test, fixed before running it (21 Nov 2026, after the first result showed a zone's record did not predict):
+#   Next to every real zone, a "random price" zone is placed on the same side with the SAME WIDTH, its near edge at a
+#   random distance from price (uniform 0.25 to max(2 x the real zone's far-edge distance + 1, 8), in ATRs), not overlapping
+#   any real zone. Its next test is measured with exactly the same rules. Real and random zones are compared inside
+#   the same distance bands (0.25-1, 1-2, 2-4, 4-8, 8+ ATR; bands with 20+ tests of each), weighted by the real
+#   tests in each band. Real zones PASS if that weighted edge is at least 5 points in both halves, with 100+ tests
+#   of each kind in each half.
+TEST_VERSION = 2
+CHANCE_EDGE = 5.0
+PLACEBO_TRIES = 30
+DIST_BANDS = [(0.25, 1), (1, 2), (2, 4), (4, 8), (8, 1e9)]
+MIN_BAND = 20
 BUCKETS_L = ["untested", "1-2 tests", "3+ tests, held under 50%", "3+ tests, held 50-74%", "3+ tests, held 75%+"]
 LEVEL_SPLIT = "2021-01-01"
 LEVEL_MIN_N = 100
@@ -762,9 +774,42 @@ def month_ends(bars, start="2016-01-01"):
     return [k for k in range(len(bars) - 1) if bars[k]["t"] >= start and bars[k]["t"][:7] != bars[k + 1]["t"][:7]]
 
 
-def level_samples(bars: list[dict], liquid=None) -> list[dict]:
+def _placebo(row: dict, lad: dict, rnd) -> Optional[tuple]:
+    """A random-price zone for `row`: same side and width, near edge at a random distance, clear of every real zone.
+    Returns (lo, hi, distance of the near edge in ATRs)."""
+    px, atr_now = lad["price"], lad["atr"]
+    width = row["hi"] - row["lo"]
+    far = abs(row["dist_atr"]) + width / atr_now
+    real = [(z["lo"], z["hi"]) for z in lad["support"] + lad["resistance"] + lad.get("inside", [])]
+    gap = BAND_ATR * atr_now
+    for _ in range(PLACEBO_TRIES):
+        x = rnd.uniform(DIST_BANDS[0][0], max(2 * far + 1, 8.0))
+        if row["kind"] == "support":
+            hi = px - x * atr_now
+            lo = hi - width
+        else:
+            lo = px + x * atr_now
+            hi = lo + width
+        if lo <= 0:
+            continue
+        if all(hi + gap < a or lo - gap > b for a, b in real):
+            return lo, hi, x
+    return None
+
+
+def _band(d) -> Optional[int]:
+    d = abs(d)
+    for k, (a, b) in enumerate(DIST_BANDS):
+        if a <= d < b:
+            return k
+    return None
+
+
+def level_samples(bars: list[dict], liquid=None, chance: bool = True) -> list[dict]:
     """One stock: at each month end, the nearest support and resistance zone (from prices up to that day only),
-    their bucket, and how their NEXT test ended."""
+    their bucket, and how their NEXT test ended; plus a random-price zone next to each for the chance test."""
+    import random
+    import zlib
     t = [b["t"] for b in bars]
     h = [b["h"] for b in bars]
     l = [b["l"] for b in bars]
@@ -773,23 +818,40 @@ def level_samples(bars: list[dict], liquid=None) -> list[dict]:
     atr = atr_series(h, l, c)
     mas = {50: technicals.sma(c, 50), 200: technicals.sma(c, 200)}
     seen, out = set(), []
+
+    def nxt(lo, hi, side, i, ma=None):
+        r = tests(h, l, c, atr, lo, hi, side, i + 1, min(n, i + 1 + LOOK), ma=ma)
+        return r["events"][0] if r["events"] else None
+
     for i in month_ends(bars):
         if i < SWING_BARS + 20 or (liquid and not liquid(bars, i)):
             continue
         lad = level_ladder(bars[:i + 1])
         for row in lad["support"][:1] + lad["resistance"][:1]:
             ma = mas[row["ma_n"]] if row.get("ma_n") else None
-            r = tests(h, l, c, atr, row["lo"], row["hi"], row["kind"], i + 1, min(n, i + 1 + LOOK), ma=ma)
-            if not r["events"]:
+            ev = nxt(row["lo"], row["hi"], row["kind"], i, ma)
+            if ev:
+                j, outcome = ev
+                key = (row["kind"], row["source"], j)
+                if key not in seen:
+                    seen.add(key)
+                    out.append({"date": t[j], "seen": t[i], "side": row["kind"], "source": row["source"],
+                                "sources": len(row["sources"]), "bucket": row["bucket"], "held": outcome == "held",
+                                "dist_atr": row["dist_atr"]})
+            if not chance:
                 continue
-            j, outcome = r["events"][0]
-            key = (row["kind"], row["source"], j)
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append({"date": t[j], "seen": t[i], "side": row["kind"], "source": row["source"],
-                        "sources": len(row["sources"]), "bucket": row["bucket"], "held": outcome == "held",
-                        "dist_atr": row["dist_atr"]})
+            rnd = random.Random(zlib.crc32(f"{t[i]}|{row['kind']}|{c[i]:.4f}".encode()))
+            pz = _placebo(row, lad, rnd)
+            out.append({"skip": True, "side": row["kind"], "date": t[i], "placed": pz is not None})
+            if pz:
+                ev = nxt(pz[0], pz[1], row["kind"], i)
+                if ev:
+                    j, outcome = ev
+                    key = (row["kind"], "random", j)
+                    if key not in seen:
+                        seen.add(key)
+                        out.append({"date": t[j], "seen": t[i], "side": row["kind"], "source": "random", "placebo": True,
+                                    "sources": 0, "bucket": None, "held": outcome == "held", "dist_atr": round(pz[2], 2)})
     return out
 
 
@@ -799,19 +861,26 @@ def _rate(rows):
 
 def summarize_levels(rows: list[dict]) -> dict:
     out = {}
+    tries = [r for r in rows if r.get("skip")]
+    rows = [r for r in rows if not r.get("skip")]
     for side in ("support", "resistance"):
-        sub = [r for r in rows if r["side"] == side]
-        halves = {"first_half": [r for r in sub if r["date"] < LEVEL_SPLIT], "second_half": [r for r in sub if r["date"] >= LEVEL_SPLIT]}
+        every = [r for r in rows if r["side"] == side]
+        sub = [r for r in every if not r.get("placebo")]
+        rand = [r for r in every if r.get("placebo")]
+        half = lambda rs: {"first_half": [r for r in rs if r["date"] < LEVEL_SPLIT], "second_half": [r for r in rs if r["date"] >= LEVEL_SPLIT]}
+        halves, rhalves = half(sub), half(rand)
         blk = {"all": _rate(sub), "halves": {k: _rate(v) for k, v in halves.items()}, "buckets": {}, "sources": {}}
         for b in BUCKETS_L:
             bb = [r for r in sub if r["bucket"] == b]
             blk["buckets"][b] = dict(_rate(bb), **{k: _rate([r for r in v if r["bucket"] == b]) for k, v in halves.items()})
         for src in sorted({r["source"] for r in sub}):
-            blk["sources"][src] = _rate([r for r in sub if r["source"] == src])
+            blk["sources"][src] = dict(_rate([r for r in sub if r["source"] == src]),
+                                       **{k: _rate([r for r in v if r["source"] == src]) for k, v in halves.items()})
         blk["confluence"] = {"one kind": _rate([r for r in sub if r.get("sources", 1) == 1]),
                              "2+ kinds": _rate([r for r in sub if r.get("sources", 1) >= 2])}
+        # 1) does a zone's own record predict its next test?
         verdicts = []
-        for k, hv in halves.items():
+        for k in halves:
             strong = blk["buckets"][BUCKETS_L[4]][k]
             weak = blk["buckets"][BUCKETS_L[2]][k]
             al = blk["halves"][k]
@@ -820,6 +889,43 @@ def summarize_levels(rows: list[dict]) -> dict:
                 continue
             verdicts.append(strong["held_pct"] - weak["held_pct"] >= LEVEL_EDGE_WEAK and strong["held_pct"] - al["held_pct"] >= LEVEL_EDGE_ALL)
         blk["passed"] = None if None in verdicts else all(verdicts)
+        # 2) do real zones hold more often than random prices at the same distance?
+        if rand:
+            blk["random"] = dict(_rate(rand), halves={k: _rate(v) for k, v in rhalves.items()})
+            blk["bands"] = []
+            for k, (a, b) in enumerate(DIST_BANDS):
+                ra = [r for r in sub if _band(r.get("dist_atr", 0)) == k]
+                rr = [r for r in rand if _band(r.get("dist_atr", 0)) == k]
+                blk["bands"].append({"band": f"{a:g}-{b:g}" if b < 1e8 else f"{a:g}+", "real": _rate(ra), "random": _rate(rr)})
+            cv, edges = [], {}
+            for k in halves:
+                num = den = 0.0
+                for bi in range(len(DIST_BANDS)):
+                    ra = [r for r in halves[k] if _band(r.get("dist_atr", 0)) == bi]
+                    rr = [r for r in rhalves[k] if _band(r.get("dist_atr", 0)) == bi]
+                    if len(ra) < MIN_BAND or len(rr) < MIN_BAND:
+                        continue
+                    diff = 100 * (sum(r["held"] for r in ra) / len(ra) - sum(r["held"] for r in rr) / len(rr))
+                    num += len(ra) * diff
+                    den += len(ra)
+                edges[k] = _r(num / den) if den else None
+                if blk["halves"][k]["n"] < LEVEL_MIN_N or blk["random"]["halves"][k]["n"] < LEVEL_MIN_N or edges[k] is None:
+                    cv.append(None)
+                else:
+                    cv.append(edges[k] >= CHANCE_EDGE)
+            blk["edge_by_half"] = edges
+            num = den = 0.0
+            for bd in blk["bands"]:
+                if bd["real"]["n"] >= MIN_BAND and bd["random"]["n"] >= MIN_BAND:
+                    num += bd["real"]["n"] * (bd["real"]["held_pct"] - bd["random"]["held_pct"])
+                    den += bd["real"]["n"]
+            blk["edge_pts"] = _r(num / den) if den else None
+            blk["beats_chance"] = None if None in cv else all(cv)
+        else:
+            blk["random"], blk["beats_chance"], blk["edge_pts"], blk["bands"], blk["edge_by_half"] = None, None, None, [], {}
+        tr_side = [r for r in tries if r["side"] == side]
+        blk["random_placed"] = {"tried": len(tr_side), "placed": sum(r["placed"] for r in tr_side),
+                                "pct": _r(100 * sum(r["placed"] for r in tr_side) / len(tr_side)) if tr_side else None}
         out[side] = blk
     return out
 
@@ -832,7 +938,8 @@ def level_track(market: str) -> Optional[dict]:
     if t.get("rules_version") != LEVEL_RULES_VERSION:
         return {"stale": True, "built": t.get("built"), "rules_version": t.get("rules_version")}
     return {"built": t.get("built"), "universe": t.get("universe_label"), "stocks": t.get("stocks"), "tests": t.get("tests"),
-            "result": t.get("result"), "pass_test": t.get("pass_test"), "note": t.get("note"),
+            "result": t.get("result"), "pass_test": t.get("pass_test"), "chance_test": t.get("chance_test"), "note": t.get("note"),
+            "has_chance": t.get("test_version", 1) >= TEST_VERSION, "skipped": t.get("skipped"), "split": t.get("split"),
             "market_note": "Tested on NSE stocks only; not tested on US stocks." if market == "US" else None}
 
 

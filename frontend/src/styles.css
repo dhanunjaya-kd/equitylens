@@ -504,3 +504,7 @@ html, body { transition: background-color .2s ease; }
 .pmap-job { padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; }
 .pmap-prog { height: 6px; background: var(--card2); border-radius: 6px; overflow: hidden; margin: 6px 0; }
 .pmap-prog > div { height: 100%; background: var(--accent); transition: width .5s; }
+.pmap-ev { font-size: 13px; line-height: 1.5; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; margin: 10px 0 4px; background: var(--card2); }
+.pmap-click { cursor: pointer; }
+.pmap-click:hover { border-color: var(--accent); }
+.pmap-chip { display: inline-block; font-size: 12px; padding: 1px 8px; margin: 0 6px 4px 0; border-radius: 999px; border: 1px solid var(--line); }

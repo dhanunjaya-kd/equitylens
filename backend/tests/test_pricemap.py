@@ -206,7 +206,7 @@ def test_level_buckets():
 
 def test_level_samples_use_no_future_and_count_each_test_once():
     bars = _bars(_walk(2000, seed=11, sd=0.02))
-    rows = pmap.level_samples(bars)
+    rows = [r for r in pmap.level_samples(bars) if not r.get("skip")]
     assert rows
     keys = [(r["side"], r["source"], r["date"]) for r in rows]
     assert len(keys) == len(set(keys))
@@ -215,7 +215,7 @@ def test_level_samples_use_no_future_and_count_each_test_once():
     cut = bars[k - 25]["t"]                                         # a test resolves within 20 sessions
     changed = bars[:k] + [dict(b, c=b["c"] * 0.5, h=b["h"] * 0.5, l=b["l"] * 0.5) for b in bars[k:]]
     a = [r for r in rows if r["date"] < cut]
-    b = [r for r in pmap.level_samples(changed) if r["date"] < cut]
+    b = [r for r in pmap.level_samples(changed) if not r.get("skip") and r["date"] < cut]
     assert a and a == b
 
 
@@ -300,6 +300,62 @@ def test_job_status_reads_progress_and_finish_from_the_log():
     os.utime(log, (_t.time() - 3600, _t.time() - 3600))
     assert jobs.status("levels")["failed"]
     log.unlink()
+
+
+def test_random_zones_copy_width_and_never_overlap_real_zones():
+    import random
+    made = 0
+    for w in range(1, 15):
+      bars = _bars(_walk(1200, seed=w, sd=0.02))
+      lad = pmap.level_ladder(bars)
+      real = [(z["lo"], z["hi"]) for z in lad["support"] + lad["resistance"] + lad["inside"]]
+      gap = pmap.BAND_ATR * lad["atr"]
+      for row in lad["support"][:1] + lad["resistance"][:1]:
+        for seed in range(10):
+            pz = pmap._placebo(row, lad, random.Random(seed))
+            if not pz:
+                continue
+            made += 1
+            lo, hi, x = pz
+            assert abs((hi - lo) - (row["hi"] - row["lo"])) < 1e-9                       # same width
+            assert all(hi + gap < a or lo - gap > b for a, b in real)                     # clear of every real zone
+            assert (hi < lad["price"]) if row["kind"] == "support" else (lo > lad["price"])  # same side
+            assert pz == pmap._placebo(row, lad, random.Random(seed))                     # repeatable
+    assert made > 0
+
+
+def _cz(side, placebo, held, date, d):
+    return {"side": side, "placebo": placebo, "held": held, "date": date, "dist_atr": d, "source": "random" if placebo else "zigzag",
+            "bucket": None if placebo else "1-2 tests", "sources": 0 if placebo else 1}
+
+
+def _crowd(date, real_pct, rand_pct, d_real, d_rand, n=150):
+    rows = [_cz("support", False, i < n * real_pct / 100, date, d_real) for i in range(n)]
+    rows += [_cz("support", True, i < n * rand_pct / 100, date, d_rand) for i in range(n)]
+    return rows
+
+
+def test_chance_rule_and_random_rows_kept_out_of_real_stats():
+    rows = _crowd("2019-05-01", 70, 50, 1.5, 1.5) + _crowd("2023-05-01", 68, 52, 1.5, 1.5)
+    rows += [{"skip": True, "side": "support", "date": "2019-05-01", "placed": k % 4 != 0} for k in range(40)]
+    b = pmap.summarize_levels(rows)["support"]
+    assert b["random_placed"] == {"tried": 40, "placed": 30, "pct": 75.0}
+    assert b["all"]["n"] == 300 and b["random"]["n"] == 300 and b["beats_chance"] is True and b["edge_pts"] >= 5
+    rows = _crowd("2019-05-01", 70, 67, 1.5, 1.5) + _crowd("2023-05-01", 70, 67, 1.5, 1.5)
+    assert pmap.summarize_levels(rows)["support"]["beats_chance"] is False
+
+
+def test_distance_alone_cannot_fake_an_edge():
+    # real zones are near (held 60%); most random zones are far (held 30%) but the near ones held 58%:
+    # a raw comparison would show +30 points, the same-distance comparison shows only ~2 -> no pass
+    rows = []
+    for date in ("2019-05-01", "2023-05-01"):
+        rows += [_cz("support", False, i < 120, date, 0.5) for i in range(200)]
+        rows += [_cz("support", True, i < 29, date, 0.5) for i in range(50)]          # 58% near
+        rows += [_cz("support", True, i < 45, date, 5.0) for i in range(150)]          # 30% far
+    b = pmap.summarize_levels(rows)["support"]
+    assert b["all"]["held_pct"] - b["random"]["held_pct"] > 20                          # raw gap is large
+    assert b["edge_pts"] < 5 and b["beats_chance"] is False                             # but not at the same distance
 
 
 if __name__ == "__main__":

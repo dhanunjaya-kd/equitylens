@@ -1,5 +1,6 @@
 import { marked } from 'marked'
 import { AccountsCard, LogsCard, PhoneCard } from '../components/Access'
+import DataChecks from '../components/DataChecks'
 import { useEffect, useRef, useState } from 'react'
 import { Badge } from '../components/ui'
 import { ago, api, go, me } from '../util'
@@ -278,7 +279,7 @@ export function Settings() {
         <p className="small muted" style={{ marginBottom: 0 }}>Keys are stored only on your laptop (backend/data/ai_settings.json, not in Git) and shown masked here.</p>
       </div>
       <AccountsCard />
-      {(!me() || me().role === 'owner') && <><PhoneCard /><LogsCard /></>}
+      {(!me() || me().role === 'owner') && <><DataChecks /><PhoneCard /><LogsCard /></>}
     </>
   )
 }

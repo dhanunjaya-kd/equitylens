@@ -13,6 +13,9 @@ The rules were fixed before any run (21 Nov 2026) and are in app/pricemap.py (LE
   - PASS (per side): "3+ tests, held 75%+" held again 10+ points more often than "3+ tests, held under 50%"
     and 5+ points more often than all levels, in both halves (tests before 2021 / from 2021), with 100+ tests
     in each of those two buckets in each half.
+  - Chance test: next to every real zone, a random-price zone (same side and width, random distance, not
+    overlapping a real zone) is tested with the same rules. Compared inside the same distance bands, real zones
+    pass if they held 5+ points more often, in both halves, with 100+ tests of each.
   - A month end is skipped when the stock was illiquid (median daily traded value over the previous 3 months
     under Rs 1 crore), same as the entry backtest.
 
@@ -101,11 +104,19 @@ def main():
     groups = {g: pricemap.summarize_levels([r for r in rows if r["group"] == g]) for g in ("N500", "OTHER")}
     result = {"built": time.strftime("%Y-%m-%d"), "rules_version": pricemap.LEVEL_RULES_VERSION,
               "universe": a.universe, "universe_label": UNIVERSES[a.universe],
-              "stocks": len({r["sym"] for r in rows}), "skipped": dict(skipped), "tests": len(rows), "split": pricemap.LEVEL_SPLIT,
+              "test_version": pricemap.TEST_VERSION,
+              "stocks": len({r["sym"] for r in rows}), "skipped": dict(skipped),
+              "tests": sum(1 for r in rows if not r.get("placebo") and not r.get("skip")),
+              "random_tests": sum(1 for r in rows if r.get("placebo")),
+              "split": pricemap.LEVEL_SPLIT,
               "result": res, "groups": groups,
               "pass_test": "Per side: levels that held 75%+ of 3+ earlier tests held again 10+ points more often than levels "
                            "that held under 50%, and 5+ points more often than all levels, in both halves (before 2021 / "
                            "from 2021), with 100+ tests in each of those buckets in each half. Fixed before any run.",
+              "chance_test": "Per side: real zones held at their next test at least 5 points more often than random-price zones "
+                             "of the same width, compared within the same distance bands (weighted by real tests), not "
+                             "overlapping a real zone, same rules; in both halves, with 100+ tests of each in each half. "
+                             "Fixed before the run.",
               "note": "Stocks listed today only (delisted companies are missing). Price history from about 2016, and a level "
                       "needs 2 years of prices first, so the first half is roughly 2018-2020. Tests of the same stock are "
                       "not independent, so the count overstates how sure this is."}
@@ -124,7 +135,13 @@ def main():
             print(f"  {k:28} {x['n']:7} {pc(x['held_pct']):>9} {pc(x['first_half']['held_pct']):>12} {pc(x['second_half']['held_pct']):>10}")
         print("  zones with one kind vs 2+ kinds of level: " + " · ".join(f"{k} {pc(v['held_pct'])} (n={v['n']})" for k, v in b["confluence"].items()))
         print("  by kind of level: " + " · ".join(f"{s} {pc(v['held_pct'])} (n={v['n']})" for s, v in b["sources"].items()))
-        print(f"  PASSED: {'YES' if b['passed'] else 'NO' if b['passed'] is False else 'n/a (too few tests)'}")
+        if b.get("random"):
+            print(f"  edge over random prices at the same distance: {b.get('edge_pts')} pts · before 2021 {b['edge_by_half'].get('first_half')} · from 2021 {b['edge_by_half'].get('second_half')}")
+            rp = b.get("random_placed") or {}
+            print(f"  random zones could be placed (a free price with no real zone) for {rp.get('pct')}% of {rp.get('tried')} real zones")
+            print(f"  random-price zones held {pc(b['random']['held_pct'])} (n={b['random']['n']}) · before 2021 {pc(b['random']['halves']['first_half']['held_pct'])} · from 2021 {pc(b['random']['halves']['second_half']['held_pct'])}")
+        yn = lambda x: 'YES' if x else 'NO' if x is False else 'n/a (too few tests)'
+        print(f"  zone record predicts the next test: {yn(b['passed'])} · real zones beat random prices: {yn(b.get('beats_chance'))}")
 
 
 if __name__ == "__main__":
