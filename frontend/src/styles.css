@@ -508,3 +508,30 @@ html, body { transition: background-color .2s ease; }
 .pmap-click { cursor: pointer; }
 .pmap-click:hover { border-color: var(--accent); }
 .pmap-chip { display: inline-block; font-size: 12px; padding: 1px 8px; margin: 0 6px 4px 0; border-radius: 999px; border: 1px solid var(--line); }
+
+/* Heatmap */
+.hm-controls { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 12px; }
+.hm-chip { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; }
+.hm-chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.hm-legend { width: 160px; height: 10px; border-radius: 5px; }
+.hm-map { position: relative; width: 100%; overflow: hidden; border-radius: 8px; background: var(--bg); }
+.hm-tile { position: absolute; box-sizing: border-box; border: 1px solid var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; overflow: hidden; cursor: pointer; text-align: center; color: #f8fafc; }
+.hm-tile:hover { outline: 2px solid #f8fafc; outline-offset: -2px; z-index: 2; }
+.hm-tile .logo, .hm-tile .logo-ini { border-radius: 7px; background: #fff; flex: none; }
+.hm-sym { font-weight: 700; line-height: 1.1; max-width: 100%; padding: 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-pct { opacity: .92; line-height: 1.1; }
+.hm-head { position: absolute; height: 18px; box-sizing: border-box; padding: 0 6px; border: 0; text-align: left; font-size: 11px; font-weight: 700; color: #e2e8f0; background: rgba(9, 14, 20, .88); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; z-index: 3; }
+.hm-head:hover { color: var(--accent); }
+.hm-card { position: absolute; z-index: 10; width: 290px; background: var(--card); border: 1px solid var(--accent); border-radius: 12px; padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.hm-preview { pointer-events: none; width: 250px; padding: 9px 11px; border-color: var(--line); }
+.hm-rets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 10px; font-size: 12px; text-align: center; }
+.hm-sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 60; display: flex; align-items: flex-end; }
+.hm-sheet { width: 100%; background: var(--card); border-top: 1px solid var(--accent); border-radius: 18px 18px 0 0; padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); }
+.hm-sheet .btn { flex: 1; padding: 10px; }
+.hm-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 10px; }
+.hm-pcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+.hm-phead { display: flex; width: 100%; justify-content: space-between; align-items: baseline; gap: 8px; padding: 9px 12px; background: none; border: 0; color: var(--text); font-size: 14px; cursor: pointer; text-align: left; }
+.hm-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+.hm-prow { display: flex; gap: 10px; align-items: center; background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+.hm-ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 760px) { .hm-kpis { grid-template-columns: 1fr 1fr; } .hm-legend { width: 110px; } }

@@ -509,6 +509,18 @@ def movers_get(market: str = "IN", tf: str = "1D", universe: str = ""):
     return movers.get(market, tf, universe.upper())
 
 
+@app.get("/api/heatmap")
+def heatmap_get(market: str = "IN", tf: str = "1D", universe: str = ""):
+    from . import heatmap
+    return heatmap.get(market.upper(), tf, universe.upper())
+
+
+@app.get("/api/heatmap/sector")
+def heatmap_sector(sector: str, market: str = "IN"):
+    from . import heatmap
+    return heatmap.sector_index(market.upper(), sector)
+
+
 @app.post("/api/movers/refresh")
 def movers_refresh(market: str = "IN", universe: str = ""):
     return movers.refresh(market.upper(), which=universe.upper() if universe.upper() in ("N500", "ALL") else "")

@@ -142,6 +142,7 @@ export function parseHash() {
   if (parts[0] === 'watch') return { page: 'watch' }
   if (parts[0] === 'screener') return { page: 'screener' }
   if (parts[0] === 'movers') return { page: 'movers' }
+  if (parts[0] === 'heatmap') return { page: 'heatmap', sector: parts[1] ? decodeURIComponent(parts[1]) : '' }
   if (parts[0] === 'premarket') return { page: 'premarket' }
   if (parts[0] === 'account') return { page: 'account' }
   if (parts[0] === 'guide') return { page: 'guide' }

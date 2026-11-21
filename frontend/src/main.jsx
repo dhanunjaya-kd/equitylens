@@ -22,6 +22,7 @@ import Watch from './pages/Watch'
 import Compare from './pages/Compare'
 import Screener from './pages/Screener'
 import Movers from './pages/Movers'
+import Heatmap from './pages/Heatmap'
 import PreMarket from './pages/PreMarket'
 import Account from './pages/Account'
 import Calendar from './pages/Calendar'
@@ -84,6 +85,7 @@ function App() {
         {route.page === 'watch' && <Watch />}
         {route.page === 'screener' && <Screener />}
         {route.page === 'movers' && <Movers />}
+        {route.page === 'heatmap' && <Heatmap sector={route.sector} />}
         {route.page === 'premarket' && <PreMarket />}
         {route.page === 'account' && <Account />}
         {route.page === 'calendar' && <Calendar tab={route.tab} />}

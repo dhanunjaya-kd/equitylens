@@ -295,6 +295,17 @@ Each card shows the level, change, an intraday sparkline and (on tap) the day an
 
 Also on the page: a **market mood gauge** (extreme fear ↔ extreme greed) with a short explanation, a **sector heatmap**, filters (price, traded value, market cap, score, sector, 200-day trend, watchlist) and ✨ **Explain the move** with AI. Rows are tagged 📦 for heavy delivery and 🚨 for surveillance.
 
+### 🗺️ Heatmap — every stock at a glance, grouped by sector
+
+Sidebar → **Heatmap** (on a phone: Market Movers → 🗺️ Heatmap). Every NIFTY 500 stock (or all NSE stocks, or the S&P 500 in the US view) as a box with its company logo, grouped by sector.
+
+- **Box size** = market cap (or traded value, or all equal). A stock that has not been scanned yet has no market cap: it is shown at the smallest size on the map and counted above it, never given a guessed size.
+- **Colour** = % change over 1D / 1W / 1M / 3M / 1Y, from red to green; the scale widens for longer periods (full colour at ±3% for a day up to ±40% for a year). Grey = no price.
+- **Web:** the whole market on one map. Hover a box for a quick look, click it for the details card (% for every period, market cap, distance from the 52-week high, 200-day trend, EquityLens score, Open stock / Price map).
+- **Phone:** one card per sector with its biggest stocks; tap a box for a details sheet from the bottom.
+- **Sector view:** click a sector name for that sector alone. It shows the average move, up/down, best and worst, how many stocks are above their 50-day average, and the closest NSE sector index (or the sector's SPDR fund in the US) with its fall from the high. Below that: every stock in the sector with logo, sortable by % change, market cap, distance from the 52-week high or score.
+- Sectors are NSE's own industry groups (S&P 500 sectors in the US). Prices are the same daily data as Market Movers. Your period, size and list choices are remembered.
+
 ### 🧭 Smart money — who is really buying
 
 | | Signal | What it tells you |
@@ -621,7 +632,7 @@ cd backend
 python run_tests.py
 ```
 
-155 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+158 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -639,6 +650,7 @@ python run_tests.py
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys; entry research parsing, retry, caching and flagging of invented numbers |
 | `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
 | `test_pricemap.py` | ZigZag keeps only major swings and never the one still forming, volume profile, unfilled gaps, today's low is not a level, hold-rate maths on each stock's own ATR scale (held, broken, unresolved, 5 days apart), random-price zones (same width, never on a real zone, repeatable, kept out of the real figures, compared at the same distance so distance can't fake an edge), in-app run status, the level backtest uses no future prices and counts each test once, its pass rule at the edges, market / sector / stock answer, value ranges tied to P/E state, the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
+| `test_heatmap.py` | Heatmap rows carry every period and never a guessed market cap, sector totals add up, sector index mapping (India and US) |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |
 
@@ -676,6 +688,7 @@ equitylens/
 │   │   ├── nextday.py        08:45 check (and its test), day map, evening preview
 │   │   ├── pricemap.py       price map: zones and hold rates, fall cases, sector check, turn signals
 │   │   ├── jobs.py           runs the long backtests from the app, with progress
+│   │   ├── heatmap.py        heatmap rows by sector and each sector's index
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
 │   │   ├── brokers.py        read-only holdings from 8 brokers + CSV / Excel import
 │   │   ├── portfolio.py      portfolio X-ray: merge, score, warnings, mix
@@ -705,6 +718,7 @@ equitylens/
 | `GET /api/calendar/earnings` · `economy` · `next/{symbol}` | Calendars and next results date |
 | `POST /api/ai/{note,chat,guidance,debate,doc,chart}/{symbol}` | AI features for a stock (`chat` takes `focus: "entry"` for questions about the entry card) |
 | `GET /api/premarket?market=IN&refresh=` · `POST /api/premarket/backtest` · `POST /api/ai/premarket` | Pre-market board, opening call, backtest, AI brief |
+| `GET /api/heatmap?market=&tf=&universe=` · `GET /api/heatmap/sector?market=&sector=` | Heatmap data, and one sector's index |
 | `GET /api/pricemap/{symbol}?refresh=` · `POST /api/ai/pricemap/{symbol}` | Price map for one stock, AI research on it |
 | `GET /api/jobs/{levels\|entry}` · `POST /api/jobs/{levels\|entry}/start` | Run the level test or the entry backtest from the app (owner only), with progress |
 | `POST /api/ai/entry/{symbol}?refresh=` | AI research on the entry decision: structured, sourced, numbers checked |
