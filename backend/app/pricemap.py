@@ -7,13 +7,19 @@ not tuned:
 
   Fall from the high     close vs the highest close of the last 252 sessions (52 weeks).
   Stage                  pullback < 10%  ·  correction 10-20%  ·  bear > 20%.
-  Swing levels           a high/low that is the extreme of the 5 bars either side, last 500 bars;
-                         pivots within 1.5% of each other are one level ("touches" = pivots in it).
-  Other levels           50- and 200-day averages, 52-week high and low, heavy-trading zones
-                         (volume by price, last 250 bars, 50 bins, top 20% of bins).
-  A test of a level      price comes within 1% of it from the other side.
-  Held                   a 3% move away from the level before any close 1% through it, within 20 bars.
-  Broken                 a close 1% through it first.  Neither in 20 bars = not counted.
+  Volatility unit        ATR(14), the stock's normal daily range. Level rules use it, so a quiet and a wild
+                         stock are judged on their own scale.
+  Major swings           ZigZag: a high/low counts once price reverses max(3 x ATR%, 5%) from it; all history
+                         (~10 years); the swing still forming is never used.
+  Other levels           50/200-day averages · 52-week high/low (not if set in the last 5 sessions) · last
+                         year's volume profile (most-traded price, 70% value-area top and bottom) · unfilled
+                         gaps of 0.5+ ATR from the last 3 years · Fibonacci 38.2/50/61.8% of the last major move.
+                         Only levels between half and twice today's price.
+  Zones                  levels within 1 ATR of each other form one zone (at most 2 ATR wide); 3 shown each side.
+  A test of a zone       price comes within 0.25 ATR of it from the other side; tests 5+ sessions apart,
+                         counted over the last 3 years.
+  Held                   a 2 ATR move away before a close 0.5 ATR through it, within 20 sessions.
+  Broken                 that close first.  Neither in 20 sessions = not counted.
   Further-fall cases     every earlier time the stock first fell this far from its 52-week high;
                          the case ends at the next 52-week high. The fall still in progress is excluded.
   Turn signals           five fixed signals; record = 21-session return after each time a signal
@@ -33,16 +39,10 @@ from typing import Optional
 
 from . import config, store, technicals
 
-VERSION = 2
+VERSION = 3
 LOOK = 252            # 52-week high
-SWING_K = 5
-SWING_BARS = 500
-CLUSTER = 0.015
-NEAR = 0.01
-BOUNCE = 0.03
+SWING_BARS = 500     # history needed before the first level backtest sample
 RESOLVE = 20
-HVN_BINS = 50
-HVN_TOP = 0.80
 FALL_MIN = 0.05       # the further-fall section needs at least a 5% fall
 IN_A_FALL = 0.10      # signal records are measured during falls of 10%+
 FWD = 21              # "a month later"
@@ -98,106 +98,242 @@ def drawdowns(c: list[float]) -> list[float]:
     return [v / h - 1 for v, h in zip(c, hi)]
 
 
-# ------------------------------------------------------------------ levels
-def pivots(h, l, k=SWING_K, bars=SWING_BARS):
-    n = len(h)
-    hi, lo = [], []
-    for i in range(max(k, n - bars), n - k):
-        if h[i] == max(h[i - k:i + k + 1]):
-            hi.append((i, h[i]))
-        if l[i] == min(l[i - k:i + k + 1]):
-            lo.append((i, l[i]))
-    return hi, lo
+# ------------------------------------------------------------------ levels (rules v2, fixed 21 Nov 2026)
+ATR_N = 14
+ZZ_ATR, ZZ_MIN = 3.0, 0.05      # a swing counts when price then reverses by max(3 x ATR%, 5%)
+MERGE_ATR = 1.0                 # levels within 1 ATR of each other are one zone ...
+MAX_ZONE_ATR = 2.0              # ... as long as the zone stays under 2 ATR wide
+BAND_ATR = 0.25                 # a test = price comes within 0.25 ATR of the zone
+HOLD_ATR = 2.0                  # held = it moves 2 ATR away from the zone ...
+BREAK_ATR = 0.5                 # ... before a close 0.5 ATR through it
+TEST_GAP = 5                    # tests at least 5 sessions apart
+TEST_BARS = 750                 # tests counted over the last 3 years
+REACH = (0.5, 2.0)              # levels between half and twice today's price
+VP_BARS, VP_BINS, VA_SHARE = 250, 50, 0.70
+GAP_ATR = 0.5                   # gaps of at least 0.5 ATR, last 3 years, still (partly) unfilled
+FIBS = (0.382, 0.5, 0.618)
+RECENT = 5                      # a 52-week extreme set in the last 5 sessions is not a level yet
+SHOW = 3                        # zones shown each side
+PRIORITY = ["zigzag", "gap", "volume", "fib", "ma", "52w"]
 
 
-def cluster(points: list[tuple[int, float]], tol: float = CLUSTER) -> list[dict]:
-    """Greedy: sort by price, join a pivot to the current group while within tol of the group's mean."""
-    groups: list[list[tuple[int, float]]] = []
-    for p in sorted(points, key=lambda x: x[1]):
-        if groups:
-            g = groups[-1]
-            m = sum(v for _, v in g) / len(g)
-            if abs(p[1] / m - 1) <= tol:
-                g.append(p)
-                continue
-        groups.append([p])
-    out = []
-    for g in groups:
-        out.append({"price": sum(v for _, v in g) / len(g), "touches": len(g),
-                    "first": min(i for i, _ in g), "last": max(i for i, _ in g)})
+def atr_series(h, l, c) -> list:
+    return technicals.wilder(technicals.true_range(h, l, c), ATR_N)
+
+
+def zigzag(h, l, atr, c) -> list[dict]:
+    """Confirmed major swings: a high (low) is a swing once price falls (rises) max(3 x ATR%, 5%) from it.
+    The swing still forming at the last bar is never returned."""
+    n = len(c)
+    out: list[dict] = []
+    if n < 3:
+        return out
+    trend, hi_i, lo_i = None, 0, 0
+    for i in range(1, n):
+        a = atr[i] if i < len(atr) else None
+        thr = max(ZZ_MIN, ZZ_ATR * (a / c[i] if a else 0))
+        if trend is None:
+            if h[i] > h[hi_i]:
+                hi_i = i
+            if l[i] < l[lo_i]:
+                lo_i = i
+            if h[i] >= l[lo_i] * (1 + thr) and lo_i < i:
+                out.append({"kind": "low", "i": lo_i, "price": l[lo_i], "confirmed": i})
+                trend, hi_i = "up", i
+            elif l[i] <= h[hi_i] * (1 - thr) and hi_i < i:
+                out.append({"kind": "high", "i": hi_i, "price": h[hi_i], "confirmed": i})
+                trend, lo_i = "down", i
+        elif trend == "up":
+            if h[i] > h[hi_i]:
+                hi_i = i
+            elif l[i] <= h[hi_i] * (1 - thr):
+                out.append({"kind": "high", "i": hi_i, "price": h[hi_i], "confirmed": i})
+                trend, lo_i = "down", i
+        else:
+            if l[i] < l[lo_i]:
+                lo_i = i
+            elif h[i] >= l[lo_i] * (1 + thr):
+                out.append({"kind": "low", "i": lo_i, "price": l[lo_i], "confirmed": i})
+                trend, hi_i = "up", i
     return out
 
 
-def tests(h, l, c, level, side: str, start: int, end: Optional[int] = None) -> dict:
-    """Count tests of a level and how they ended. `level` is a number or a list (moving average).
+def volume_profile(h, l, c, v):
+    """Last 250 sessions: point of control and the 70% value area (volume placed at each bar's typical price)."""
+    n = len(c)
+    s = max(0, n - VP_BARS)
+    if sum(1 for x in v[s:] if x) < (n - s) * 0.8:
+        return None
+    lo, hi = min(l[s:]), max(h[s:])
+    if hi <= lo:
+        return None
+    w = (hi - lo) / VP_BINS
+    vol = [0.0] * VP_BINS
+    for i in range(s, n):
+        vol[min(VP_BINS - 1, int(((h[i] + l[i] + c[i]) / 3 - lo) / w))] += v[i] or 0
+    tot = sum(vol)
+    if tot <= 0:
+        return None
+    poc = max(range(VP_BINS), key=lambda k: vol[k])
+    a = b = poc
+    got = vol[poc]
+    while got < VA_SHARE * tot:
+        left = vol[a - 1] if a > 0 else -1
+        right = vol[b + 1] if b < VP_BINS - 1 else -1
+        if right >= left:
+            b += 1
+            got += right
+        else:
+            a -= 1
+            got += left
+    edge = lambda k: lo + k * w
+    return {"poc": (edge(poc), edge(poc + 1)), "val": edge(a), "vah": edge(b + 1), "start": s}
 
-    side 'support': price comes down to within 1% of it from above.
-    side 'resistance': price comes up to within 1% of it from below.
-    Uses only bars after `start`; each test is resolved before the next one is looked for."""
+
+def _month(t: str) -> str:
+    return dt.date.fromisoformat(t).strftime("%b %Y")
+
+
+def candidates(bars: list[dict], atr: list) -> list[dict]:
+    """Every level the rules produce, each with the bar from which its tests are counted."""
+    t = [b["t"] for b in bars]
+    h = [b["h"] for b in bars]
+    l = [b["l"] for b in bars]
+    c = [b["c"] for b in bars]
+    v = [b.get("v") or 0 for b in bars]
+    n, px = len(c), c[-1]
+    out = []
+
+    def add(lo, hi, src, what, start, moving=None):
+        if REACH[0] * px <= (lo + hi) / 2 <= REACH[1] * px:
+            out.append({"lo": lo, "hi": hi, "src": src, "what": what, "start": start, "moving": moving})
+
+    zz = zigzag(h, l, atr, c)
+    for p in zz:
+        add(p["price"], p["price"], "zigzag", f"Major swing {p['kind']} {p['price']:.2f} ({_month(t[p['i']])})", p["confirmed"] + 1)
+    for mn in (50, 200):
+        ma = technicals.sma(c, mn)
+        if ma[-1] is None:
+            continue
+        slope = "rising" if ma[-21] is not None and ma[-1] > ma[-21] else "falling"
+        add(ma[-1], ma[-1], "ma", f"{mn}-day average ({slope})", mn, moving=mn)
+    s = max(0, n - LOOK)
+    i_hi = max(range(s, n), key=lambda i: h[i])
+    i_lo = min(range(s, n), key=lambda i: l[i])
+    if i_hi < n - RECENT:
+        add(h[i_hi], h[i_hi], "52w", f"52-week high ({t[i_hi]})", i_hi + 1)
+    if i_lo < n - RECENT:
+        add(l[i_lo], l[i_lo], "52w", f"52-week low ({t[i_lo]})", i_lo + 1)
+    vp = volume_profile(h, l, c, v)
+    if vp:
+        add(vp["poc"][0], vp["poc"][1], "volume", "Most-traded price, last year (volume profile)", vp["start"])
+        add(vp["val"], vp["val"], "volume", "Bottom of last year's value area (70% of volume)", vp["start"])
+        add(vp["vah"], vp["vah"], "volume", "Top of last year's value area (70% of volume)", vp["start"])
+    for i in range(max(1, n - TEST_BARS), n):
+        a = atr[i]
+        if not a:
+            continue
+        if l[i] - h[i - 1] >= GAP_ATR * a:                 # gap up: support while unfilled
+            low_since = min(l[i:])
+            if low_since > h[i - 1]:
+                add(h[i - 1], min(l[i], low_since), "gap", f"Unfilled gap up from {t[i]}", i + 1)
+        if l[i - 1] - h[i] >= GAP_ATR * a:                 # gap down: resistance while unfilled
+            high_since = max(h[i:])
+            if high_since < l[i - 1]:
+                add(max(h[i], high_since), l[i - 1], "gap", f"Unfilled gap down from {t[i]}", i + 1)
+    if len(zz) >= 2:                                       # Fibonacci of the last major move
+        a, b = zz[-2], zz[-1]
+        move = "rise" if b["kind"] == "high" else "fall"
+        for r in FIBS:
+            p = b["price"] + r * (a["price"] - b["price"])
+            add(p, p, "fib", f"Fibonacci {r * 100:.1f}% of the {move} {a['price']:.2f} → {b['price']:.2f} ({_month(t[a['i']])}–{_month(t[b['i']])})",
+                b["confirmed"] + 1)
+    return out
+
+
+def zones_from(cands: list[dict], atr_now: float) -> list[dict]:
+    """Merge levels within 1 ATR of each other into zones (never wider than 2 ATR)."""
+    zs: list[dict] = []
+    for cd in sorted(cands, key=lambda x: (x["lo"] + x["hi"]) / 2):
+        if zs:
+            z = zs[-1]
+            if cd["lo"] - z["hi"] <= MERGE_ATR * atr_now and max(z["hi"], cd["hi"]) - min(z["lo"], cd["lo"]) <= MAX_ZONE_ATR * atr_now:
+                z["lo"], z["hi"] = min(z["lo"], cd["lo"]), max(z["hi"], cd["hi"])
+                z["parts"].append(cd)
+                continue
+        zs.append({"lo": cd["lo"], "hi": cd["hi"], "parts": [cd]})
+    for z in zs:
+        srcs = {p["src"] for p in z["parts"]}
+        z["sources"] = [s for s in PRIORITY if s in srcs]
+        z["source"] = z["sources"][0]
+        z["start"] = min(p["start"] for p in z["parts"])
+        mv = [p["moving"] for p in z["parts"] if p["moving"]]
+        z["moving"] = mv[0] if len(z["parts"]) == 1 and mv else None
+    return zs
+
+
+def tests(h, l, c, atr, lo, hi, side: str, start: int, end: Optional[int] = None, ma: Optional[list] = None) -> dict:
+    """Count tests of a zone and how they ended (ATR at each test). `ma` = a moving line instead of a fixed zone.
+
+    support: price comes within 0.25 ATR of the zone top from above.  resistance: of the zone bottom from below.
+    held: a 2 ATR move away from the zone before a close 0.5 ATR through it, within 20 sessions; broken: that close
+    first; neither: not counted. Tests are at least 5 sessions apart and only use bars from `start`."""
     end = len(c) if end is None else end
-    lv = (lambda i: level[i]) if isinstance(level, list) else (lambda i: level)
     held = broken = 0
-    dates = []
+    events = []
     i = max(start, 1)
     while i < end:
-        L, Lp = lv(i), lv(i - 1)
-        if L is None or Lp is None:
+        a = atr[i]
+        zlo, zhi = (ma[i], ma[i]) if ma else (lo, hi)
+        plo, phi = (ma[i - 1], ma[i - 1]) if ma else (lo, hi)
+        if not a or zlo is None or plo is None:
             i += 1
             continue
         if side == "support":
-            began = l[i] <= L * (1 + NEAR) and c[i - 1] > Lp * (1 + NEAR)
+            began = l[i] <= zhi + BAND_ATR * a and c[i - 1] > phi + BAND_ATR * a
         else:
-            began = h[i] >= L * (1 - NEAR) and c[i - 1] < Lp * (1 - NEAR)
+            began = h[i] >= zlo - BAND_ATR * a and c[i - 1] < plo - BAND_ATR * a
         if not began:
             i += 1
             continue
         outcome, j = None, i
         for j in range(i, min(end, i + RESOLVE)):
-            Lj = lv(j)
-            if Lj is None:
+            jl, jh = (ma[j], ma[j]) if ma else (zlo, zhi)
+            if jl is None:
                 continue
             if side == "support":
-                if c[j] < Lj * (1 - NEAR):
+                if c[j] < jl - BREAK_ATR * a:
                     outcome = "broken"
-                elif h[j] >= L * (1 + BOUNCE):
+                elif h[j] >= zhi + HOLD_ATR * a:
                     outcome = "held"
             else:
-                if c[j] > Lj * (1 + NEAR):
+                if c[j] > jh + BREAK_ATR * a:
                     outcome = "broken"
-                elif l[j] <= L * (1 - BOUNCE):
+                elif l[j] <= zlo - HOLD_ATR * a:
                     outcome = "held"
             if outcome:
                 break
-        if outcome == "held":
-            held += 1
-        elif outcome == "broken":
-            broken += 1
         if outcome:
-            dates.append((i, outcome))
-            i = j + 1
+            held += outcome == "held"
+            broken += outcome == "broken"
+            events.append((i, outcome))
+            i = max(j + 1, i + TEST_GAP)
         else:
             i += RESOLVE
-    return {"held": held, "broken": broken, "tests": held + broken, "events": dates}
+    return {"held": held, "broken": broken, "tests": held + broken, "events": events}
 
 
-def volume_zones(h, l, c, v, bars=250, bins=HVN_BINS):
+def _zone_row(z, side, px, atr_now, h, l, c, atr, t, mas):
     n = len(c)
-    s = max(0, n - bars)
-    lo, hi = min(l[s:]), max(h[s:])
-    if hi <= lo or not any(v[s:]):
-        return []
-    w = (hi - lo) / bins
-    vol = [0.0] * bins
-    for i in range(s, n):
-        tp = (h[i] + l[i] + c[i]) / 3
-        vol[min(bins - 1, int((tp - lo) / w))] += v[i] or 0
-    cut = _pct(vol, HVN_TOP)
-    return [(lo + k * w, lo + (k + 1) * w, vol[k]) for k in range(bins) if vol[k] >= cut and vol[k] > 0]
-
-
-def _month(t: str) -> str:
-    d = dt.date.fromisoformat(t)
-    return d.strftime("%b %Y")
+    ma = mas.get(z["moving"]) if z["moving"] else None
+    ts = tests(h, l, c, atr, z["lo"], z["hi"], side, max(z["start"], n - TEST_BARS), ma=ma)
+    edge = z["hi"] if side == "support" else z["lo"]
+    return {"kind": side, "lo": round(z["lo"], 2), "hi": round(z["hi"], 2), "price": round((z["lo"] + z["hi"]) / 2, 2),
+            "dist_pct": round((edge / px - 1) * 100, 1), "dist_atr": round((edge - px) / atr_now, 1),
+            "what": " · ".join(p["what"] for p in z["parts"]), "parts": [p["what"] for p in z["parts"]],
+            "sources": z["sources"], "source": z["source"], "ma_n": z["moving"],
+            "held": ts["held"], "tests": ts["tests"], "bucket": bucket(ts["tests"], ts["held"]),
+            "last_test": t[ts["events"][-1][0]] if ts["events"] else None}
 
 
 def level_ladder(bars: list[dict]) -> dict:
@@ -205,68 +341,21 @@ def level_ladder(bars: list[dict]) -> dict:
     h = [b["h"] for b in bars]
     l = [b["l"] for b in bars]
     c = [b["c"] for b in bars]
-    v = [b.get("v") or 0 for b in bars]
-    n, px = len(c), c[-1]
-    win0 = max(1, n - SWING_BARS)
-    cands = []
-    hi_p, lo_p = pivots(h, l)
-    for g in cluster(hi_p):
-        cands.append({"price": g["price"], "what": f"Swing high from {_month(t[g['last']])}" + (f" · {g['touches']} touches" if g["touches"] > 1 else ""),
-                      "touches": g["touches"], "start": g["first"] + SWING_K + 1, "src": "swing"})
-    for g in cluster(lo_p):
-        cands.append({"price": g["price"], "what": f"Swing low from {_month(t[g['last']])}" + (f" · {g['touches']} touches" if g["touches"] > 1 else ""),
-                      "touches": g["touches"], "start": g["first"] + SWING_K + 1, "src": "swing"})
-    s50, s200 = technicals.sma(c, 50), technicals.sma(c, 200)
-    for name, ma, mn in (("50-day average", s50, 50), ("200-day average", s200, 200)):
-        if ma[-1] is None:
-            continue
-        slope = "rising" if ma[-21] is not None and ma[-1] > ma[-21] else "falling"
-        cands.append({"price": ma[-1], "what": f"{name}, {slope}", "touches": 0, "start": win0, "src": "ma", "ma": ma, "ma_n": mn})
-    s = max(0, n - LOOK)
-    i_hi = max(range(s, n), key=lambda i: h[i])
-    i_lo = min(range(s, n), key=lambda i: l[i])
-    cands.append({"price": h[i_hi], "what": f"52-week high ({t[i_hi]})", "touches": 1, "start": i_hi + 1, "src": "52w"})
-    cands.append({"price": l[i_lo], "what": f"52-week low ({t[i_lo]})", "touches": 1, "start": i_lo + 1, "src": "52w"})
-    zones = volume_zones(h, l, c, v)
-
-    def in_zone(p):
-        return any(a <= p <= b for a, b, _ in zones)
-
-    # merge candidates within 1.5% (keep the one with the most touches, join the labels)
-    cands.sort(key=lambda x: x["price"])
-    merged: list[dict] = []
-    for cd in cands:
-        if merged and abs(cd["price"] / merged[-1]["price"] - 1) <= CLUSTER and "ma" not in cd and "ma" not in merged[-1]:
-            m = merged[-1]
-            keep, other = (m, cd) if m["touches"] >= cd["touches"] else (cd, m)
-            keep = dict(keep)
-            keep["what"] = keep["what"] + " · " + other["what"]
-            keep["start"] = min(m["start"], cd["start"])
-            keep["touches"] = m["touches"] + cd["touches"]
-            merged[-1] = keep
-        else:
-            merged.append(cd)
-    for z in zones:  # heavy-trading zone with nothing else near it becomes its own level
-        mid = (z[0] + z[1]) / 2
-        if not any(abs(m["price"] / mid - 1) <= CLUSTER for m in merged):
-            merged.append({"price": mid, "what": "Heavy-trading zone (volume by price)", "touches": 0, "start": win0, "src": "volume"})
-
-    out_r, out_s = [], []
-    for m in merged:
-        if abs(m["price"] / px - 1) < 0.003:
-            continue
-        side = "resistance" if m["price"] > px else "support"
-        ts = tests(h, l, c, m.get("ma", m["price"]), side, max(m["start"], win0))
-        row = {"kind": side, "price": round(m["price"], 2), "dist_pct": round((m["price"] / px - 1) * 100, 1),
-               "what": m["what"] + (" · heavy-trading zone" if in_zone(m["price"]) and m["src"] != "volume" else ""),
-               "held": ts["held"], "tests": ts["tests"], "source": m["src"], "ma_n": m.get("ma_n"),
-               "bucket": bucket(ts["tests"], ts["held"]),
-               "last_test": t[ts["events"][-1][0]] if ts["events"] else None}
-        (out_r if side == "resistance" else out_s).append(row)
-    out_r.sort(key=lambda x: x["price"])
-    out_s.sort(key=lambda x: -x["price"])
-    return {"price": round(px, 2), "resistance": out_r[:3], "support": out_s[:3],
-            "zones": [{"from": round(a, 2), "to": round(b, 2)} for a, b, _ in zones]}
+    px = c[-1]
+    atr = atr_series(h, l, c)
+    atr_now = atr[-1] or px * 0.02
+    zs = zones_from(candidates(bars, atr), atr_now)
+    mas = {50: technicals.sma(c, 50), 200: technicals.sma(c, 200)}
+    band = BAND_ATR * atr_now
+    inside = [z for z in zs if z["lo"] - band <= px <= z["hi"] + band]
+    below = sorted([z for z in zs if z["hi"] + band < px], key=lambda z: -z["hi"])[:SHOW]
+    above = sorted([z for z in zs if z["lo"] - band > px], key=lambda z: z["lo"])[:SHOW]
+    row = lambda z, side: _zone_row(z, side, px, atr_now, h, l, c, atr, t, mas)
+    return {"price": round(px, 2), "atr": round(atr_now, 2), "atr_pct": round(atr_now / px * 100, 2),
+            "resistance": [row(z, "resistance") for z in above], "support": [row(z, "support") for z in below],
+            "inside": [{"lo": round(z["lo"], 2), "hi": round(z["hi"], 2), "what": " · ".join(p["what"] for p in z["parts"]),
+                        "sources": z["sources"]} for z in inside],
+            "zone_count": len(zs)}
 
 
 # ------------------------------------------------------------------ further-fall cases
@@ -652,7 +741,7 @@ def business(rep: dict) -> dict:
 #   often than the "3+ tests, held under 50%" bucket AND at least 5 points more often than all levels of that
 #   side, in BOTH halves (tests before 2021 / from 2021), with at least 100 tests in each of those buckets in
 #   each half. Otherwise past hold rates are reported as NOT predictive.
-LEVEL_RULES_VERSION = 1
+LEVEL_RULES_VERSION = 2
 BUCKETS_L = ["untested", "1-2 tests", "3+ tests, held under 50%", "3+ tests, held 50-74%", "3+ tests, held 75%+"]
 LEVEL_SPLIT = "2021-01-01"
 LEVEL_MIN_N = 100
@@ -674,13 +763,14 @@ def month_ends(bars, start="2016-01-01"):
 
 
 def level_samples(bars: list[dict], liquid=None) -> list[dict]:
-    """One stock: at each month end, the nearest support and resistance (from prices up to that day only),
+    """One stock: at each month end, the nearest support and resistance zone (from prices up to that day only),
     their bucket, and how their NEXT test ended."""
     t = [b["t"] for b in bars]
     h = [b["h"] for b in bars]
     l = [b["l"] for b in bars]
     c = [b["c"] for b in bars]
     n = len(c)
+    atr = atr_series(h, l, c)
     mas = {50: technicals.sma(c, 50), 200: technicals.sma(c, 200)}
     seen, out = set(), []
     for i in month_ends(bars):
@@ -688,8 +778,8 @@ def level_samples(bars: list[dict], liquid=None) -> list[dict]:
             continue
         lad = level_ladder(bars[:i + 1])
         for row in lad["support"][:1] + lad["resistance"][:1]:
-            lv = mas[row["ma_n"]] if row.get("ma_n") else row["price"]
-            r = tests(h, l, c, lv, row["kind"], i + 1, min(n, i + 1 + LOOK))
+            ma = mas[row["ma_n"]] if row.get("ma_n") else None
+            r = tests(h, l, c, atr, row["lo"], row["hi"], row["kind"], i + 1, min(n, i + 1 + LOOK), ma=ma)
             if not r["events"]:
                 continue
             j, outcome = r["events"][0]
@@ -698,7 +788,8 @@ def level_samples(bars: list[dict], liquid=None) -> list[dict]:
                 continue
             seen.add(key)
             out.append({"date": t[j], "seen": t[i], "side": row["kind"], "source": row["source"],
-                        "bucket": row["bucket"], "held": outcome == "held"})
+                        "sources": len(row["sources"]), "bucket": row["bucket"], "held": outcome == "held",
+                        "dist_atr": row["dist_atr"]})
     return out
 
 
@@ -717,6 +808,8 @@ def summarize_levels(rows: list[dict]) -> dict:
             blk["buckets"][b] = dict(_rate(bb), **{k: _rate([r for r in v if r["bucket"] == b]) for k, v in halves.items()})
         for src in sorted({r["source"] for r in sub}):
             blk["sources"][src] = _rate([r for r in sub if r["source"] == src])
+        blk["confluence"] = {"one kind": _rate([r for r in sub if r.get("sources", 1) == 1]),
+                             "2+ kinds": _rate([r for r in sub if r.get("sources", 1) >= 2])}
         verdicts = []
         for k, hv in halves.items():
             strong = blk["buckets"][BUCKETS_L[4]][k]
@@ -736,6 +829,8 @@ def level_track(market: str) -> Optional[dict]:
     if not hit:
         return None
     t = hit[1]
+    if t.get("rules_version") != LEVEL_RULES_VERSION:
+        return {"stale": True, "built": t.get("built"), "rules_version": t.get("rules_version")}
     return {"built": t.get("built"), "universe": t.get("universe_label"), "stocks": t.get("stocks"), "tests": t.get("tests"),
             "result": t.get("result"), "pass_test": t.get("pass_test"), "note": t.get("note"),
             "market_note": "Tested on NSE stocks only; not tested on US stocks." if market == "US" else None}
@@ -818,7 +913,7 @@ def value_floor(rep: dict) -> dict:
                                "available), so it matches the P/E ranges above, not the entry card's combined state.")
     else:
         out["record"] = None
-        out["record_note"] = ("Not tested on this install yet: run tools/entry_backtest.py." if rep.get("market") != "US"
+        out["record_note"] = ("Not tested on this install yet." if rep.get("market") != "US"
                               else "The value record is from NSE stocks only; not tested on US stocks.")
     return out
 

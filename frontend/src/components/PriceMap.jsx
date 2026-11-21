@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, ago, go } from '../util'
 import { Badge, Loading } from './ui'
 import { Md, useAISettings } from '../pages/AI'
@@ -19,13 +19,61 @@ function Tile({ k, v, s, tone }) {
 }
 
 function heldText(l) {
-  if (!l.tests) return 'not tested in the last 2 years'
+  if (!l.tests) return 'not tested in the last 3 years'
   return `held ${l.held} of ${l.tests} test${l.tests > 1 ? 's' : ''}${l.tests < 3 ? ' · thin evidence' : ''}`
 }
 
-function TrackLine({ tr }) {
-  if (!tr) {
-    return <div className="small" style={{ color: 'var(--warn)', margin: '4px 0 6px' }}>Not tested yet: whether a level's past record predicts its next test. Run <code>tools\levels_backtest.py</code> once; until then the counts are history only.</div>
+function JobRunner({ name, what, howLong, onDone, compact }) {
+  const [st, setSt] = useState(null), [denied, setDenied] = useState(false), [busy, setBusy] = useState(false)
+  const wasRunning = useRef(false)
+  const check = () => api(`/api/jobs/${name}`).then((x) => {
+    if (wasRunning.current && !x.running && x.finished) onDone?.()
+    wasRunning.current = x.running
+    setSt(x)
+  }).catch((e) => { if (String(e.message).match(/owner|403|forbidden/i)) setDenied(true) })
+  useEffect(() => { check() }, [name]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!st?.running) return undefined
+    const t = setInterval(check, 5000)
+    return () => clearInterval(t)
+  }, [st?.running]) // eslint-disable-line react-hooks/exhaustive-deps
+  const start = async () => { setBusy(true); try { const x = await post(`/api/jobs/${name}/start`); wasRunning.current = x.running; setSt(x) } finally { setBusy(false) } }
+  if (denied) return <div className="small muted">Only the owner of this EquityLens can run this test.</div>
+  if (!st) return null
+  if (st.running) {
+    const p = st.progress, pctDone = p?.total ? Math.round((p.done / p.total) * 100) : 0
+    return (
+      <div className="pmap-job">
+        <div className="small"><b>{st.label}: running</b> · {p ? `${p.done.toLocaleString('en-IN')} of ${p.total.toLocaleString('en-IN')} stocks` : 'starting…'}{st.started ? ` · started ${ago(st.started)}` : ''} · you can keep using the app</div>
+        <div className="pmap-prog"><div style={{ width: `${pctDone}%` }} /></div>
+        {st.last_lines?.length > 0 && <div className="small muted" style={{ fontFamily: 'monospace', fontSize: 11 }}>{st.last_lines[st.last_lines.length - 1]}</div>}
+      </div>
+    )
+  }
+  return (
+    <div className="pmap-job">
+      {st.failed && (
+        <div className="small" style={{ color: 'var(--bad)', marginBottom: 6 }}>The last run stopped before finishing:
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, margin: '4px 0' }}>{st.last_lines.slice(-4).join('\n')}</pre>
+        </div>
+      )}
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+        <button className={compact ? 'btn small' : 'btn primary small'} disabled={busy} onClick={start}>{st.result_built ? '↻ Run again' : '▶ Run the test now'}</button>
+        <span className="small muted">{what} · {howLong} · runs in the background{st.result_built ? ` · last result ${st.result_built}` : ''}</span>
+      </div>
+    </div>
+  )
+}
+
+function TrackLine({ tr, onDone }) {
+  const job = (compact) => <JobRunner name="levels" what="All NSE stocks, rules fixed before the run" howLong="about 20–40 min" onDone={onDone} compact={compact} />
+  if (!tr || tr.stale) {
+    return (
+      <div style={{ margin: '6px 0' }}>
+        <div className="small" style={{ color: 'var(--warn)', marginBottom: 6 }}>{tr?.stale ? `The level test result (${tr.built}) is for older level rules (v${tr.rules_version}); run it again for these rules.` : "Not tested yet: whether a zone's past record predicts its next test. Until the test runs, the counts below are history only."}</div>
+        {job(false)}
+      </div>
+    )
   }
   const side = (k, lab) => {
     const b = tr.result?.[k]
@@ -38,20 +86,26 @@ function TrackLine({ tr }) {
       <div className="muted">Backtest, {tr.universe}, {tr.stocks} stocks, {tr.tests?.toLocaleString('en-IN')} level tests (built {tr.built}). Fixed test: {tr.pass_test}</div>
       {side('support', 'Supports')}{side('resistance', 'Resistances')}
       {tr.market_note && <div style={{ color: 'var(--warn)' }}>{tr.market_note}</div>}
+      <div style={{ marginTop: 6 }}>{job(true)}</div>
     </div>
   )
 }
 
-function Ladder({ lv, cur, tr }) {
+const SRC_L = { zigzag: 'major swing', gap: 'gap', volume: 'volume', fib: 'Fibonacci', ma: 'average', '52w': '52-week' }
+const zoneTxt = (z, cur) => (z.lo === z.hi ? `${cur}${n2(z.lo)}` : `${cur}${n2(z.lo)} – ${n2(z.hi)}`)
+
+function Ladder({ lv, cur, tr, onDone, range }) {
+  const beyond = (l) => range && (l.kind === 'support' ? l.hi < range.lo : l.lo > range.hi)
   const row = (l, i) => {
     const res = l.kind === 'resistance'
     const b = tr?.result?.[l.kind]?.buckets?.[l.bucket]
     return (
       <div key={`${l.kind}${i}`} className="pmap-lv">
         <span className="pmap-kind" style={{ color: res ? 'var(--bad)' : 'var(--good)' }}>{res ? 'RESISTANCE' : 'SUPPORT'}</span>
-        <b className="pmap-px">{cur}{n2(l.price)}</b>
-        <span className="pmap-dist">{sg(l.dist_pct)}</span>
-        <span className="pmap-what">{l.what}
+        <b className="pmap-px">{zoneTxt(l, cur)}</b>
+        <span className="pmap-dist">{sg(l.dist_pct)}<br /><span style={{ fontSize: 11 }}>{Math.abs(l.dist_atr)} days' range{beyond(l) ? ' · beyond a normal month' : ''}</span></span>
+        <span className="pmap-what">{(l.parts || [l.what]).map((p) => <span key={p} style={{ display: 'block' }}>{p}</span>)}
+          {l.sources?.length > 1 && <span className="pmap-bt" style={{ color: 'var(--text)' }}>{l.sources.length} kinds of level meet here: {l.sources.map((x) => SRC_L[x] || x).join(', ')}</span>}
           {b && b.n >= 100 && <span className="pmap-bt">Backtest: {l.kind === 'support' ? 'supports' : 'resistances'} with this record ({l.bucket}) held at the next test {b.held_pct}% of {b.n.toLocaleString('en-IN')} times</span>}
           {b && b.n < 100 && <span className="pmap-bt" style={{ color: 'var(--warn)' }}>Backtest: only {b.n} tests of levels with this record ({l.bucket}), too few for a percentage</span>}
         </span>
@@ -62,14 +116,16 @@ function Ladder({ lv, cur, tr }) {
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>Where buyers and sellers stepped in before</h3>
-      <div className="small muted">Each level comes from this stock's own prices. A test = price came within 1%; held = it moved 3% away before closing 1% through, within 20 sessions.</div>
-      <TrackLine tr={tr} />
+      <div className="small muted">Zones from this stock's own prices: major swings (ZigZag), volume profile, unfilled gaps, Fibonacci, 50/200-day averages, 52-week high/low. Everything is scaled to its normal daily range (ATR {cur}{n2(lv.atr)} = {lv.atr_pct}%). A test = price came within ¼ of a day's range; held = it then moved 2 days' range away before closing ½ a day's range through.</div>
+      <TrackLine tr={tr} onDone={onDone} />
       {[...lv.resistance].reverse().map(row)}
       <div className="pmap-lv pmap-now">
-        <span className="pmap-kind">NOW</span><b className="pmap-px">{cur}{n2(lv.price)}</b><span className="pmap-dist" /><span className="pmap-what">Last close</span><span className="pmap-held" />
+        <span className="pmap-kind">NOW</span><b className="pmap-px">{cur}{n2(lv.price)}</b><span className="pmap-dist" />
+        <span className="pmap-what">Last close{lv.inside?.length > 0 && lv.inside.map((z) => <span key={z.lo} className="pmap-bt" style={{ color: 'var(--warn)' }}>Price is inside a zone right now ({zoneTxt(z, cur)}): {z.what}</span>)}</span><span className="pmap-held" />
       </div>
       {lv.support.map(row)}
-      {!lv.support.length && <div className="small muted" style={{ padding: 8 }}>No support level below today's price in the last 2 years.</div>}
+      {!lv.support.length && <div className="small muted" style={{ padding: 8 }}>No support zone below today's price within half of it.</div>}
+      {!lv.resistance.length && <div className="small muted" style={{ padding: 8 }}>No resistance zone above (it is at or near its highs).</div>}
     </div>
   )
 }
@@ -190,7 +246,7 @@ function Sector({ s, sym, m }) {
   )
 }
 
-function ValueFloor({ v, cur, price }) {
+function ValueFloor({ v, cur, price, onDone }) {
   const fmtR = (r) => (r.below !== undefined ? `below ${cur}${n2(r.below)}` : r.above !== undefined ? `above ${cur}${n2(r.above)}` : `${cur}${n2(r.from)} – ${cur}${n2(r.to)}`)
   const pc = (x) => (x === null || x === undefined ? '—' : sg(x))
   return (
@@ -220,7 +276,12 @@ function ValueFloor({ v, cur, price }) {
               Record: entry backtest ({v.record_scope}, built {v.record_built}), average return minus same-month peers. {v.record_basis}
               {v.value_test && <> Fixed value test ({v.value_test.rule}): <b style={{ color: v.value_test.passed ? 'var(--good)' : 'var(--bad)' }}>{v.value_test.passed ? 'passed' : 'not passed'}</b>.</>}
             </div>
-          ) : <div className="small" style={{ color: 'var(--warn)', marginTop: 4 }}>{v.record_note}</div>}
+          ) : (
+            <div style={{ marginTop: 6 }}>
+              <div className="small" style={{ color: 'var(--warn)', marginBottom: 6 }}>{v.record_note}</div>
+              {v.record_note?.includes('Not tested') && <JobRunner name="entry" what="Entry backtest on all NSE stocks" howLong="2–3 hours the first time (downloads P/E history), faster after" onDone={onDone} />}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -364,10 +425,10 @@ export default function PriceMap({ symbol }) {
           s={d.sector.breadth ? `${d.sector.breadth.above50} of ${d.sector.breadth.of} peers above their 50-day` : 'no peer prices'} />
         <Tile k="Business" v={d.business.score !== null && d.business.score !== undefined ? `${Math.round(d.business.score)}/100` : '—'} s={d.business.verdict || ''} />
       </div>
-      <Ladder lv={d.levels} cur={cur} tr={d.level_track} />
+      <Ladder lv={d.levels} cur={cur} tr={d.level_track} onDone={() => load(true)} range={d.further.range_1m} />
       <Further f={d.further} w={w} cur={cur} sym={sym} />
       <Sector s={d.sector} sym={sym} m={d.market} />
-      <ValueFloor v={d.value} cur={cur} price={w.price} />
+      <ValueFloor v={d.value} cur={cur} price={w.price} onDone={() => load(true)} />
       <Signals list={d.signals} />
       <Business b={d.business} />
       <PriceMapAI sym={d.symbol} date={w.date} />

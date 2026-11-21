@@ -220,8 +220,8 @@ def main():
                 row["turned"] = j is not None
                 row["r12_wait"] = c[i + 252] / c[j] - 1 if j is not None else 0.0
             rows.append(row)
-        if n % 25 == 0:
-            print(f"  {n}/{len(syms)} stocks · {len(rows)} monthly verdicts · {(time.time() - t0) / 60:.1f} min")
+        if n % 10 == 0:
+            print(f"  {n}/{len(syms)} stocks · {len(rows)} monthly verdicts · {(time.time() - t0) / 60:.1f} min", flush=True)
 
     peers(rows, "r12", "p12")
     peers(rows, "r24", "p24")

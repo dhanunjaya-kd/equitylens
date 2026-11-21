@@ -238,13 +238,7 @@ REM or NIFTY 500 only
 venv\Scripts\python tools\entry_backtest.py --universe N500
 ```
 
-Test the Price map's support and resistance levels (about 10–30 minutes for all NSE: the test itself is quick, most of the time is downloading fresh prices):
-```cmd
-cd backend
-venv\Scripts\python tools\levels_backtest.py
-REM quick trial first
-venv\Scripts\python tools\levels_backtest.py --limit 40
-```
+The Price map's level test and the entry backtest can also be started from the app (Price map tab → **Run the test**), with no terminal needed.
 
 ### 🌅 Pre-market — how is NIFTY likely to open?
 
@@ -265,8 +259,8 @@ Open **Pre-market** (side menu, or the card on the home page). From 08:20 to 09:
 Open any stock (Indian or US) → **📍 Price map** tab. Everything is measured on real daily prices of the stock, its sector index and its peers, with rules fixed before looking at any result (not tuned). Every claim shows how many cases it rests on; with fewer than 10 cases it lists the cases one by one and gives no percentages.
 
 - **Where it stands**: fall from the highest close of the last 52 weeks, sessions since that high, and the stage (pullback < 10% · correction 10–20% · bear > 20%).
-- **Support and resistance ladder**: swing highs and lows from the last 2 years (pivots within 1.5% are one level), the 50- and 200-day averages, the 52-week high and low, and heavy-trading zones (volume by price). Each level shows **how often it held**: a test = price came within 1%; held = it moved 3% away before closing 1% through, within 20 sessions.
-- **Do these levels really work? (tested, not assumed)**: `tools\levels_backtest.py` checks on NSE stocks whether a level's past record predicts its NEXT test. At every month end since 2018 it builds the nearest support and resistance from prices up to that day only, groups them by their record so far (untested · 1–2 tests · 3+ tests held under 50% / 50–74% / 75%+), and records how the next test ended. Fixed before any run: it **passes** only if levels that held 75%+ held again 10+ points more often than levels that held under 50%, and 5+ points more often than all levels, in both halves (before 2021 / from 2021), with 100+ tests in each bucket and half. Every level on the tab then shows how levels with the same record did. Until the backtest is run, the tab says "not tested yet" and shows no such figure. US stocks: not tested.
+- **Support and resistance zones** (level rules v2): major swing highs and lows from all ~10 years (ZigZag: a swing counts only when price then reversed at least 3x its normal daily range (ATR), 5% minimum; the swing still forming is never used), last year's volume profile (most-traded price, value-area top and bottom), unfilled gaps, Fibonacci 38.2/50/61.8% of the last major move, the 50/200-day averages and the 52-week high/low (not one set in the last 5 days). Levels within one day's range (1 ATR) of each other become one zone, so the zones shown are spread out, not three lines inside one day's move. Each zone shows its distance in % and in days' range, which kinds of level meet there, and **how often it held** over the last 3 years: a test = price came within ¼ of a day's range; held = it then moved 2 days' range away before closing ½ a day's range through; tests at least 5 days apart, so a stock chopping around one price can't inflate the count.
+- **Do these zones really work? (tested, not assumed)**: press **Run the test** on the Price map tab (owner only; about 20–40 minutes on all NSE stocks, in the background with a progress bar; you can keep using the app). At every month end since 2018 it builds the nearest support and resistance zone from prices up to that day only, groups them by their record so far (untested · 1–2 tests · 3+ tests held under 50% / 50–74% / 75%+), and records how the next test ended. Fixed before any run: it **passes** only if zones that held 75%+ held again 10+ points more often than zones that held under 50%, and 5+ points more often than all zones, in both halves (before 2021 / from 2021), with 100+ tests in each bucket and half. It also reports each kind of level (major swing, volume, gap, Fibonacci, average) and zones where 2+ kinds meet, so you can see which really hold. Until it has run, the tab says "not tested yet" and shows no such figure; a result from older rules is marked as outdated. US stocks: not tested.
 - **How much further could it fall?** Every earlier time the stock first fell this far from its 52-week high, what happened next, up to its next 52-week high: half the time it fell less than X% more, 3 times in 4 less than Y%, the worst case, sessions to the low and how often it was back to that price within 3 months. The same cases for its sector peers (more cases), and its normal 1-month move. The fall still running is never counted.
 - **Market, sector or just this stock?** NIFTY 50 (or the S&P 500 for US stocks), then the closest NSE sector index (e.g. NIFTY IT for TCS) or sector fund (US, e.g. SMH for NVIDIA, matched on the SEC industry): each one's fall from its high and trend, how many peers are above their 50-day average, the stock vs the sector over 3 months, and how much the stock moves with each. One fixed-rule answer: broad fall, sector fall, market fall or mostly this stock. A peer table shows how each sector stock is moving. If an index can't be loaded, the page says so.
 - **Value floor from its own P/E history**: the price at which today's P/E would be Cheap, Fair, Full or Expensive against the stock's own P/E history (30th / 60th / 85th percentiles, at today's earnings), with how each P/E state did in the entry backtest (12, 24 and 36 months vs same-month peers, and how many stock-months). The backtest grades P/E state only, so the page says so when the entry card's combined state differs.
@@ -623,7 +617,7 @@ cd backend
 python run_tests.py
 ```
 
-143 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+150 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -640,7 +634,7 @@ python run_tests.py
 | `test_access.py` | Password sign-in, protected keys, shutdown only from this computer, phone addresses, log viewer |
 | `test_ai.py` | Exact request formats for Claude, OpenAI, Gemini and Ollama; error handling; masked keys; entry research parsing, retry, caching and flagging of invented numbers |
 | `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
-| `test_pricemap.py` | Hold-rate maths (held, broken, unresolved), the level backtest uses no future prices and counts each test once, its pass rule at the edges, market / sector / stock answer, value ranges tied to P/E state, the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
+| `test_pricemap.py` | ZigZag keeps only major swings and never the one still forming, volume profile, unfilled gaps, today's low is not a level, hold-rate maths on each stock's own ATR scale (held, broken, unresolved, 5 days apart), in-app run status, the level backtest uses no future prices and counts each test once, its pass rule at the edges, market / sector / stock answer, value ranges tied to P/E state, the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |
 
@@ -676,7 +670,8 @@ equitylens/
 │   │   ├── entry.py          entry decision rules (Enter / Avoid), live and in the backtest
 │   │   ├── premarket.py      overnight board, NIFTY opening call, its backtest and frozen live calls
 │   │   ├── nextday.py        08:45 check (and its test), day map, evening preview
-│   │   ├── pricemap.py       price map: levels and hold rates, fall cases, sector check, turn signals
+│   │   ├── pricemap.py       price map: zones and hold rates, fall cases, sector check, turn signals
+│   │   ├── jobs.py           runs the long backtests from the app, with progress
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
 │   │   ├── brokers.py        read-only holdings from 8 brokers + CSV / Excel import
 │   │   ├── portfolio.py      portfolio X-ray: merge, score, warnings, mix
@@ -707,6 +702,7 @@ equitylens/
 | `POST /api/ai/{note,chat,guidance,debate,doc,chart}/{symbol}` | AI features for a stock (`chat` takes `focus: "entry"` for questions about the entry card) |
 | `GET /api/premarket?market=IN&refresh=` · `POST /api/premarket/backtest` · `POST /api/ai/premarket` | Pre-market board, opening call, backtest, AI brief |
 | `GET /api/pricemap/{symbol}?refresh=` · `POST /api/ai/pricemap/{symbol}` | Price map for one stock, AI research on it |
+| `GET /api/jobs/{levels\|entry}` · `POST /api/jobs/{levels\|entry}/start` | Run the level test or the entry backtest from the app (owner only), with progress |
 | `POST /api/ai/entry/{symbol}?refresh=` | AI research on the entry decision: structured, sourced, numbers checked |
 | `POST /api/ai/{picks,movers,calendar}` | AI explanations of lists, moves and the week |
 | `GET /api/fno` | F&O stocks and lot sizes |

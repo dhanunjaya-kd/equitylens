@@ -494,7 +494,9 @@ Reply with ONE JSON object and nothing else (no code fence), exactly these keys:
  "confidence": {"level": "low" | "medium" | "high", "why": "...", "data_gaps": ["what is missing, stale or too thin"]}}
 levels: 2-4 (both sides). turn_watch: 2-4. why_it_fell: 1-4. business: 2-4 each.
 Rules: every number copied from the data (same figure, same units); no new price levels, no targets, no dates
-for a turn; no buy/sell advice; describe the past as the past."""
+for a turn; no buy/sell advice; describe the past as the past. Levels are zones (lo-hi): quote them as the data
+gives them. Do not call a level strong, major, reliable, key or psychological unless it has 10+ tests in the data,
+and never say what clearing or losing a level "would signal" unless a turn signal's record in the data shows it."""
 
 
 def pricemap_trim(pm: dict) -> dict:

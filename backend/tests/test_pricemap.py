@@ -33,27 +33,85 @@ def test_stage_bands():
     assert pmap.stage(10) == "Correction" and pmap.stage(20) == "Correction" and pmap.stage(20.1) == "Bear phase"
 
 
-def test_support_held_and_broken():
-    # price falls to 100, bounces 5% (held), later falls to 100 again and closes 3% below (broken)
-    c = [110] * 5 + [105, 102, 100.5, 103, 106, 108, 110, 110, 107, 104, 101, 97, 96, 95] + [95] * 30
-    h = [x * 1.002 for x in c]
-    l = [x * 0.998 for x in c]
-    r = pmap.tests(h, l, c, 100.0, "support", 1)
-    assert r["tests"] == 2 and r["held"] == 1 and r["broken"] == 1
+def _hlc(c, w=0.3):
+    return [x + w for x in c], [x - w for x in c], c
+
+
+def test_support_held_and_broken_on_atr_scale():
+    # ATR fixed at 1: test = low within 0.25 of the zone top; held = high 2 above it; broken = close 0.5 below the bottom
+    c = [110] * 5 + [105, 102, 100.3, 101, 102.5, 104, 106, 108, 110] + [110] * 6 + [106, 103, 100.2, 99.2, 98, 97] + [97] * 30
+    h, l, _ = _hlc(c)
+    r = pmap.tests(h, l, c, [1.0] * len(c), 100.0, 100.0, "support", 1)
+    assert (r["tests"], r["held"], r["broken"]) == (2, 1, 1)
+
+
+def test_same_move_is_not_a_test_on_a_wilder_stock():
+    # the same 2.5-point bounce is a "held" test when ATR is 1, but not resolved when ATR is 3 (needs 6 away)
+    c = [110] * 5 + [105, 102, 100.3, 101, 102.5, 101.5] + [101.5] * 30
+    h, l, _ = _hlc(c)
+    assert pmap.tests(h, l, c, [1.0] * len(c), 100.0, 100.0, "support", 1)["held"] == 1
+    assert pmap.tests(h, l, c, [3.0] * len(c), 100.0, 100.0, "support", 1)["tests"] == 0
+
+
+def test_tests_are_five_sessions_apart():
+    # price bounces off 100 every 3 sessions: only every other touch can count
+    c = [106] * 3
+    for _ in range(8):
+        c += [100.2, 103, 106]
+    c += [106] * 25
+    h, l, _ = _hlc(c, 0.1)
+    r = pmap.tests(h, l, c, [1.0] * len(c), 100.0, 100.0, "support", 1)
+    starts = [i for i, _ in r["events"]]
+    assert r["tests"] >= 2 and all(b - a >= pmap.TEST_GAP for a, b in zip(starts, starts[1:]))
+    assert r["tests"] < 8
 
 
 def test_resistance_needs_approach_from_below():
-    c = [90, 92, 95, 99.5, 96, 93, 95, 99.3, 102, 104, 106] + [106] * 25
-    h = [x * 1.001 for x in c]
-    l = [x * 0.999 for x in c]
-    r = pmap.tests(h, l, c, 100.0, "resistance", 1)
-    assert r["tests"] == 2 and r["held"] == 1 and r["broken"] == 1
+    c = [90, 92, 95, 99.9, 96, 93, 92, 92, 95, 99.8, 101, 102, 103] + [103] * 25
+    h, l, _ = _hlc(c, 0.1)
+    r = pmap.tests(h, l, c, [1.0] * len(c), 100.0, 100.0, "resistance", 1)
+    assert (r["tests"], r["held"], r["broken"]) == (2, 1, 1)
 
 
 def test_unresolved_test_is_not_counted():
-    c = [110, 105, 100.5] + [100.8] * 30       # sits on the level, never 3% away, never 1% through
-    r = pmap.tests([x * 1.001 for x in c], [x * 0.999 for x in c], c, 100.0, "support", 1)
-    assert r["tests"] == 0
+    c = [110, 105, 100.3] + [100.6] * 30        # sits on the zone, never 2 ATR away, never 0.5 ATR through
+    h, l, _ = _hlc(c, 0.1)
+    assert pmap.tests(h, l, c, [1.0] * len(c), 100.0, 100.0, "support", 1)["tests"] == 0
+
+
+def test_zigzag_major_swings_only_and_never_the_one_forming():
+    # wiggles of 2% are not swings when the threshold is 5%; the final drop's low is still forming
+    c = [100 + (2 if k % 2 else 0) for k in range(40)] + [100 + 2 * k for k in range(1, 16)] + [130 - 3 * k for k in range(1, 9)]
+    h, l, _ = _hlc(c, 0.01)
+    atr = [0.1] * len(c)                         # tiny ATR -> the 5% floor applies
+    zz = pmap.zigzag(h, l, atr, c)
+    assert [p["kind"] for p in zz] == ["low", "high"]
+    assert abs(zz[-1]["price"] - 130.01) < 1e-6 and zz[-1]["confirmed"] > zz[-1]["i"]
+    assert all(p["i"] < len(c) - 1 for p in zz)
+
+
+def test_volume_profile_value_area_holds_70_percent():
+    c = [100.0] * 150 + [120.0] * 100 + [110.0] * 10
+    bars = _bars(c, vol=1000, spread=0.001)
+    for b in bars[:150]:
+        b["v"] = 3000                              # most volume traded near 100
+    h = [b["h"] for b in bars]; l = [b["l"] for b in bars]; v = [b["v"] for b in bars]
+    vp = pmap.volume_profile(h, l, c, v)
+    assert vp["poc"][0] <= 100.1 and vp["poc"][1] >= 99.9 and vp["val"] <= 100 < vp["vah"]
+
+
+def test_unfilled_gap_and_recent_52w_low_rules():
+    c = [100.0] * 300 + [110.0] * 40 + [108.0] * 3 + [104.0]
+    bars = _bars(c, spread=0.002)
+    atr = pmap.atr_series([b["h"] for b in bars], [b["l"] for b in bars], c)
+    cand = pmap.candidates(bars, atr)
+    gaps = [x for x in cand if x["src"] == "gap"]
+    assert gaps and abs(gaps[0]["lo"] - 100.2) < 0.01 and gaps[0]["hi"] <= 110 * 0.998 + 1e-9
+    lows = [x for x in cand if x["what"].startswith("52-week low")]
+    assert lows                                                       # the old low, not today's
+    bars2 = _bars(c[:-1] + [90.0], spread=0.002)                      # new 52-week low today: not a level yet
+    atr2 = pmap.atr_series([b["h"] for b in bars2], [b["l"] for b in bars2], [b["c"] for b in bars2])
+    assert not [x for x in pmap.candidates(bars2, atr2) if x["what"].startswith("52-week low")]
 
 
 def test_fall_cases_exclude_the_fall_still_running():
@@ -114,8 +172,10 @@ def test_sector_mapping():
 def test_ladder_levels_sit_on_the_right_side():
     bars = _bars(_walk(900, seed=5))
     lv = pmap.level_ladder(bars)
-    assert all(x["price"] > lv["price"] for x in lv["resistance"]) and all(x["price"] < lv["price"] for x in lv["support"])
+    band = pmap.BAND_ATR * lv["atr"]
+    assert all(x["lo"] - band > lv["price"] for x in lv["resistance"]) and all(x["hi"] + band < lv["price"] for x in lv["support"])
     assert all(0 <= x["held"] <= x["tests"] for x in lv["resistance"] + lv["support"])
+    assert all(x["hi"] - x["lo"] <= pmap.MAX_ZONE_ATR * lv["atr"] + 1e-6 for x in lv["resistance"] + lv["support"])
 
 
 def test_build_on_demo_stock():
@@ -215,6 +275,31 @@ def test_market_layer_and_untested_levels_on_demo():
     assert d["market"]["name"] == "NIFTY 50" and d["market"]["fall_pct"] is not None and d["sector"]["layers"]
     assert d["level_track"] is None                                    # nothing invented before the backtest runs
     assert all(r["bucket"] in pmap.BUCKETS_L for r in d["levels"]["support"] + d["levels"]["resistance"])
+
+
+def test_old_level_results_are_marked_stale():
+    store.put_company("LEVELS_TRACK::IN", {"built": "2026-11-21", "rules_version": pmap.LEVEL_RULES_VERSION - 1, "result": {}})
+    assert pmap.level_track("IN")["stale"] is True
+    store.put_company("LEVELS_TRACK::IN", {"built": "2026-11-21", "rules_version": pmap.LEVEL_RULES_VERSION, "result": {}, "tests": 5})
+    assert "stale" not in pmap.level_track("IN") and pmap.level_track("US")["market_note"]
+    with store._conn() as c:
+        c.execute("DELETE FROM company WHERE symbol='LEVELS_TRACK::IN'")
+
+
+def test_job_status_reads_progress_and_finish_from_the_log():
+    from app import jobs, config
+    log = config.DATA_DIR / "job_levels.log"
+    log.write_text("1541 stocks (All NSE stocks) · level rules v2\n  410/1541 stocks · 9120 level tests · 6.2 min\n", encoding="utf-8")
+    st = jobs.status("levels")
+    assert st["running"] and st["progress"] == {"done": 410, "total": 1541} and not st["failed"]
+    log.write_text(log.read_text(encoding="utf-8") + "\nDone in 31.0 min · 50000 level tests\n", encoding="utf-8")
+    st = jobs.status("levels")
+    assert st["finished"] and not st["running"] and not st["failed"]
+    log.write_text("Turn demo mode off first.\n", encoding="utf-8")
+    import os, time as _t
+    os.utime(log, (_t.time() - 3600, _t.time() - 3600))
+    assert jobs.status("levels")["failed"]
+    log.unlink()
 
 
 if __name__ == "__main__":

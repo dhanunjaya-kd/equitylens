@@ -408,6 +408,24 @@ def ai_premarket(market: str = "IN", refresh: bool = False):
     return _ai(ai.premarket_brief, premarket.build(market), refresh)
 
 
+@app.get("/api/jobs/{name}")
+def job_status(name: str):
+    from . import jobs
+    try:
+        return jobs.status(name)
+    except KeyError:
+        raise HTTPException(404, "No such job")
+
+
+@app.post("/api/jobs/{name}/start")
+def job_start(name: str):
+    from . import jobs
+    try:
+        return jobs.start(name)
+    except KeyError:
+        raise HTTPException(404, "No such job")
+
+
 @app.get("/api/pricemap/{symbol}")
 def pricemap_get(symbol: str, refresh: bool = False):
     from . import pricemap

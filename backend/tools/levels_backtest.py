@@ -1,15 +1,14 @@
 """Do support/resistance levels that held before hold again? Tests the Price map's levels on NSE stocks.
 
-    python tools\\levels_backtest.py                  (all NSE; reuses the prices saved by the entry backtest)
-    python tools\\levels_backtest.py --universe N500  (NIFTY 500 only)
-    python tools\\levels_backtest.py --limit 40       (quick trial on 40 stocks)
+    Normally started from the app: Price map tab -> "Run the test". From a terminal:
+    python tools\\levels_backtest.py
 
 The rules were fixed before any run (21 Nov 2026) and are in app/pricemap.py (LEVEL_* constants):
-  - At every month end, the nearest support and the nearest resistance are built exactly like the Price map,
+  - At every month end, the nearest support and resistance ZONE are built exactly like the Price map (rules v2),
     from prices up to that day only. Their record so far puts them in a bucket:
     untested · 1-2 tests · 3+ tests held under 50% · 3+ tests held 50-74% · 3+ tests held 75%+.
-  - The outcome is the NEXT test of that level after that day: held (a 3% move away before a close 1% through,
-    within 20 sessions) or broken. Untested within 252 sessions, or unresolved, is not counted.
+  - The outcome is the NEXT test of that zone after that day: held (a 2 ATR move away before a close 0.5 ATR
+    through, within 20 sessions) or broken. Untested within 252 sessions, or unresolved, is not counted.
     Each test is counted once.
   - PASS (per side): "3+ tests, held 75%+" held again 10+ points more often than "3+ tests, held under 50%"
     and 5+ points more often than all levels, in both halves (tests before 2021 / from 2021), with 100+ tests
@@ -69,7 +68,9 @@ def main():
     done = 0
 
     def jobs():
-        for sym in syms:
+        for k, sym in enumerate(syms, 1):
+            if k % 10 == 0:
+                print(f"  {k}/{len(syms)} stocks · {len(rows)} level tests · {(time.time() - t0) / 60:.1f} min", flush=True)
             try:
                 bars, _, ohlc = technicals.get_bars(sym)
             except Exception as e:  # noqa: BLE001
@@ -92,8 +93,6 @@ def main():
             for r in got:
                 r["group"] = "N500" if sym in n500 else "OTHER"
             rows += got
-            if done % 25 == 0:
-                print(f"  {done} stocks · {len(rows)} level tests · {(time.time() - t0) / 60:.1f} min")
 
     for job in jobs():
         take([work(job)])
@@ -123,6 +122,7 @@ def main():
         for k in pricemap.BUCKETS_L:
             x = b["buckets"][k]
             print(f"  {k:28} {x['n']:7} {pc(x['held_pct']):>9} {pc(x['first_half']['held_pct']):>12} {pc(x['second_half']['held_pct']):>10}")
+        print("  zones with one kind vs 2+ kinds of level: " + " · ".join(f"{k} {pc(v['held_pct'])} (n={v['n']})" for k, v in b["confluence"].items()))
         print("  by kind of level: " + " · ".join(f"{s} {pc(v['held_pct'])} (n={v['n']})" for s, v in b["sources"].items()))
         print(f"  PASSED: {'YES' if b['passed'] else 'NO' if b['passed'] is False else 'n/a (too few tests)'}")
 
