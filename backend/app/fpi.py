@@ -288,9 +288,9 @@ def fetch_nsdl_month(y: int, m: int, web: Web) -> Optional[int]:
 
 def _months() -> list[dict]:
     out = []
-    for k in sorted(store.keys_like("NSDL2::%")):
+    for k in sorted(store.keys_like("NSDL2::____-__")):
         hit = store.get_company(k)
-        if hit:
+        if hit and isinstance(hit[1].get("days"), dict):
             out.append(dict(hit[1], ym=k.split("::")[1]))
     return out
 
@@ -493,7 +493,7 @@ def sector_reports() -> list[dict]:
     out = []
     for k in store.keys_like("FPISECT2::%"):
         hit = store.get_company(k)
-        if hit and hit[1]["r"]:
+        if hit and hit[1].get("r"):
             out.append(hit[1]["r"])
     by = {r["end"]: r for r in out}
     return [by[d] for d in sorted(by)]
@@ -573,9 +573,9 @@ def _save_mf(parsed: dict) -> int:
 
 def mf_days() -> dict:
     out: dict = {}
-    for k in sorted(store.keys_like("SEBIMF2::%")):
+    for k in sorted(store.keys_like("SEBIMF2::____-__")):         # months only (not the "tried" markers)
         hit = store.get_company(k)
-        if hit:
+        if hit and isinstance(hit[1].get("days"), dict):
             out.update(hit[1]["days"])
     return dict(sorted(out.items()))
 
@@ -618,7 +618,7 @@ def fetch_mf_month(y: int, m: int, web: Web) -> Optional[int]:
 def backfill_mf() -> None:
     st = STATE["mf"]
     todo = [(y, m) for y, m in _months_back(HIST_MONTHS) if store.get_company(_mf_key(f"{y:04d}-{m:02d}")) is None
-            and not store.get_company(f"SEBIMF2::TRIED::{y:04d}-{m:02d}")]
+            and not store.get_company(f"SEBIMFTRIED::{y:04d}-{m:02d}")]
     st.update(running=bool(todo), done=0, total=len(todo))
     web, misses = Web(), 0
     for k, (y, m) in enumerate(todo, 1):
@@ -636,7 +636,7 @@ def backfill_mf() -> None:
             if misses >= 3 and not st["archive"]:
                 st["archive"] = False
                 break
-            store.put_company(f"SEBIMF2::TRIED::{y:04d}-{m:02d}", {"n": 0})
+            store.put_company(f"SEBIMFTRIED::{y:04d}-{m:02d}", {"n": 0})
         st["done"] = k
     st["running"] = False
 
@@ -705,6 +705,14 @@ def records(rows: list[dict]) -> dict:
             "year": {"buy": big(yr, max), "sell": big(yr, min)},
             "streaks": _streaks([(r["date"], r["net"]) for r in yr]),
             "sum5": s(rows[-5:]), "sum20": s(rows[-20:]), "n5": len(rows[-5:]), "n20": len(rows[-20:])}
+
+
+def empty_payload() -> dict:
+    return {"nsdl": {"rows": [], "months": [], "years": [], "first": None, "last": None, "days": 0, "backfill": dict(STATE["nsdl"]),
+                     "records": {}, "unchecked": [], "deriv": [], "deriv_latest": None},
+            "sectors": None, "sectors_backfill": dict(STATE["sectors"]),
+            "mf": {"days": [], "months": [], "periods": [], "last": None, "backfill": dict(STATE["mf"])},
+            "errors": dict(STATE["errors"])}
 
 
 def payload() -> dict:

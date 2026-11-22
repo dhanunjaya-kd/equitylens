@@ -251,6 +251,16 @@ def test_archive_request_is_the_forms_own_submit():
     assert hit["final"] is True and hit["checked"] is True and set(hit["days"]) == {"2024-12-02", "2024-12-03"}
 
 
+def test_markers_never_break_the_history():
+    from app import fpi
+    fpi.store.put_company("SEBIMF2::2026-03", {"days": {"2026-03-02": {"buy": 1.0, "sell": 0.5, "net": 0.5}}, "checked": None})
+    fpi.store.put_company("SEBIMFTRIED::2026-02", {"n": 0})
+    fpi.store.put_company("SEBIMF2::TRIED::2026-01", {"n": 0})               # written by the previous version
+    assert "2026-03-02" in fpi.mf_days()
+    p = fpi.payload()
+    assert p["mf"]["last"] >= "2026-03-02"
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

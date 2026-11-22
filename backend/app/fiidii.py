@@ -395,7 +395,11 @@ def india(fetch: bool = True) -> dict:
     test_part = extreme_test(share_series, nifty, LOOKBACK_IN, (5, 21), start_shift=1) if len(share_series) > LOOKBACK_IN and nifty else None
     if fetch and not config.DEMO:
         threading.Thread(target=fpi.refresh_daily, daemon=True).start()   # NSDL + SEBI pages, at most every 3 hours
-    extra = fpi.payload()
+    try:
+        extra = fpi.payload()
+    except Exception as e:  # noqa: BLE001 - the longer history failing must not take the page down
+        STATE["error"] = f"History: {e.__class__.__name__}: {str(e)[:160]}"
+        extra = fpi.empty_payload()
     fpi_series = [(r["date"], r["net"]) for r in extra["nsdl"]["rows"]]
     # NSDL's reporting date carries the previous day's trades and is public that day: count from the next close
     test_fpi = extreme_test(fpi_series, nifty, LOOKBACK_IN, (5, 21), start_shift=1) if len(fpi_series) > LOOKBACK_IN and nifty else None
