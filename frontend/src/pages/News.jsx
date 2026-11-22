@@ -183,14 +183,14 @@ export default function News() {
             </>
           )}
           <div className="nw-filters">
-            <div className="list-chips" style={{ flexWrap: 'nowrap', overflowX: 'auto' }}>
+            <div className="list-chips nw-cats">
               <button className={`tab ${cat === 'all' ? 'on' : ''}`} onClick={() => setCat('all')}>All</button>
               {d.cats.filter((c) => c.n > 0).map((c) => <button key={c.key} className={`tab ${cat === c.key ? 'on' : ''}`} onClick={() => setCat(c.key)}>{c.label} <span className="muted">{c.n}</span></button>)}
             </div>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="nw-ctrls">
               <select className="input" value={kind} onChange={(e) => setKind(e.target.value)}>{KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               <button className={`hm-chip ${mine ? 'on' : ''}`} onClick={() => setMine(!mine)} title={wl.size ? '' : 'Add stocks to a watchlist first'}>⭐ My watchlists</button>
-              <input className="input" placeholder="Search news" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 160 }} />
+              <input className="input nw-q" placeholder="Search news" value={q} onChange={(e) => setQ(e.target.value)} />
               <div className="row" style={{ gap: 4 }}>{[['cards', '▦ Cards'], ['list', '☰ List']].map(([v, l]) => <button key={v} className={`hm-chip ${view === v ? 'on' : ''}`} onClick={() => pickView(v)}>{l}</button>)}</div>
             </div>
           </div>
