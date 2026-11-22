@@ -13,13 +13,13 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-76_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-197_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
 **Search a company and get a complete report in seconds: a clear verdict, the reasons behind it, the risks,<br/>what the chart says next, and what has to go right over the next 3, 5 and 10 years.**
 
-[What it does](#-what-it-does) · [Video](#-walkthrough-video) · [Screenshots](#-screenshots) · [Features](#-features) · [Getting started](#-getting-started) · [How it works](#-how-it-works) · [Data sources](#-data-sources)
+[What it does](#-what-it-does) · [What's new](#-whats-new) · [Video](#-walkthrough-video) · [Screenshots](#-screenshots) · [Features](#-features) · [Getting started](#-getting-started) · [How it works](#-how-it-works) · [Data sources](#-data-sources)
 
 </div>
 
@@ -36,14 +36,30 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 | 🔎 | **Stock report** | Verdict, 6 scores, red flags, forensics, valuation, 10-year story, 3/5/10-year scenarios, chart outlook |
 | 🌅 | **Pre-market** | Before 09:15: overnight US, Asia, crude, gold, silver, Bitcoin, rupee, yields and FII / DII flows, each marked positive or negative for NIFTY, plus a NIFTY opening call with its real backtested and live track record |
 | 🚦 | **Entry decision** | *Enter now* or *Avoid for now* for a 1–3 year holding, from fixed rules tested on 10 years of NSE data, with the rule's real track record and AI research on every stock |
+| 📍 | **Price map** | Where the floors and ceilings are, how often each one held before, how far the stock could fall, tested against random price levels |
 | 📊 | **Market dashboard** | NIFTY · BANK NIFTY · SENSEX · VIX (or S&P 500 · NASDAQ · DOW · RUSSELL · VIX) on every page, plus market movers, mood and sector heatmap |
+| 🗺️ | **Heatmap** | Every stock as a box with its logo, grouped by NSE / S&P sector, sized by market cap, coloured by 1D to 1Y move |
 | 🧭 | **Smart money** | Delivery %, bulk & block deals, promoter / insider trades and exchange surveillance flags |
+| 🏦 | **FII / DII** | Daily FII and DII figures, 5 years of confirmed foreign flows, F&O positions of FIIs, DIIs, pros and clients, sector flows, mutual funds, stocks institutions added or cut, and whether any of it predicted NIFTY · US: CFTC positions of funds and banks |
+| 📰 | **News** | Company filings, RBI / Fed and business news for India and the US, market-moving items only, with real pictures, a **Breaking** bar and **Telegram alerts** |
 | 📅 | **Calendar** | Results and economic events with official dates, countdowns and what each one means |
-| 🏆 | **Discovery** | Rank the whole NIFTY 500 / S&P 500, build your own screens, watchlist, compare |
+| 🏆 | **Discovery** | Rank the whole NIFTY 500 / S&P 500, build your own screens, up to 10 named watchlists, compare |
 | ✨ | **AI analyst** | Entry research, research notes, chat, bull-vs-bear debate, guidance check, report reader — with your choice of AI |
 | 🏛️ | **Stock lists** | NIFTY 50 · NIFTY 100 · NIFTY 500 · All NSE — one choice applies to every list and to scans |
 | 🎯 | **F&O stocks** | One switch turns every list into F&O stocks only; F&O badge and lot size on each stock |
 | 📘 | **Beginner guide** | Learn to read a company in 10 minutes: 11 steps, a checklist, a glossary and a walkthrough video |
+
+### 🆕 What's new
+
+| | Added | Where |
+|:-:|---|---|
+| 📰 | **News for India and the US**: company filings (NSE, SEC 8-K), RBI / Fed releases, business news and major global events; noise and routine filings left out; one story shown once with all its sources; publishers' own pictures; real price moves | Sidebar → News |
+| 🔴 | **Breaking bar** on every page: serious market-wide events reported by two or more sources, central-bank announcements, index moves of 2%+ | Every page |
+| 📨 | **Telegram alerts**: breaking news, your watchlist stocks' filings, RBI / Fed releases, sent to your own Telegram | Settings → Telegram alerts |
+| 🏦 | **FII / DII module**: same-evening NSE figures, 5 years of NSDL-confirmed FPI flows checked against NSDL's month totals, FPI derivatives, NSE F&O positions of each group, sector flows, mutual funds, stocks FIIs / DIIs added or cut, tested *does it predict NIFTY?* · US: CFTC positions | Sidebar → FII / DII |
+| 🗺️ | **Heatmap** with real company logos, NSE sectors for all NSE stocks, market caps from NSE / SEC share counts | Sidebar → Heatmap |
+| ⭐ | **Up to 10 watchlists** with your own names, % since added, drag to reorder, heatmap view | Watchlist |
+| 📍 | **Price map v2**: major swing levels only, each level's real hold rate, tested against random price levels, runs from Settings → Data checks | Stock page → Price map |
 
 ---
 
@@ -75,6 +91,15 @@ To film it again with real companies and live data on your own laptop: `python t
 | Price moves **joined with fundamentals** — *Quality on sale* and *Hype watch* | ➖ | ✅ |
 | Promoter & insider trades with **cluster-buying** and pledge alerts (NSE + SEC Form 4) | ➖ | ✅ |
 | **Exchange surveillance warnings** (GSM / ASM / ESM, insolvency, default, high pledge) on the stock page | ➖ | ✅ |
+| FII / DII daily figures | ✅ | ✅ |
+| **5 years of confirmed FPI flows**, F&O positions of FIIs / DIIs / pros / clients, sector flows and mutual funds in one place | ➖ | ✅ |
+| *Does it predict NIFTY?* tested on that history, **with a verdict only when the evidence is clear** | ➖ | ✅ |
+| Support / resistance levels with **each level's real hold rate, compared with random price levels** | ➖ | ✅ |
+| **News** | | |
+| Filings, central banks and business news in one feed, **noise and routine filings left out** | ➖ | ✅ |
+| The same story from many sites **shown once with every source** | ➖ | ✅ |
+| Real price move of each stock in the news, order size as % of market value; **no guessed bullish / bearish labels** | ➖ | ✅ |
+| **Breaking bar** and **Telegram alerts** to your own chat | ➖ | ✅ |
 | **Calendar** | | |
 | Results calendar with EPS estimates and timing | ✅ | ✅ |
 | Results joined with **your watchlist and scores**, beat rate and price reaction | ➖ | ✅ |
@@ -558,8 +583,10 @@ python run.py
 | 4 | Search any stock | Full report in about 5 seconds, cached for 24 hours (↻ Refresh fetches new data) |
 | 5 | ⚙️ Settings → choose an AI provider | Optional: Claude, ChatGPT, Gemini, or free local Ollama |
 | 6 | Top Picks → pick **NIFTY 50 / 100 / 500 / All NSE** (or S&P 500) → **Start scan** | Builds the rankings used by Top Picks, the screener and the signature scans. Start with NIFTY 50 (~3 min); re-run weekly |
-| 7 | Run the entry backtest once: `venv\Scripts\python tools\entry_backtest.py` in `backend/` | Fills the track record shown on every entry card (first run 2–3 hours; see 🚦 Entry decision) |
+| 7 | ⚙️ Settings → **Data checks** → run the **entry backtest** and the **level test** once | Fills the track records shown on every entry card and price map (first run takes a while; progress is shown in the app, no terminal needed) |
 | 8 | Open **Movers**, **Calendar** and **Money** once | First load downloads the index's daily prices and NSE files (a few minutes); after that they refresh in the background |
+| 9 | Leave EquityLens running for about 30 minutes the first time | **FII / DII** history downloads by itself in the background (NSE positions ~20 min, NSDL, sector reports, SEBI and CFTC a few minutes each); **News** fills within minutes. **Data status** at the bottom of the FII / DII page shows each source |
+| 10 | *Optional:* ⚙️ Settings → **📨 Telegram alerts** | Breaking news and your stocks' filings on your phone (about 2 minutes to set up) |
 
 ### 📱 Phone and ☁️ cloud
 
@@ -675,7 +702,7 @@ cd backend
 python run_tests.py
 ```
 
-164 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+197 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -736,6 +763,11 @@ equitylens/
 │   │   ├── heatmap.py        heatmap rows by sector and each sector's index
 │   │   ├── sectors.py        NSE sector and issued shares for every stock (looked up once, saved)
 │   │   ├── usshares.py       US shares outstanding from SEC filings (all companies in a few requests)
+│   │   ├── fiidii.py         FII / DII: NSE cash figures, F&O positions, CFTC (US), tested "does it predict"
+│   │   ├── fpi.py            NSDL daily FPI flows and derivatives, sector reports, SEBI mutual funds (all checked)
+│   │   ├── instholdings.py   stocks FIIs / DIIs added or cut, from scanned shareholding
+│   │   ├── news.py           filings, central banks and publishers' feeds; tags, de-duplication, breaking
+│   │   ├── alerts.py         Telegram alerts (breaking, watchlist filings, RBI / Fed)
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
 │   │   ├── brokers.py        read-only holdings from 8 brokers + CSV / Excel import
 │   │   ├── portfolio.py      portfolio X-ray: merge, score, warnings, mix
@@ -768,6 +800,9 @@ equitylens/
 | `GET /api/watch/quotes?symbols=A,B,US:C` | Last close, 1D/1W/1M and distance from the 52-week high for watchlist stocks |
 | `GET /api/heatmap?market=&tf=&universe=` · `GET /api/heatmap/sector?market=&sector=` | Heatmap data, and one sector's index |
 | `GET /api/pricemap/{symbol}?refresh=` · `POST /api/ai/pricemap/{symbol}` | Price map for one stock, AI research on it |
+| `GET /api/fiidii?market=IN\|US` · `GET /api/fiidii/stocks?quarter=` | FII / DII page data · stocks institutions added or cut |
+| `GET /api/news?market=` · `GET /api/news/breaking?market=` | News page · breaking items only |
+| `GET /api/alerts` · `POST /api/alerts` · `POST /api/alerts/find-chat` · `POST /api/alerts/test` | Telegram alerts settings, find your chat, send a test (owner only) |
 | `GET /api/jobs/{levels\|entry}` · `POST /api/jobs/{levels\|entry}/start` | Run the level test or the entry backtest from the app (owner only), with progress |
 | `POST /api/ai/entry/{symbol}?refresh=` | AI research on the entry decision: structured, sourced, numbers checked |
 | `POST /api/ai/{picks,movers,calendar}` | AI explanations of lists, moves and the week |
@@ -787,7 +822,11 @@ equitylens/
 
 ## 🛣️ Roadmap
 
-- [ ] 🔔 Telegram alerts and a morning digest: watchlist results, big economic events, 52-week breakouts, verdict changes
+- [x] 📰 News for India and the US with a Breaking bar
+- [x] 🔔 Telegram alerts: breaking news, watchlist stocks' filings, RBI / Fed releases
+- [ ] 🔔 Morning digest on Telegram: today's results of your stocks, big economic events, 52-week breakouts, verdict changes
+- [x] 🏦 FII / DII module with 5 years of history and a tested record
+- [ ] ⏱️ First-time downloads start by themselves, with time left for each
 - [ ] 🧾 Results-day analyser: new quarter vs estimates and vs the 3/5/10-year assumptions
 - [x] 💼 Portfolio X-ray: connect your broker or upload holdings, see combined score, concentration and red flags
 - [x] ☁️ Cloud hosting guide, Docker and password protection so it works with the laptop off

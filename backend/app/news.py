@@ -124,7 +124,7 @@ def classify(text: str) -> Optional[str]:
 
 
 def clean(s: str, n: int = 320) -> str:
-    s = htmllib.unescape(re.sub(r"<[^>]+>", " ", s or ""))
+    s = htmllib.unescape(htmllib.unescape(re.sub(r"<[^>]+>", " ", s or "")))   # some feeds escape twice ("&amp;amp;")
     s = re.sub(r"\s+", " ", s).strip()
     return s if len(s) <= n else s[: n - 1].rsplit(" ", 1)[0] + "…"
 

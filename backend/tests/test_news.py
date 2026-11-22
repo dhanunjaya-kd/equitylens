@@ -35,6 +35,7 @@ def test_rss_and_atom_are_read_with_times():
     b = news.parse_feed(ATOM)
     assert b[0]["url"].endswith("x-index.htm") and b[0]["time"] == "2026-11-20T21:31:04+00:00"
     assert news.parse_feed("not xml") == []
+    assert news.clean("Indo Borax &amp;amp; Chemicals") == "Indo Borax & Chemicals"
 
 
 def test_only_market_news_is_kept():
