@@ -16,8 +16,15 @@ export const mon = (ym) => (ym ? new Date(`${ym}-15T12:00:00`).toLocaleDateStrin
 const label = (k) => (k && k.length === 7 ? mon(k) : dmy(k))
 export const C_FII = '#60a5fa', C_DII = '#a78bfa', C_IDX = '#fbbf24', C_CLIENT = '#22c55e', C_PRO = '#f97316'
 
-export function Chips({ opts, value, onChange }) {
-  return <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>{opts.map(([t, v]) => <button key={t} className={`hm-chip ${value === v ? 'on' : ''}`} onClick={() => onChange(v)}>{t}</button>)}</div>
+export function Chips({ opts, value, onChange, disabled = () => false }) {
+  return (
+    <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      {opts.map(([t, v]) => {
+        const off = disabled(v)
+        return <button key={t} className={`hm-chip ${value === v && !off ? 'on' : ''}`} disabled={off} title={off ? 'Not enough history saved yet' : undefined} style={off ? { opacity: 0.4, cursor: 'not-allowed' } : undefined} onClick={() => !off && onChange(v)}>{t}</button>
+      })}
+    </div>
+  )
 }
 
 function useTip(n, iw, padL) {

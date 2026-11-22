@@ -399,6 +399,8 @@ def india(fetch: bool = True) -> dict:
     fpi_series = [(r["date"], r["net"]) for r in extra["nsdl"]["rows"]]
     # NSDL's reporting date carries the previous day's trades and is public that day: count from the next close
     test_fpi = extreme_test(fpi_series, nifty, LOOKBACK_IN, (5, 21), start_shift=1) if len(fpi_series) > LOOKBACK_IN and nifty else None
+    fut_series = [(r["date"], r["idx_fut_net"]) for r in extra["nsdl"]["deriv"] if r["idx_fut_net"] is not None]
+    test_fut = extreme_test(fut_series, nifty, LOOKBACK_IN, (5, 21), start_shift=1) if len(fut_series) > LOOKBACK_IN and nifty else None
     series = []
     for d, p in parts:
         x = derived(p)
@@ -422,7 +424,8 @@ def india(fetch: bool = True) -> dict:
         "nifty": [(d, nifty[d]) for d in sorted(nifty)[-1300:]] if nifty else [],
         "fpi": extra,
         "history_from": parts[0][0] if parts else None,
-        "tests": {"fii_futures_share": test_part, "fpi_net": test_fpi,
+        "tests": {"fii_futures_share": test_part, "fpi_net": test_fpi, "fpi_fut": test_fut,
+                  "fut_days_needed": max(0, LOOKBACK_IN + 1 - len(fut_series)),
                   "fpi_days_needed": max(0, LOOKBACK_IN + 1 - len(fpi_series)),
                   "part_days_needed": max(0, LOOKBACK_IN + 1 - len(share_series))},
         "backfill": dict(STATE["in"]), "error": STATE["error"],

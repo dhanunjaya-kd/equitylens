@@ -595,3 +595,5 @@ html, body { transition: background-color .2s ease; }
   .fd .fd-spark { width: 56px; }
 }
 .fd-src summary { cursor: pointer; }
+.fd-recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); column-gap: 24px; }
+@media (max-width: 640px) { .fd-recs { grid-template-columns: 1fr; } }

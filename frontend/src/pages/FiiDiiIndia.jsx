@@ -6,6 +6,7 @@ import {
   cr, dm, dmy, mon, n0, sgnCr, tone,
 } from '../components/FlowCharts'
 
+const RNG = [['1M', 22], ['3M', 66], ['6M', 130], ['1Y', 260], ['5Y monthly', 'M']]
 const TABS = [['flows', 'Money flows'], ['positions', 'F&O positions'], ['sectors', 'Sectors (FPI)'], ['stocks', 'Stocks']]
 const lakh = (v) => (v === null || v === undefined ? '—' : `₹${(v / 1e5).toLocaleString('en-IN', { maximumFractionDigits: 2 })} L Cr`)
 const nearClose = (by, iso) => {
@@ -19,7 +20,8 @@ const nearClose = (by, iso) => {
 // ---------------------------------------------------------------- money flows
 function Flows({ d }) {
   const F = d.fpi, N = F.nsdl, M = F.mf, L = d.latest
-  const [rng, setRng] = useState(66)
+  const [rng0, setRng] = useState(66)
+  const rng = rng0 !== 'M' && rng0 > 22 && N.days < rng0 * 0.7 ? 22 : rng0       // a longer range than the history shows 1M
   const niftyBy = useMemo(() => Object.fromEntries(d.nifty || []), [d.nifty])
   const monthEnd = useMemo(() => {
     const out = {}
@@ -39,6 +41,12 @@ function Flows({ d }) {
     const chg = monthEnd[m.month] && monthEnd[pm] ? (monthEnd[m.month] / monthEnd[pm] - 1) * 100 : null
     return { ...m, mf: mfBy[m.month], nifty: chg }
   })
+  const [per, setPer] = useState('m')
+  const yearChg = (y) => {
+    const a = Object.keys(monthEnd).filter((k) => k.startsWith(`${+y - 1}-`)).sort().pop()
+    const b = Object.keys(monthEnd).filter((k) => k.startsWith(`${y}-`)).sort().pop()
+    return a && b ? (monthEnd[b] / monthEnd[a] - 1) * 100 : null
+  }
   const nse = d.cash || []
   const mfRows = M.days.slice(-66).map((r) => ({ date: r.date, net: r.net }))
   return (
@@ -56,11 +64,12 @@ function Flows({ d }) {
       <div className="card">
         <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}>
           <h3 style={{ margin: 0 }}>Foreign investors (FPI) · net buying of Indian shares</h3>
-          <Chips opts={[['1M', 22], ['3M', 66], ['6M', 130], ['1Y', 260], ['5Y monthly', 'M']]} value={rng} onChange={setRng} />
+          <Chips opts={RNG} value={rng} onChange={setRng} disabled={(v) => (v === 'M' ? N.months.length < 3 : v > 22 && N.days < v * 0.7)} />
         </div>
         <div className="small muted" style={{ margin: '4px 0 8px' }}>
           NSDL's confirmed figures (custodian-reported), equity bought minus sold on the stock exchanges, ₹ crore{rng === 'M' ? ', added up by month' : ', by NSDL reporting date (each date carries the previous trading day\'s trades)'}.
           {N.days ? ` ${N.days.toLocaleString('en-IN')} reporting days saved, from ${dm(N.first)} to ${dm(N.last)}.` : ''}
+          {N.days > 0 && N.days < 200 ? ' Longer ranges switch on as the 5-year history downloads.' : ''}
         </div>
         {rows.length > 0
           ? <><Chart rows={rows} bars={[{ key: 'net', color: C_FII, label: 'FPI net' }]} line={{ key: 'nifty', color: C_IDX }} lineLabel="NIFTY 50" barFmt={sgnCr} />
@@ -71,22 +80,38 @@ function Flows({ d }) {
 
       {table.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Month by month</h3>
+          <div className="row between" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+            <h3 style={{ margin: 0 }}>{per === 'y' ? 'Year by year' : 'Month by month'}</h3>
+            <Chips opts={[['Months', 'm'], ['Years', 'y']]} value={per} onChange={setPer} />
+          </div>
           <div style={{ overflowX: 'auto' }}>
             <table className="pm-table fd-fit" style={{ minWidth: 600 }}>
-              <thead><tr><th>Month</th><th>FPI, stock exchanges</th><th className="hide-sm">FPI, with IPOs and other primary</th><th>Mutual funds (SEBI)</th><th>NIFTY 50</th></tr></thead>
-              <tbody>{table.map((m) => (
+              <thead><tr><th>{per === 'y' ? 'Year' : 'Month'}</th><th>FPI, stock exchanges</th><th className="hide-sm">FPI, with IPOs and other primary</th><th>Mutual funds (SEBI)</th><th>NIFTY 50</th></tr></thead>
+              {per === 'y' ? (
+                <tbody>{[...N.years].reverse().map((y) => (
+                  <tr key={y.year}>
+                    <td>{y.year}{y.months < 12 ? <span className="small muted"> · {y.months} month{y.months === 1 ? '' : 's'}</span> : null}</td>
+                    <td style={{ color: tone(y.exch), fontWeight: 700 }}>{sgnCr(y.exch)}</td>
+                    <td className="hide-sm" style={{ color: tone(y.equity) }}>{sgnCr(y.equity)}</td>
+                    <td className="muted">—</td>
+                    <td style={{ color: tone(yearChg(y.year)) }}>{yearChg(y.year) === null ? '—' : signed(yearChg(y.year), 1, '%')}</td>
+                  </tr>))}</tbody>
+              ) : <tbody>{table.map((m) => (
                 <tr key={m.month}>
-                  <td>{mon(m.month)}{m.month === cur ? <span className="small muted"> · so far</span> : null}</td>
+                  <td>{mon(m.month)}{m.month === cur ? <span className="small muted"> · so far</span> : null}{m.checked === true ? <span className="small" title="The days add up to NSDL's own month total" style={{ color: 'var(--good)' }}> ✓</span> : m.checked === false ? <span className="small" title="The days do not add up to NSDL's month total: a day is missing or was revised" style={{ color: 'var(--warn)' }}> ⚠</span> : null}</td>
                   <td style={{ color: tone(m.exch), fontWeight: 700 }}>{sgnCr(m.exch)}</td>
                   <td className="hide-sm" style={{ color: tone(m.equity) }}>{sgnCr(m.equity)}</td>
                   <td style={{ color: tone(m.mf?.net) }}>{m.mf ? sgnCr(m.mf.net) : <span className="muted">not published yet</span>}{m.mf && m.month === M.last?.slice(0, 7) ? <span className="small muted"> · to {dm(M.last)}</span> : null}</td>
                   <td style={{ color: tone(m.nifty) }}>{m.nifty === null ? '—' : signed(m.nifty, 1, '%')}</td>
-                </tr>))}</tbody>
+                </tr>))}</tbody>}
             </table>
           </div>
+          <div className="small muted" style={{ marginTop: 6 }}>✓ = the days add up to NSDL's own total for that month. NIFTY 50 = change from the previous {per === 'y' ? 'year' : 'month'}'s last close.{per === 'y' ? ' Mutual fund years: see the SEBI card below.' : ''}</div>
         </div>
       )}
+
+      <FutCard d={d} />
+      <Records r={N.records} first={N.first} />
 
       <div className="fd-two">
         <div className="card">
@@ -124,6 +149,72 @@ function Flows({ d }) {
         lag=" (the session after NSDL's reporting date)" lowLabel="Heavy FPI selling (bottom 10%)" highLabel="Heavy FPI buying (top 10%)"
         need={d.tests.fpi_days_needed} needWhat="reporting days" />
     </>
+  )
+}
+
+
+// ---------------------------------------------------------------- FII in F&O (on the flows tab)
+const PROD = [['idx_fut', 'Index futures'], ['idx_opt', 'Index options'], ['stk_fut', 'Stock futures'], ['stk_opt', 'Stock options']]
+function FutCard({ d }) {
+  const P = d.positions.now?.FII, ch = d.positions.change_1d?.FII, wk = d.positions.change_1w?.FII
+  const D = d.fpi.nsdl.deriv_latest
+  if (!P && !D) return null
+  return (
+    <div className="card">
+      <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <h3 style={{ margin: 0 }}>FIIs in futures and options</h3>
+        <button className="btn small" onClick={() => go('fiidii/positions')}>All F&O positions →</button>
+      </div>
+      <div className="fd-two eq" style={{ marginTop: 10 }}>
+        <div>
+          <div className="small muted" style={{ marginBottom: 6 }}>Open positions at the end of {dmy(d.positions.date)} (NSE, contracts)</div>
+          {P ? (
+            <>
+              <div className="pmap-kv"><span className="muted">Index futures, net</span><b style={{ color: tone(P.fut_idx_net) }}>{n0(P.fut_idx_net)} {P.fut_idx_net < 0 ? '(net short)' : '(net long)'}</b></div>
+              <div className="pmap-kv"><span className="muted">Index futures, % long</span><b>{P.fut_idx_share}%{wk?.fut_idx_share !== null && wk?.fut_idx_share !== undefined ? <span className="small muted"> · {signed(wk.fut_idx_share, 1, ' pts')} in a week</span> : null}</b></div>
+              <div className="pmap-kv"><span className="muted">Change in net futures vs previous day</span><b style={{ color: tone(ch?.fut_idx_net) }}>{n0(ch?.fut_idx_net)}</b></div>
+              <div className="pmap-kv"><span className="muted">Index calls / puts, net</span><b><span style={{ color: tone(P.idx_call_net) }}>{n0(P.idx_call_net)}</span> / <span style={{ color: tone(P.idx_put_net) }}>{n0(P.idx_put_net)}</span></b></div>
+              <div className="pmap-kv"><span className="muted">Stock futures, % long</span><b>{P.fut_stk_share}%</b></div>
+            </>
+          ) : <Unavailable>No NSE positions file saved yet.</Unavailable>}
+        </div>
+        <div>
+          <div className="small muted" style={{ marginBottom: 6 }}>Trades reported on {D ? dmy(D.date) : '—'} (NSDL, all exchanges, ₹ crore)</div>
+          {D ? (
+            <table className="pm-table fd-fit" style={{ minWidth: 0 }}>
+              <thead><tr><th /><th>Bought</th><th>Sold</th><th>Net</th><th className="hide-sm">Open interest</th></tr></thead>
+              <tbody>{PROD.filter(([k]) => D[k]).map(([k, l]) => {
+                const x = D[k], net = x.buy - x.sell
+                return <tr key={k}><td>{l}</td><td>{cr(x.buy)}</td><td>{cr(x.sell)}</td><td style={{ color: tone(net), fontWeight: 700 }}>{sgnCr(net)}</td><td className="hide-sm">{cr(x.oi)}</td></tr>
+              })}</tbody>
+            </table>
+          ) : <Unavailable>NSDL's derivative figures not saved yet.</Unavailable>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Records({ r, first }) {
+  if (!r || !r.all) return null
+  const st = r.streaks || {}
+  const run = (x) => (x ? `${x.n} day${x.n > 1 ? 's' : ''} (${dm(x.from)} – ${dm(x.to)}), ${sgnCr(x.sum)}` : '—')
+  const items = [
+    ['Last 5 reporting days', sgnCr(r.sum5), tone(r.sum5)],
+    ['Last 20 reporting days', sgnCr(r.sum20), tone(r.sum20)],
+    ['Now', st.current ? `${st.current.n} day${st.current.n > 1 ? 's' : ''} of net ${st.current.side === 'buy' ? 'buying' : 'selling'}` : '—', st.current ? (st.current.side === 'buy' ? 'var(--good)' : 'var(--bad)') : undefined],
+    ['Biggest buying day, last 12 months', `${sgnCr(r.year.buy.net)} · ${dm(r.year.buy.date)}`, 'var(--good)'],
+    ['Biggest selling day, last 12 months', `${sgnCr(r.year.sell.net)} · ${dm(r.year.sell.date)}`, 'var(--bad)'],
+    ['Longest buying run, last 12 months', run(st.longest_buy)],
+    ['Longest selling run, last 12 months', run(st.longest_sell)],
+    [`Biggest buying day since ${dm(first)}`, `${sgnCr(r.all.buy.net)} · ${dm(r.all.buy.date)}`, 'var(--good)'],
+    [`Biggest selling day since ${dm(first)}`, `${sgnCr(r.all.sell.net)} · ${dm(r.all.sell.date)}`, 'var(--bad)'],
+  ]
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>FPI records and streaks <span className="small muted">· NSDL, stock exchanges</span></h3>
+      <div className="fd-recs">{items.map(([k, v, c]) => <div key={k} className="pmap-kv"><span className="muted">{k}</span><b style={{ color: c, textAlign: 'right' }}>{v}</b></div>)}</div>
+    </div>
   )
 }
 
@@ -187,10 +278,27 @@ function Positions({ d }) {
           </div>
         </>
       )}
+      <FpiDeriv d={d} rng={rng} />
+      <Tested title="FPI index futures net buying, ₹ crore (NSDL)" test={d.tests.fpi_fut} horizons={[['5', '5 sessions'], ['21', '21 sessions (about a month)']]}
+        lag=" (the session after NSDL's reporting date)" lowLabel="Heavy FPI futures selling (bottom 10%)" highLabel="Heavy FPI futures buying (top 10%)"
+        need={d.tests.fut_days_needed} needWhat="reporting days" />
       <Tested title="FII index futures % long" test={d.tests.fii_futures_share} horizons={[['5', '5 sessions'], ['21', '21 sessions (about a month)']]}
         lag=" (the next session, since NSE publishes after the market shuts)" lowLabel="FIIs very short (bottom 10%)" highLabel="FIIs very long (top 10%)"
         need={d.tests.part_days_needed} needWhat="trading days of positions" />
     </>
+  )
+}
+
+function FpiDeriv({ d, rng }) {
+  const rows = (d.fpi.nsdl.deriv || []).slice(-rng)
+  if (rows.length < 2) return null
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>FPI index futures · net buying and open interest <span className="small muted">· NSDL, ₹ crore</span></h3>
+      <Chart rows={rows} bars={[{ key: 'idx_fut_net', color: C_FII, label: 'Net buying' }]} line={{ key: 'idx_fut_oi', color: C_IDX }} lineLabel="Open interest (₹ Cr)" barFmt={sgnCr} />
+      <Legend items={[[C_FII, 'Index futures bought − sold'], [C_IDX, 'Index futures open interest', true]]} />
+      <div className="small muted" style={{ marginTop: 6 }}>Foreign investors' index-futures trades on all Indian exchanges by NSDL reporting date (the previous trading day's trades). {(d.fpi.nsdl.deriv || []).length.toLocaleString('en-IN')} days saved.</div>
+    </div>
   )
 }
 
@@ -299,7 +407,9 @@ function Sources({ d }) {
   const rows = [
     ['NSE same-evening FII / DII', d.saved_days ? `${d.saved_days} day${d.saved_days === 1 ? '' : 's'} saved` : null, (d.error || '').startsWith('NSE cash') ? d.error : null],
     ['NSE derivatives positions', d.positions.days_saved ? `${d.positions.days_saved.toLocaleString('en-IN')} trading days` : null, (d.error || '').startsWith('NSE positions') ? d.error : null],
-    ['NSDL confirmed FPI, daily', F.nsdl.days ? `${F.nsdl.days.toLocaleString('en-IN')} reporting days (${dm(F.nsdl.first)} – ${dm(F.nsdl.last)})` : null, E.nsdl || E.nsdl_archive],
+    ['NSDL confirmed FPI, daily', F.nsdl.days ? `${F.nsdl.days.toLocaleString('en-IN')} reporting days (${dm(F.nsdl.first)} – ${dm(F.nsdl.last)}) · ${F.nsdl.months.filter((m) => m.checked).length} of ${F.nsdl.months.length} months match NSDL's month totals` : null,
+      [E.nsdl, E.nsdl_archive, F.nsdl.unchecked.length ? `${F.nsdl.unchecked.map(mon).join(', ')}: days do not add up to NSDL's total` : null].filter(Boolean).join(' · ') || null],
+    ['NSDL FPI derivatives, daily', F.nsdl.deriv.length ? `${F.nsdl.deriv.length.toLocaleString('en-IN')} reporting days` : null, null],
     ['NSDL / CDSL sector reports', F.sectors ? `${F.sectors.reports} fortnights (from ${dm(F.sectors.first)})` : null, E.sectors],
     ['SEBI mutual fund trades', F.mf.days.length ? `${F.mf.days.length} days (to ${dm(F.mf.last)})` : null, E.mf || (F.mf.backfill?.archive === false ? 'older months not available from SEBI; building forward' : null)],
   ]

@@ -145,13 +145,37 @@ FIX = Path(__file__).parent / "fixtures"
 
 def test_nsdl_daily_reads_equity_and_checks_every_row():
     from app import fpi
-    days, bad = fpi.parse_nsdl_daily((FIX / "nsdl_daily.html").read_text())
-    assert set(days) == {"2024-12-02", "2024-12-03"}                       # 04-Dec fails 100 - 50 = 70 and is dropped
-    assert bad == 1
-    d = days["2024-12-02"]
+    p = fpi.parse_nsdl_daily((FIX / "nsdl_daily.html").read_text())
+    assert set(p["days"]) == {"2024-12-02", "2024-12-03"}                   # 04-Dec fails 100 - 50 = 70 and is dropped
+    assert p["bad"] == 1
+    d = p["days"]["2024-12-02"]
     assert d["exch"] == {"buy": 16983.42, "sell": 19982.44, "net": -2999.02}  # brackets = negative
     assert d["primary"]["net"] == 2008.7 and d["sub"]["net"] == -990.32
-    assert "2024-12-01" not in days                                         # derivative table's date not read as equity
+    # "Total for December" / "Total for 2024" are never read as the last day
+    assert p["days"]["2024-12-03"]["exch"]["net"] == 999.5
+    assert p["totals"]["December"]["exch"] == -1999.52 and p["totals"]["2024"]["exch"] == -263543.74
+    # derivative trades: index futures and options by date, the month total skipped
+    f = p["deriv"]["2024-12-02"]["idx_fut"]
+    assert f == {"buy_n": 11157.0, "buy": 1709.31, "sell_n": 13877.0, "sell": 2156.34, "oi_n": 309633.0, "oi": 47536.53}
+    assert set(p["deriv"]) == {"2024-12-02"}
+
+
+def test_month_is_checked_against_nsdls_own_total():
+    from app import fpi
+    p = fpi.parse_nsdl_daily((FIX / "nsdl_daily.html").read_text())
+    assert fpi.month_checks(p) == {"2024-12": True}                          # -2999.02 + 999.50 = -1999.52
+    p["days"].pop("2024-12-03")
+    assert fpi.month_checks(p) == {"2024-12": False}                         # a missing day is caught
+
+
+def test_sector_list_reads_irregular_file_names():
+    from app import fpi
+    html = """<select><option value="~/StaticReports/Fortnightly_Sector_wise_FII_Investment_Data/FIIInvestSector_Nov152026.html">NOV 15, 2026</option>
+<option value="~/StaticReports/Fortnightly_Sector_wise_FII_Investment_Data/FIIInvestSector_June302016.html">June 30, 2016 </option>
+<option value="~/StaticReports/Fortnightly_Sector_wise_FII_Investment_Data/FIIInvestSecor_Jan312012.html">January 31, 2012</option></select>"""
+    o = fpi.sector_options(html)
+    assert [d for d, _ in o] == ["2026-11-15", "2016-06-30", "2012-01-31"]
+    assert o[0][1] == "/web/StaticReports/Fortnightly_Sector_wise_FII_Investment_Data/FIIInvestSector_Nov152026.html"
 
 
 def test_sector_report_columns_and_total_check():
@@ -168,10 +192,12 @@ def test_sector_report_columns_and_total_check():
 
 def test_sebi_mutual_funds_days_and_years():
     from app import fpi
-    days, periods = fpi.parse_sebi_mf((FIX / "sebi_mf.html").read_text())
-    assert days == {"2026-11-03": {"buy": 12500.4, "sell": 10200.1, "net": 2300.3}, "2026-11-04": {"buy": 9000.0, "sell": 9800.0, "net": -800.0}}
-    assert [p["period"] for p in periods] == ["April 2005-Mar 2006", "April 2002-Mar 2003"]
-    assert periods[1]["net"] == -2066.7
+    p = fpi.parse_sebi_mf((FIX / "sebi_mf.html").read_text())
+    assert p["days"] == {"2026-11-03": {"buy": 12500.4, "sell": 10200.1, "net": 2300.3}, "2026-11-04": {"buy": 9000.0, "sell": 9800.0, "net": -800.0}}
+    assert p["total"] == 1500.3                                             # SEBI's Total row is a total, not a day
+    assert [x["period"] for x in p["periods"]] == ["April 2005-Mar 2006", "April 2002-Mar 2003"]
+    assert p["periods"][1]["net"] == -2066.7
+    assert "2026-10-23" not in p["days"]                                    # the derivative table is not read
 
 
 def test_numbers():
@@ -200,6 +226,29 @@ def test_fpi_payload_in_demo():
     s = p["sectors"]
     assert abs(sum(x["net"] for x in s["sectors"]) - s["total"]["net"]) < 1
     assert all(len(x["hist"]) == len(s["periods"]) for x in s["sectors"])
+
+
+def test_archive_request_is_the_forms_own_submit():
+    from app import fpi, config
+    page = (FIX / "nsdl_daily.html").read_text()
+    sent = {}
+
+    class FakeWeb:
+        def fetch(self, method, url, **kw):
+            if method == "POST":
+                sent.update(kw["data"], _h=kw["headers"])
+            return page
+    demo, config.DEMO = config.DEMO, False
+    try:
+        n = fpi.fetch_nsdl_month(2024, 12, FakeWeb())
+    finally:
+        config.DEMO = demo
+    assert n == 2
+    assert sent["__VIEWSTATE"] == "abc" and sent["__EVENTTARGET"] == "btnSubmit1"
+    assert sent["hdnDate"] == sent["txtDate"] == "31-Dec-2024"
+    assert sent["_h"]["Referer"].endswith("Archive.aspx")
+    hit = fpi.store.get_company(fpi._month_key(2024, 12))[1]
+    assert hit["final"] is True and hit["checked"] is True and set(hit["days"]) == {"2024-12-02", "2024-12-03"}
 
 
 if __name__ == "__main__":

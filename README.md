@@ -322,7 +322,9 @@ Sidebar → **FII / DII** (on a phone: Smart Money → 🏦 FII / DII, or tap th
 
 - **Money flows**
   - NSE's same-evening FII and DII figures, saved every evening. NSE only publishes the latest day, so this history starts on install day; it is the only public source for daily DII.
-  - **5 years of confirmed foreign (FPI) buying and selling from NSDL**, day by day or month by month, with NIFTY 50.
+  - **5 years of confirmed foreign (FPI) buying and selling from NSDL**, day by day, month by month or year by year, with NIFTY 50. Each month is checked against NSDL's own month total (✓).
+  - **FIIs in futures and options:** NSE positions (net contracts, % long, calls and puts) next to NSDL's daily FPI derivative trades (index and stock futures and options: bought, sold, net, open interest in ₹ crore).
+  - **Records and streaks:** last 5 and 20 days, current run, longest buying and selling runs, biggest days.
   - A month-by-month table: FPI through the stock exchanges, FPI including IPOs and other primary-market buying, mutual funds (SEBI) and NIFTY's move that month.
   - **Mutual funds** (the biggest part of DII) from SEBI, which publishes about two weeks late, with yearly totals.
 - **F&O positions:** NSE participant-wise open interest (FII, DII, Pro, Client), downloaded once for about 5 years. Shows the FII index-futures long %, index futures net by group, and FII index calls and puts over time.
