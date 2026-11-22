@@ -643,3 +643,7 @@ a.nw-title:hover { color: var(--accent); }
 .nw-hero-pic .nw-pic, .nw-hero-pic .nw-poster { height: 100%; border-radius: 12px; }
 @media (max-width: 900px) { .nw-hero { grid-template-columns: 1fr; } .nw-hero-pic { order: -1; min-height: 0; } .nw-hero-pic .nw-pic, .nw-hero-pic .nw-poster { aspect-ratio: 16 / 9; height: auto; min-height: 0; } .nw-hero-title { font-size: 22px; } }
 @media (max-width: 640px) { .nw-cards { grid-template-columns: 1fr; } }
+.nw-hero.noimg { grid-template-columns: 1fr; }
+.nw-card.noimg .nw-card-title { font-size: 16px; -webkit-line-clamp: 4; margin-top: 6px; }
+.nw-card-sum { color: var(--muted); font-size: 13px; line-height: 1.5; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.nw-badge-inline { font-size: 11.5px; color: var(--muted); }

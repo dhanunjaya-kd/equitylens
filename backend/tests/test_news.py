@@ -137,6 +137,15 @@ def test_pictures_come_from_the_feed():
                    "Gold steady": "https://img.e.com/g.png", "No picture": None}
 
 
+def test_share_picture_from_article_page():
+    page = '<html><head><meta property="og:title" content="x"><meta property="og:image" content="https://img.e.com/share.jpg?w=1200&amp;h=630"></head>'
+    assert news.og_image(page) == "https://img.e.com/share.jpg?w=1200&h=630"
+    page2 = '<head><meta content="/pics/a.jpg" name="twitter:image"></head>'
+    assert news.og_image(page2, "https://site.com/news/1") == "https://site.com/pics/a.jpg"
+    assert news.og_image("<head><meta property='og:image' content='https://site.com/logo.svg'></head>") is None
+    assert news.og_image("<head></head>") is None
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

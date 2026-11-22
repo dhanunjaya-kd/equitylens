@@ -207,6 +207,47 @@ def pick_image(cands: list) -> Optional[str]:
     return "https://" + u[7:] if u.startswith("http://") else u
 
 
+OG = [re.compile(p, re.I) for p in (
+    r'<meta[^>]+property=["\']og:image(?::secure_url)?["\'][^>]+content=["\']([^"\']+)',
+    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+    r'<meta[^>]+name=["\']twitter:image(?::src)?["\'][^>]+content=["\']([^"\']+)',
+    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']twitter:image["\']')]
+
+
+def og_image(page: str, base: str = "") -> Optional[str]:
+    """The picture the publisher set for sharing the article (og:image / twitter:image)."""
+    from urllib.parse import urljoin
+    head = page[:400000]
+    for rx in OG:
+        m = rx.search(head)
+        if m:
+            return pick_image([(0, urljoin(base, htmllib.unescape(m.group(1).strip())))])
+    return None
+
+
+def fill_pictures(saved: dict, limit: int = 60) -> int:
+    """Articles from the last two days without a picture: read the publisher's own share picture from the page."""
+    cut = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+    todo = [v for v in saved.values() if v["kind"] == "news" and not v.get("image") and not v.get("og_tried")
+            and v.get("url") and v["time"] >= cut]
+    todo.sort(key=lambda v: v["time"], reverse=True)
+    n = 0
+    for v in todo[:limit]:
+        v["og_tried"] = True
+        try:
+            r = requests.get(v["url"], headers={**UA, "Accept": "text/html,application/xhtml+xml"}, timeout=10, stream=True)
+            page = r.raw.read(400000, decode_content=True).decode(r.encoding or "utf-8", "ignore") if r.status_code == 200 else ""
+            r.close()
+        except Exception:  # noqa: BLE001 - no picture is fine
+            page = ""
+        img = og_image(page, v["url"]) if page else None
+        if img:
+            v["image"] = img
+            n += 1
+        time.sleep(0.3)
+    return n
+
+
 def _fetch(url: str, headers: Optional[dict] = None) -> str:
     r = requests.get(url, headers=headers or UA, timeout=config.REQUEST_TIMEOUT)
     r.raise_for_status()
@@ -308,14 +349,11 @@ def build_tagger(names: dict) -> callable:
                 continue                                          # "Central Bank", "South West": everyday words only
             alias.setdefault(a, set()).add(sym)
     alias = {a: next(iter(s)) for a, s in alias.items() if len(s) == 1}
-    rx = {a: re.compile(r"(?<![A-Za-z0-9])" + re.escape(a) + r"(?![A-Za-z0-9])") for a in alias}     # as the name is written
+    big = re.compile(r"(?<![A-Za-z0-9])(" + "|".join(re.escape(a) for a in sorted(alias, key=len, reverse=True)) + r")(?![A-Za-z0-9])") if alias else None
     plain = {s.replace("US:", ""): s for s in names}
 
     def tag(text: str) -> list[str]:
-        out = []
-        for a, r in rx.items():
-            if r.search(text):
-                out.append(alias[a])
+        out = [alias[m] for m in big.findall(text)] if big else []      # names as they are written
         for tok in re.findall(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9&]{3,11})(?![A-Za-z0-9])", text):
             if tok in plain and tok not in CAPS_STOP:
                 out.append(plain[tok])
@@ -407,6 +445,19 @@ def _names(market: str) -> dict:
     return names
 
 
+_tag_cache: dict = {}
+
+
+def tagger(market: str):
+    """The stock tagger for a market, rebuilt every 30 minutes (names come from the app's stock lists)."""
+    hit = _tag_cache.get(market)
+    if hit and time.time() - hit[0] < 1800:
+        return hit[1]
+    f = build_tagger(_names(market))
+    _tag_cache[market] = (time.time(), f)
+    return f
+
+
 def _saved() -> dict:
     hit = store.get_company("NEWS::ITEMS")
     return hit[1] if hit else {}
@@ -435,7 +486,8 @@ def refresh() -> dict:
         STATE["running"] = True
     try:
         saved = _saved()
-        taggers = {m: build_tagger(_names(m)) for m in ("IN", "US")}
+        _tag_cache.clear()
+        taggers = {m: tagger(m) for m in ("IN", "US")}
         fresh: list[dict] = []
         for fid, name, url, mkt, kind, mo in FEEDS:
             try:
@@ -488,6 +540,11 @@ def refresh() -> dict:
         saved = {k: v for k, v in saved.items() if v["time"] >= cut}
         store.put_company("NEWS::ITEMS", saved)
         STATE["last"] = time.time()
+        try:
+            if fill_pictures(saved):
+                store.put_company("NEWS::ITEMS", saved)
+        except Exception:  # noqa: BLE001
+            pass
     finally:
         STATE["running"] = False
     return STATE
@@ -530,7 +587,11 @@ def get(market: str) -> dict:
         maybe_refresh()
     elif not _saved():
         demo_fill()
-    items = [v for v in _saved().values() if v["market"] in (market, "GLOBAL")]
+    items = [dict(v) for v in _saved().values() if v["market"] in (market, "GLOBAL")]
+    tg = tagger(market)
+    for it in items:                       # news is tagged again with today's rules, so a fixed rule fixes old items too
+        if it["kind"] == "news":
+            it["symbols"] = tg(f"{it['title']} {it.get('summary', '')[:240]}")[:6]
     items = cluster(items)
     items.sort(key=lambda x: x["time"], reverse=True)
     px = _prices(market)

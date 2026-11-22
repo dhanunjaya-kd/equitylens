@@ -50,30 +50,13 @@ function Item({ it }) {
   )
 }
 
-// ---------------------------------------------------------------- pictures
-const POSTER = {
-  results: ['#0f766e', '#134e4a', '📊'], orders: ['#1d4ed8', '#1e3a8a', '📝'], actions: ['#7c3aed', '#4c1d95', '🏷️'],
-  management: ['#b45309', '#78350f', '👔'], economy: ['#a16207', '#713f12', '🏛️'], global: ['#0369a1', '#0c4a6e', '🌍'],
-  markets: ['#15803d', '#14532d', '📈'], company: ['#475569', '#1e293b', '🏢'],
-}
-function Poster({ it, big }) {
-  const [a, b, icon] = POSTER[it.category] || POSTER.company
-  const t = it.tags[0]
-  const fig = it.order ? `${cr(it.order.crore)} order` : t && t.d1 !== null && t.d1 !== undefined ? `${t.symbol.replace('US:', '')} ${signed(t.d1, 2, '%')} today` : null
-  return (
-    <div className={`nw-poster ${big ? 'big' : ''}`} style={{ background: `linear-gradient(135deg, ${a}, ${b})` }}>
-      <span className="nw-poster-icon">{icon}</span>
-      {t ? <span className="nw-poster-logo"><Logo sym={t.symbol} name={t.name} size={big ? 72 : 52} /></span> : <span className="nw-poster-word">{it.kind === 'official' ? it.source : it.catLabel}</span>}
-      {fig && <span className="nw-poster-fig">{fig}</span>}
-    </div>
-  )
-}
-function Pic({ it, big }) {
+// ---------------------------------------------------------------- pictures: only the publisher's own; none is drawn
+function Pic({ it, big, onFail }) {
   const [bad, setBad] = useState(false)
-  if (!it.image || bad) return <Poster it={it} big={big} />
+  if (!it.image || bad) return null
   return (
     <div className={`nw-pic ${big ? 'big' : ''}`}>
-      <img src={it.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBad(true)} />
+      <img src={it.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => { setBad(true); if (onFail) onFail() }} />
       {it.image_by && <span className="nw-credit">Picture: {it.image_by}</span>}
     </div>
   )
@@ -81,15 +64,16 @@ function Pic({ it, big }) {
 
 function Card({ it }) {
   const [k, kc] = KIND[it.kind]
+  const [noPic, setNoPic] = useState(!it.image)
   const open = () => it.url && window.open(it.url, '_blank', 'noopener')
+  const badge = <span className={noPic ? 'nw-badge-inline' : 'nw-badge'}><b style={{ color: kc }}>{k}</b> · {it.catLabel}</span>
   return (
-    <div className={`card nw-card ${it.url ? 'link' : ''}`} onClick={open}>
-      <div style={{ position: 'relative' }}>
-        <Pic it={it} />
-        <span className="nw-badge"><b style={{ color: kc }}>{k}</b> · {it.catLabel}</span>
-      </div>
+    <div className={`card nw-card ${it.url ? 'link' : ''} ${noPic ? 'noimg' : ''}`} onClick={open}>
+      {!noPic && <div style={{ position: 'relative' }}><Pic it={it} onFail={() => setNoPic(true)} />{badge}</div>}
       <div className="nw-card-body">
+        {noPic && badge}
         <div className="nw-card-title">{it.title}</div>
+        {noPic && it.summary && it.summary !== it.title && <div className="nw-card-sum">{it.summary}</div>}
         {it.order && <div className="small" style={{ marginTop: 4 }}>Order <b>{cr(it.order.crore)}</b>{it.order.pct_mcap !== null && it.order.pct_mcap !== undefined ? <> · <b>{it.order.pct_mcap < 0.1 ? '<0.1' : it.order.pct_mcap.toFixed(1)}%</b> of market value</> : null}</div>}
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 'auto', paddingTop: 8, alignItems: 'center' }}>
           {it.tags.slice(0, 3).map((t) => <Tag key={t.symbol} t={t} />)}
@@ -103,7 +87,7 @@ function Card({ it }) {
 function Hero({ it }) {
   const [k, kc] = KIND[it.kind]
   return (
-    <div className="card nw-hero" onClick={() => it.url && window.open(it.url, '_blank', 'noopener')} style={{ cursor: it.url ? 'pointer' : 'default' }}>
+    <div className={`card nw-hero ${it.image ? '' : 'noimg'}`} onClick={() => it.url && window.open(it.url, '_blank', 'noopener')} style={{ cursor: it.url ? 'pointer' : 'default' }}>
       <div className="nw-hero-text">
         <div className="nw-meta"><b style={{ color: '#fbbf24' }}>TOP STORY</b><span className="muted">· <span style={{ color: kc }}>{k}</span> · {it.catLabel} · {it.sources.map((x) => x.name).join(', ')} · {when(it.time)}</span></div>
         <div className="nw-hero-title">{it.title}</div>
@@ -113,7 +97,7 @@ function Hero({ it }) {
           {it.covered > 1 && <span className="small muted">covered by {it.covered} sources</span>}
         </div>
       </div>
-      <div className="nw-hero-pic"><Pic it={it} big /></div>
+      {it.image && <div className="nw-hero-pic"><Pic it={it} big /></div>}
     </div>
   )
 }
