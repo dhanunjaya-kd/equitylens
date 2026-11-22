@@ -629,9 +629,16 @@ AI keys and model names: see `backend/.env.example`, or set them in ⚙️ Setti
 
 ## 🧭 How it works
 
-<img src="docs/pipeline.svg" alt="How EquityLens works: fetch, analyse, store and explain, your screen (animated)" width="100%"/>
+<img src="docs/pipeline.svg" alt="How EquityLens works: fetch, analyse and test, store and check, your screen and Telegram (animated)" width="100%"/>
 
-A single Python process (FastAPI) fetches the data, analyses it, caches it in a local SQLite file and serves the prebuilt React app. Every source is fetched politely (paced, retried, cached), and one failing source never breaks the rest of the page.
+A single Python process (FastAPI) fetches the data, analyses it, stores it in a local SQLite file and serves the prebuilt React app.
+
+- **Fetch:** company financials, prices, NSE / SEC files and filings, FII / DII and regulator data (NSE, NSDL, CDSL, SEBI, CFTC, RBI, Fed), publishers' news feeds and, if you connect one, your broker. Every source is fetched politely (paced, retried, cached), and one failing source never breaks the rest of the page.
+- **Analyse + test:** the research engine, price map, market tools, smart money and FII / DII, the news engine and the portfolio X-ray. Anything that claims an edge (entry rules, price-map levels, the NIFTY opening call, *does it predict NIFTY?*) is backtested with no future data, and gets a verdict only when the evidence is clear.
+- **Store + check:** background jobs download history once and keep it fresh (news and breaking every 5 minutes, FII / DII each evening). Every row is checked as it is read (bought − sold = net, days add up to the month total, sectors add up to the total); anything that fails is left out, never estimated.
+- **Your screen:** the app on laptop or phone, a Breaking bar on every page, and Telegram alerts if you switch them on.
+
+The diagram is drawn by `backend/tools/make_pipeline_svg.py`.
 
 ### Verdicts
 
