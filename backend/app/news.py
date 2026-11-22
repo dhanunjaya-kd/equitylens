@@ -342,18 +342,23 @@ def build_tagger(names: dict) -> callable:
             cands.add(" ".join(words[:2]))
         if len(words[0]) >= 5 and words[0].lower() not in COMMON:
             cands.add(words[0])
-        full = " ".join(words)
+        full = {" ".join(words)}
+        if words[0].lower() == "the" and len(words) >= 3:       # "The Coca-Cola Company" is written "Coca-Cola"
+            cands |= {" ".join(words[1:]), " ".join(words[1:3])}   # (never a lone word: "The Federal Bank" is not "Federal")
+            full.add(" ".join(words[1:]))
         for a in cands:
             ws = a.lower().split()
-            if len(a) < 4 or (all(w in COMMON for w in ws) and not (a == full and len(ws) >= 3)):
+            if len(a) < 4 or (all(w in COMMON for w in ws) and not (a in full and len(ws) >= 3)):
                 continue                                          # "Central Bank", "South West": everyday words only
             alias.setdefault(a, set()).add(sym)
     alias = {a: next(iter(s)) for a, s in alias.items() if len(s) == 1}
-    big = re.compile(r"(?<![A-Za-z0-9])(" + "|".join(re.escape(a) for a in sorted(alias, key=len, reverse=True)) + r")(?![A-Za-z0-9])") if alias else None
+    # "Take Two" also matches "Take-Two" (names are split on hyphens above, headlines often keep them)
+    big = re.compile(r"(?<![A-Za-z0-9])(" + "|".join(re.escape(a).replace(r"\ ", "[ \\-\u2010\u2011]") for a in sorted(alias, key=len, reverse=True))
+                     + r")(?![A-Za-z0-9])") if alias else None
     plain = {s.replace("US:", ""): s for s in names}
 
     def tag(text: str) -> list[str]:
-        out = [alias[m] for m in big.findall(text)] if big else []      # names as they are written
+        out = [alias[re.sub("[-\u2010\u2011]", " ", m)] for m in big.findall(text)] if big else []      # names as they are written
         for tok in re.findall(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9&]{3,11})(?![A-Za-z0-9])", text):
             if tok in plain and tok not in CAPS_STOP:
                 out.append(plain[tok])

@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-197_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-198_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -709,7 +709,7 @@ cd backend
 python run_tests.py
 ```
 
-197 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+198 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -728,7 +728,7 @@ python run_tests.py
 | `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
 | `test_pricemap.py` | ZigZag keeps only major swings and never the one still forming, volume profile, unfilled gaps, today's low is not a level, hold-rate maths on each stock's own ATR scale (held, broken, unresolved, 5 days apart), random-price zones (same width, never on a real zone, repeatable, kept out of the real figures, compared at the same distance so distance can't fake an edge), in-app run status, the level backtest uses no future prices and counts each test once, its pass rule at the edges, market / sector / stock answer, value ranges tied to P/E state, the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
 | `test_heatmap.py` | Heatmap rows carry every period and never a guessed market cap, market cap from NSE issued shares only when there is no scan, reading NSE's sector and shares, which stocks still need a lookup, sector totals add up, sector index mapping (India and US), US closes dated on New York time, US shares from SEC, watchlist prices |
-| `test_news.py` | Breaking needs a serious event and two sources (or a central bank, or a 2% index move), Telegram alerts sent once and only for new items, RSS and Atom feeds read with times, only market news kept (tips, lifestyle dropped), routine filings dropped, order amounts in crore, SEC 8-K items, unambiguous stock tags, the same story shown once with all sources |
+| `test_news.py` | Breaking needs a serious event and two sources (or a central bank, or a 2% index move), Telegram alerts sent once and only for new items, RSS and Atom feeds read with times, only market news kept (tips, lifestyle dropped), routine filings dropped, order amounts in crore, SEC 8-K items, unambiguous stock tags (also "Take-Two" and "Coca-Cola" written with or without a hyphen), the same story shown once with all sources |
 | `test_fiidii.py` | Reading NSE's FII/DII figures, participant open interest (Indian comma grouping, TOTAL row skipped) and CFTC report columns, every contract has two sides, test starts only after the figures are public, extremes use only earlier readings, events kept apart, verdicts need 10 cases, NSDL daily rows and sector reports read and checked (bought − sold = net, sectors add up to the total), SEBI mutual fund days and yearly rows, holding change per stock from the shareholding table |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |

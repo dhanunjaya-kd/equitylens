@@ -123,6 +123,16 @@ def test_no_tag_from_everyday_words():
     assert tag("Reliance Industries to invest in green hydrogen") == ["RELIANCE"]
 
 
+def test_hyphen_and_the_in_names():
+    tag = news.build_tagger({"US:TTWO": "Take-Two Interactive Software, Inc.", "US:KO": "The Coca-Cola Company",
+                             "FEDERALBNK": "The Federal Bank Limited", "US:HIG": "The Hartford Financial Services Group"})
+    assert tag("Saudi Arabia now owns a $2 billion stake in Take Two") == ["US:TTWO"]
+    assert tag("Saudi fund raises stake in Take-Two Interactive") == ["US:TTWO"]
+    assert tag("Coca-Cola beats estimates") == ["US:KO"]
+    assert tag("The Federal Bank posts record profit") == ["FEDERALBNK"]
+    assert tag("Federal Reserve holds rates") == [] and tag("Hartford flood warning") == [] and tag("take two steps back") == []
+
+
 def test_pictures_come_from_the_feed():
     rss = """<rss xmlns:media="http://search.yahoo.com/mrss/" version="2.0"><channel>
 <item><title>Markets rally</title><link>https://e.com/1</link><pubDate>Sun, 22 Nov 2026 10:00:00 +0530</pubDate>
