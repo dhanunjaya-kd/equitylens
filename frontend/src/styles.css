@@ -597,3 +597,23 @@ html, body { transition: background-color .2s ease; }
 .fd-src summary { cursor: pointer; }
 .fd-recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); column-gap: 24px; }
 @media (max-width: 640px) { .fd-recs { grid-template-columns: 1fr; } }
+
+/* News */
+.nw-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+.nw-side .card { margin-bottom: 12px; }
+.nw-item { margin-bottom: 10px; }
+.nw-meta { display: flex; gap: 6px; font-size: 12.5px; align-items: baseline; flex-wrap: wrap; }
+.nw-title { display: block; font-weight: 700; font-size: 16px; line-height: 1.35; margin-top: 6px; color: inherit; text-decoration: none; }
+a.nw-title:hover { color: var(--accent); }
+.nw-sum { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin-top: 5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nw-tag { border: 1px solid var(--line); background: var(--card2); color: inherit; border-radius: 6px; padding: 2px 7px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.nw-more { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 0 2px; }
+.nw-srcs { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 12.5px; }
+.nw-srcs a { color: var(--accent); }
+.nw-top { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.nw-top .nw-item { margin-bottom: 0; }
+.nw-filters { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.nw-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 0; border: 0; border-top: 1px solid var(--line); background: none; color: inherit; cursor: pointer; font: inherit; }
+.nw-ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1000px) { .nw-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .nw-top { grid-template-columns: 1fr; } .nw-title { font-size: 15px; } .nw-filters .input { flex: 1; min-width: 0 !important; } }

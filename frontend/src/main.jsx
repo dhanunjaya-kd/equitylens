@@ -29,6 +29,7 @@ import Calendar from './pages/Calendar'
 import IndexStrip from './components/IndexStrip'
 import SmartMoney from './pages/SmartMoney'
 import FiiDii from './pages/FiiDii'
+import News from './pages/News'
 import Guide from './pages/Guide'
 import Portfolio from './pages/Portfolio'
 import { Settings } from './pages/AI'
@@ -92,6 +93,7 @@ function App() {
         {route.page === 'calendar' && <Calendar tab={route.tab} />}
         {route.page === 'money' && <SmartMoney tab={route.tab} />}
         {route.page === 'fiidii' && <FiiDii tab={route.tab} />}
+        {route.page === 'news' && <News />}
         {route.page === 'guide' && <Guide />}
         {route.page === 'portfolio' && <Portfolio />}
         {route.page === 'settings' && <Settings />}

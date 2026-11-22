@@ -210,6 +210,7 @@ export function parseHash() {
   if (parts[0] === 'portfolio') return { page: 'portfolio' }
   if (parts[0] === 'money') return { page: 'money', tab: parts[1] }
   if (parts[0] === 'fiidii') return { page: 'fiidii', tab: parts[1] }
+  if (parts[0] === 'news') return { page: 'news' }
   if (parts[0] === 'calendar') return { page: 'calendar', tab: parts[1] || 'results' }
   if (parts[0] === 'settings') return { page: 'settings' }
   if (parts[0] === 'compare') return { page: 'compare', symbols: (params.get('s') || '').split(',').filter(Boolean) }

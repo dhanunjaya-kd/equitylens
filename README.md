@@ -341,6 +341,17 @@ Sidebar → **FII / DII** (on a phone: Smart Money → 🏦 FII / DII, or tap th
 - The same tested record for asset managers and leveraged funds, counted from the first trading day after the Friday release.
 - Weekly US fund flows and monthly foreign purchases of US stocks are not included yet.
 
+### 📰 News — market-moving items only, India and US
+
+Sidebar → **News** (on a phone: Market Movers → 📰 News). The page follows the India / US switch.
+
+- **Company filings:** NSE corporate announcements (India) and SEC 8-K filings for S&P 500 companies (US), with a link to the company's own document. Only filings that can move a stock are kept: results, orders and deals, corporate actions, top-management changes, credit ratings. Routine filings (trading window, newspaper copies, lost share certificates, compliance certificates, AGM notices) are dropped.
+- **Central banks:** RBI and Federal Reserve press releases about policy, rates, liquidity and markets.
+- **Business news and major global events:** headlines and each publisher's own short summary from their public RSS feeds (Economic Times, Mint, The Hindu, BusinessLine, Business Standard, Moneycontrol, CNBC, MarketWatch, Bloomberg). Open an item to read it on the publisher's site; articles are never copied. An item is kept only when it names a company we track or is about markets, the economy, central banks or a major global event. Tip lists, lifestyle and entertainment pieces are dropped.
+- **The same story from several publishers is shown once**, with every source listed. **Top stories** = covered by the most sources.
+- **Measured, never guessed:** each tagged stock's real move today; for an order win, the order size and its share of the company's market value. There are no bullish / bearish labels, because nothing would back them.
+- Filters by type (results, orders & deals, corporate actions, management, economy & policy, global, markets), by source kind, **My watchlists** and search. Side panel: most-mentioned stocks in 24 hours and stocks that moved 3%+ with news. Refreshes every 10 minutes.
+
 ### 📅 Calendar
 
 A week view with a day strip, for each market:
@@ -647,6 +658,7 @@ All free and public. No logins, no paid feeds.
 | Results calendar | NSE event calendar (board meetings) | Nasdaq earnings calendar |
 | Economic calendar | Nasdaq economic calendar + RBI, MoSPI and DPIIT official schedules | Nasdaq economic calendar + Federal Reserve FOMC schedule |
 | Documents | Annual reports, concalls, announcements (company page) | 10-K, 10-Q, 8-K (SEC) |
+| News | NSE corporate announcements · RBI press releases · publishers' RSS feeds | SEC 8-K current filings · Federal Reserve press releases · publishers' RSS feeds |
 | Logos | Financial Modeling Prep public logo images, or the company's website icon | same |
 
 If a source changes its format, `python selftest.py` shows exactly which part broke.
@@ -679,6 +691,7 @@ python run_tests.py
 | `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
 | `test_pricemap.py` | ZigZag keeps only major swings and never the one still forming, volume profile, unfilled gaps, today's low is not a level, hold-rate maths on each stock's own ATR scale (held, broken, unresolved, 5 days apart), random-price zones (same width, never on a real zone, repeatable, kept out of the real figures, compared at the same distance so distance can't fake an edge), in-app run status, the level backtest uses no future prices and counts each test once, its pass rule at the edges, market / sector / stock answer, value ranges tied to P/E state, the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
 | `test_heatmap.py` | Heatmap rows carry every period and never a guessed market cap, market cap from NSE issued shares only when there is no scan, reading NSE's sector and shares, which stocks still need a lookup, sector totals add up, sector index mapping (India and US), US closes dated on New York time, US shares from SEC, watchlist prices |
+| `test_news.py` | RSS and Atom feeds read with times, only market news kept (tips, lifestyle dropped), routine filings dropped, order amounts in crore, SEC 8-K items, unambiguous stock tags, the same story shown once with all sources |
 | `test_fiidii.py` | Reading NSE's FII/DII figures, participant open interest (Indian comma grouping, TOTAL row skipped) and CFTC report columns, every contract has two sides, test starts only after the figures are public, extremes use only earlier readings, events kept apart, verdicts need 10 cases, NSDL daily rows and sector reports read and checked (bought − sold = net, sectors add up to the total), SEBI mutual fund days and yearly rows, holding change per stock from the shareholding table |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |

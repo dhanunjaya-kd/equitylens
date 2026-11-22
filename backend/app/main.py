@@ -38,6 +38,8 @@ def _background_jobs():
     premarket.start_background()      # builds the pre-market page before the open; refreshes its backtest weekly
     from . import fiidii
     fiidii.start_background()         # saves FII/DII cash figures every evening; fills positions history once
+    from . import news
+    news.start_background()           # filings, central banks and publishers' feeds every 10 minutes
 
 
 @app.middleware("http")
@@ -517,6 +519,12 @@ def fiidii_get(market: str = "IN"):
     if config.DEMO and not fiidii.cash_history():
         fiidii.demo_fill()
     return fiidii.us() if market.upper() == "US" else fiidii.india()
+
+
+@app.get("/api/news")
+def news_get(market: str = "IN"):
+    from . import news
+    return news.get(market)
 
 
 @app.get("/api/fiidii/stocks")
