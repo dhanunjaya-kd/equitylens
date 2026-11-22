@@ -527,6 +527,42 @@ def news_get(market: str = "IN"):
     return news.get(market)
 
 
+@app.get("/api/news/breaking")
+def news_breaking(market: str = "IN"):
+    from . import news
+    return {"items": news.breaking_now(market)[:5]}
+
+
+@app.get("/api/alerts")
+def alerts_get():
+    from . import alerts
+    return alerts.public()
+
+
+@app.post("/api/alerts")
+def alerts_save(body: dict = Body(...)):
+    from . import alerts
+    return alerts.save(body or {})
+
+
+@app.post("/api/alerts/find-chat")
+def alerts_find(body: dict = Body(default={})):
+    from . import alerts
+    try:
+        return alerts.find_chat((body or {}).get("token"))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/alerts/test")
+def alerts_test():
+    from . import alerts
+    try:
+        return alerts.test()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, str(e))
+
+
 @app.get("/api/fiidii/stocks")
 def fiidii_stocks(quarter: Optional[str] = None):
     from . import instholdings

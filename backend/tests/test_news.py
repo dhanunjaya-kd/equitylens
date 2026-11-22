@@ -146,6 +146,46 @@ def test_share_picture_from_article_page():
     assert news.og_image("<head></head>") is None
 
 
+def test_breaking_needs_a_serious_event_and_two_sources():
+    from datetime import datetime, timezone
+    now = datetime(2026, 11, 22, 10, 0, tzinfo=timezone.utc)
+    t = "2026-11-22T08:00:00+00:00"
+    src2 = [{"name": "A", "url": ""}, {"name": "B", "url": ""}]
+    items = [
+        {"id": "1", "kind": "news", "category": "global", "title": "Missile attack on oil terminal; crude jumps 6%", "time": t, "sources": src2},
+        {"id": "2", "kind": "news", "category": "global", "title": "Missile attack reported near border", "time": t, "sources": src2[:1]},  # one source
+        {"id": "3", "kind": "news", "category": "company", "title": "XYZ shares crash 20% after fraud claim", "time": t, "sources": src2},  # one company
+        {"id": "4", "kind": "news", "category": "markets", "title": "Sensex ends higher for a third day", "time": t, "sources": src2},     # not serious
+        {"id": "5", "kind": "news", "category": "global", "title": "War fears grip markets", "time": "2026-11-21T20:00:00+00:00", "sources": src2},  # old
+        {"id": "6", "kind": "official", "category": "economy", "title": "RBI announces emergency rate cut", "time": t, "sources": [{"name": "RBI", "url": ""}]},
+    ]
+    ts = int(datetime(2026, 11, 22, 9, 0, tzinfo=timezone.utc).timestamp())
+    idx = [{"symbol": "^NSEI", "name": "NIFTY 50", "kind": "index", "market": "IN", "price": 24000.0, "change": -600.0, "change_pct": -2.44, "time": ts},
+           {"symbol": "^NSEBANK", "name": "BANK NIFTY", "kind": "index", "market": "IN", "price": 50000.0, "change": 500.0, "change_pct": 1.0, "time": ts},
+           {"symbol": "^INDIAVIX", "name": "INDIA VIX", "kind": "vix", "market": "IN", "price": 20.0, "change": 3.0, "change_pct": 17.6, "time": ts}]
+    b = news.breaking_from(items, idx, now)
+    assert [x["id"] for x in b] == ["idx-^NSEI-2026-11-22", "1", "6"]
+    assert b[0]["title"] == "NIFTY 50 falls 2.4% today" and b[0]["breaking"] == "index"
+
+
+def test_telegram_alerts_once_and_only_new():
+    from app import alerts
+    sent = []
+    alerts.send = lambda text, s=None: sent.append(text)
+    alerts.save({"token": "123:abc", "chat_id": "42", "on": True, "watch": ["TESTCO"]})
+    s = alerts.settings()
+    old = "2000-01-01T00:00:00+00:00"
+    new = "2999-01-01T00:00:00+00:00"
+    pages = {"IN": {"breaking": [{"id": "b1", "kind": "news", "title": "Missile attack", "summary": "", "time": new, "sources": [{"name": "A"}, {"name": "B"}], "url": "https://x"}],
+                    "items": [{"id": "f1", "kind": "filing", "title": "Test Industries — order", "summary": "", "time": new, "symbols": ["TESTCO"], "sources": [{"name": "NSE filing"}], "url": "", "order": {"crore": 1250.0, "pct_mcap": 0.9}, "tags": [{"symbol": "TESTCO", "d1": -0.73}]},
+                              {"id": "f2", "kind": "filing", "title": "Other Co — results", "summary": "", "time": new, "symbols": ["OTHER"], "sources": [{"name": "NSE filing"}], "url": ""},
+                              {"id": "c0", "kind": "official", "title": "RBI policy", "summary": "", "time": old, "symbols": [], "sources": [{"name": "RBI"}], "url": ""}]}}
+    assert alerts.dispatch(pages) == 2                                                       # breaking + watchlist filing; old RBI item skipped
+    assert "BREAKING" in sent[0] and "Order ₹1,250 Cr · 0.9% of market value" in sent[1] and "TESTCO -0.73% today" in sent[1]
+    assert alerts.dispatch(pages) == 0                                                       # each item once
+    assert "token" not in alerts.public() and alerts.public()["token_hint"] == ""            # short demo token: no hint shown
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

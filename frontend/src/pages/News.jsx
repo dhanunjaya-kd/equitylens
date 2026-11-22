@@ -171,6 +171,15 @@ export default function News() {
       {!d && !err && <div className="card empty">Loading…</div>}
       {d && (
         <>
+          {d.breaking?.length > 0 && cat === 'all' && kind === 'all' && !mine && !q && (
+            <div className="card nw-break">
+              <div className="nw-meta"><b style={{ color: '#ef4444' }}>🔴 BREAKING</b><span className="muted">· serious market-wide events reported by two or more sources, central-bank announcements, and index moves of 2%+ today</span></div>
+              {d.breaking.map((b) => (
+                <a key={b.id} className="nw-break-row" href={b.url || undefined} target="_blank" rel="noreferrer">
+                  <b>{b.title}</b><span className="small muted">{b.sources.map((x) => x.name).slice(0, 3).join(', ')} · {when(b.time)}</span>
+                </a>))}
+            </div>
+          )}
           {top.length > 0 && cat === 'all' && kind === 'all' && !mine && !q && (
             <>
               <Hero it={top.find((i) => i.image) || top[0]} />

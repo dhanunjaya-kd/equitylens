@@ -40,7 +40,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
       "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5"}
 KEEP_DAYS = 7
-REFRESH_S = 10 * 60
+REFRESH_S = 5 * 60
 NSE_ANN = "https://www.nseindia.com/api/corporate-announcements?index=equities"
 SEC_8K = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&company=&dateb=&owner=include&count=100&output=atom"
 
@@ -541,6 +541,11 @@ def refresh() -> dict:
         store.put_company("NEWS::ITEMS", saved)
         STATE["last"] = time.time()
         try:
+            from . import alerts
+            alerts.dispatch()
+        except Exception as e:  # noqa: BLE001 - alerts never stop the news
+            STATE["feeds"]["telegram"] = {"name": "Telegram alerts", "ok": False, "count": 0, "error": str(e)[:120], "at": time.time()}
+        try:
             if fill_pictures(saved):
                 store.put_company("NEWS::ITEMS", saved)
         except Exception:  # noqa: BLE001
@@ -568,6 +573,53 @@ def start_background() -> None:
     if config.DEMO:
         return
     threading.Thread(target=_loop, name="news", daemon=True).start()
+
+
+# ---------------------------------------------------------------- breaking
+SEVERE = re.compile(r"\b(wars?|attack(?:s|ed)?|missiles?|air ?strikes?|invasion|invades?|bomb(?:ing|ings|s)?|blasts?|explosions?|terror\w*|"
+                    r"coup|martial law|assassinat\w*|earthquake|tsunami|nuclear|state of emergency|emergency (?:meeting|rate cut|cut|session)|"
+                    r"government shutdown|defaults?|defaulted|collapses?|collapsed|crash(?:es|ed)?|plunge[sd]?|tumbles?|tumbled|"
+                    r"circuit (?:breaker|filter)|trading halt|halted|sanctions?|evacuat\w*|hostages?|ceasefire|escalat\w*|retaliat\w*|"
+                    r"surprise (?:rate|cut|hike)|meltdown|bloodbath|black (?:monday|friday))\b", re.I)
+BREAK_HOURS = 6
+INDEX_ALERT = 2.0          # % move of NIFTY 50 / SENSEX / S&P 500 / Nasdaq in a day
+
+
+def breaking_from(items: list[dict], index_items: list[dict], now: Optional[datetime] = None) -> list[dict]:
+    """Breaking = a serious market-wide event in the last 6 hours that at least two publishers report (or a central bank
+    announces), plus any main index moving 2% or more today. Every item rests on its sources; nothing is guessed."""
+    now = now or datetime.now(timezone.utc)
+    cut = (now - timedelta(hours=BREAK_HOURS)).isoformat()
+    out = [dict(i, breaking="event") for i in items if i["time"] >= cut and i["category"] in ("global", "economy", "markets")
+           and SEVERE.search(i["title"]) and (len(i.get("sources") or []) >= 2 or i["kind"] == "official")]
+    for x in index_items or []:
+        p, t = x.get("change_pct"), x.get("time")
+        if p is None or abs(p) < INDEX_ALERT or not t or x.get("kind") not in (None, "index") or "VIX" in str(x.get("name", "")).upper():
+            continue
+        when = datetime.fromtimestamp(t, timezone.utc)
+        if when.isoformat() < cut:
+            continue
+        verb = "falls" if p < 0 else "jumps"
+        out.append({"id": f"idx-{x['symbol']}-{when.date()}", "kind": "market", "market": x.get("market"), "category": "markets",
+                    "title": f"{x['name']} {verb} {abs(p):.1f}% today", "breaking": "index",
+                    "summary": f"{x['name']} at {x.get('price') or 0:,} ({'+' if p > 0 else ''}{x.get('change') or 0:,} points), by the latest index price.",
+                    "url": "", "time": when.isoformat(), "symbols": [], "source": "Index prices",
+                    "sources": [{"name": "Index prices", "url": ""}]})
+    out.sort(key=lambda i: i["time"], reverse=True)
+    return out
+
+
+def breaking_now(market: str) -> list[dict]:
+    market = market.upper()
+    if config.DEMO and not _saved():
+        demo_fill()
+    items = cluster([dict(v) for v in _saved().values() if v["market"] in (market, "GLOBAL")])
+    try:
+        from . import indices
+        idx = indices.get(market)["items"]
+    except Exception:  # noqa: BLE001
+        idx = []
+    return breaking_from(items, idx)
 
 
 # ---------------------------------------------------------------- payload
@@ -618,7 +670,12 @@ def get(market: str) -> dict:
                 movers[t["symbol"]] = {"symbol": t["symbol"], "name": t["name"], "d1": t["d1"], "title": i["title"], "id": i["id"]}
     ids = [f[0] for f in FEEDS if f[3] in (market, "GLOBAL")] + (["nse"] if market == "IN" else ["sec"])
     feeds = [dict(STATE["feeds"][k], id=k) for k in ids if k in STATE["feeds"]]
-    return {"market": market, "items": items[:400], "count": len(items),
+    try:
+        from . import indices
+        idx = [] if config.DEMO else indices.get(market)["items"]
+    except Exception:  # noqa: BLE001
+        idx = []
+    return {"market": market, "items": items[:400], "count": len(items), "breaking": breaking_from(items, idx)[:5],
             "top": sorted([i for i in recent if i["covered"] >= 2 or i["kind"] == "official"], key=lambda i: (-i["covered"], i["time"]))[:6],
             "mentioned": [{"symbol": s, "n": n, "d1": (px.get(s) or {}).get("d1"), "name": (px.get(s) or {}).get("name")} for s, n in mentioned],
             "movers": sorted(movers.values(), key=lambda x: -abs(x["d1"]))[:8],
@@ -643,6 +700,10 @@ def demo_fill() -> dict:
          "url": "", "time": t(2), "category": "markets", "symbols": [], "source": "Demo publisher A"},
         {"kind": "news", "market": "IN", "title": "Sensex, Nifty end higher as banks gain; FPIs buy for a third day", "summary": "Demo item.",
          "url": "", "time": t(2.2), "category": "markets", "symbols": [], "source": "Demo publisher B"},
+        {"kind": "news", "market": "GLOBAL", "title": "Missile attack on Gulf oil terminal; crude jumps 6%", "summary": "Demo item.",
+         "url": "", "time": t(0.5), "category": "global", "symbols": [], "source": "Demo publisher C"},
+        {"kind": "news", "market": "GLOBAL", "title": "Missile attack on Gulf oil terminal, crude jumps 6 per cent", "summary": "Demo item.",
+         "url": "", "time": t(0.6), "category": "global", "symbols": [], "source": "Demo publisher D"},
         {"kind": "news", "market": "GLOBAL", "title": "Oil prices climb as OPEC+ extends output cuts", "summary": "Demo item.",
          "url": "", "time": t(4), "category": "global", "symbols": [], "source": "Demo publisher C"},
         {"kind": "filing", "market": "US", "title": "Test Corp Us — Results of operations", "subject": "8-K items 2.02, 9.01",

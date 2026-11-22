@@ -27,6 +27,7 @@ import PreMarket from './pages/PreMarket'
 import Account from './pages/Account'
 import Calendar from './pages/Calendar'
 import IndexStrip from './components/IndexStrip'
+import BreakingBar from './components/BreakingBar'
 import SmartMoney from './pages/SmartMoney'
 import FiiDii from './pages/FiiDii'
 import News from './pages/News'
@@ -80,6 +81,7 @@ function App() {
         </div>
       </header>
       <main className="wrap" key={market + theme}>
+        <BreakingBar market={route.page === 'stock' ? (isUS(route.symbol) ? 'US' : 'IN') : market} />
         {route.page !== 'settings' && <IndexStrip market={route.page === 'stock' ? (isUS(route.symbol) ? 'US' : 'IN') : market} />}
         {route.page === 'home' && <Home />}
         {route.page === 'stock' && <Stock key={route.symbol} symbol={route.symbol} tab={route.tab} />}
