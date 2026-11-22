@@ -43,7 +43,30 @@ def vix_mood(level: Optional[float], market: str) -> Optional[dict]:
     return {"label": "Fear", "tone": "bad", "read": "High fear: large swings likely. Panic phases have often been better buying zones for long-term investors than euphoric ones."}
 
 
-def parse(j: dict, sym: str, name: str, kind: str, market: str) -> dict:
+def prev_close_from_daily(daily: dict, price_time: Optional[int]) -> Optional[float]:
+    """The previous session's close: the last daily close dated before the session of `price_time`
+    (dates on the exchange's own clock). Yahoo's chartPreviousClose on a 1-day chart can point to an
+    older session on weekends and holidays, which doubled the shown change."""
+    res = ((daily or {}).get("chart") or {}).get("result") or []
+    if not res or not price_time:
+        return None
+    r = res[0]
+    meta = r.get("meta") or {}
+    try:
+        off = int(meta.get("gmtoffset"))
+    except (TypeError, ValueError):
+        off = 19800
+    day = lambda t: time.strftime("%Y-%m-%d", time.gmtime(t + off))
+    session = day(price_time)
+    closes = ((r.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+    prev = None
+    for t, c in zip(r.get("timestamp") or [], closes):
+        if c is not None and day(t) < session:
+            prev = c
+    return prev
+
+
+def parse(j: dict, sym: str, name: str, kind: str, market: str, daily: Optional[dict] = None) -> dict:
     res = ((j or {}).get("chart") or {}).get("result") or []
     if not res:
         raise ValueError(f"no data for {sym}")
@@ -53,7 +76,7 @@ def parse(j: dict, sym: str, name: str, kind: str, market: str) -> dict:
     ts = r.get("timestamp") or []
     pts = [(t, c) for t, c in zip(ts, closes) if c is not None]
     price = meta.get("regularMarketPrice") or (pts[-1][1] if pts else None)
-    prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+    prev = prev_close_from_daily(daily, meta.get("regularMarketTime")) or meta.get("previousClose") or meta.get("chartPreviousClose")
     per = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
     now = time.time()
     is_open = bool(per.get("start") and per.get("end") and per["start"] <= now < per["end"])
@@ -93,7 +116,13 @@ def _one(sym: str, name: str, kind: str, market: str) -> dict:
                      headers=_UA, timeout=config.REQUEST_TIMEOUT)
     if r.status_code != 200:
         raise ValueError(f"Yahoo answered {r.status_code} for {sym}")
-    return parse(r.json(), sym, name, kind, market)
+    daily = None
+    try:
+        d = requests.get(URL.format(sym=quote(sym)), params={"range": "10d", "interval": "1d"}, headers=_UA, timeout=config.REQUEST_TIMEOUT)
+        daily = d.json() if d.status_code == 200 else None
+    except (requests.RequestException, ValueError):
+        daily = None
+    return parse(r.json(), sym, name, kind, market, daily)
 
 
 def get(market: str) -> dict:

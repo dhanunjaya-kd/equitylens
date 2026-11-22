@@ -101,6 +101,20 @@ def test_watchlist_quotes():
     assert main.watch_quotes("")["rows"] == []
 
 
+def test_index_change_uses_the_real_previous_session_close():
+    import calendar
+    import datetime as dt
+    from app import indices
+    ts = lambda y, m, d, h, mi: calendar.timegm(dt.datetime(y, m, d, h, mi).timetuple())
+    daily = {"chart": {"result": [{"meta": {"gmtoffset": 19800}, "timestamp": [ts(2026, 11, 18, 3, 45), ts(2026, 11, 19, 3, 45), ts(2026, 11, 20, 3, 45)],
+                                   "indicators": {"quote": [{"close": [24940.0, 25515.0, 25801.0]}]}}]}}
+    fri = ts(2026, 11, 20, 10, 0)
+    one = {"chart": {"result": [{"meta": {"regularMarketPrice": 25801.0, "regularMarketTime": fri, "chartPreviousClose": 25228.0},
+                                 "timestamp": [fri], "indicators": {"quote": [{"close": [25801.0]}]}}]}}
+    r = indices.parse(one, "^NSEI", "NIFTY 50", "index", "IN", daily)
+    assert r["prev_close"] == 25515.0 and r["change"] == 286.0          # not 573 from a weekend chartPreviousClose
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):
