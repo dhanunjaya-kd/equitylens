@@ -163,7 +163,7 @@ function Board({ d }) {
             {g.items.map((i) => {
               const im = IMPACT[i.impact] || IMPACT.neutral
               return (
-                <div key={i.name} className="tile">
+                <div key={i.name} className="tile" style={i.flow ? { cursor: 'pointer' } : undefined} onClick={i.flow ? () => go('fiidii') : undefined}>
                   <div className="k">{i.name}</div>
                   {i.flow
                     ? <div className="v" style={{ color: i.net >= 0 ? 'var(--good)' : 'var(--bad)' }}>{i.net >= 0 ? '+' : '−'}₹{num(Math.abs(i.net), 0)} cr</div>
@@ -172,7 +172,7 @@ function Board({ d }) {
                         <span style={{ fontWeight: 600, fontSize: 13, color: i.change_pct > 0 ? 'var(--good)' : i.change_pct < 0 ? 'var(--bad)' : 'var(--muted)' }}>{i.change_pct == null ? '' : `${i.change_pct > 0 ? '▲' : i.change_pct < 0 ? '▼' : ''} ${Math.abs(i.change_pct).toFixed(2)}%`}</span>
                       </div>}
                   <div style={{ marginTop: 4 }}><Badge tone={im[0]}>{im[1]}</Badge></div>
-                  <div className="s" style={{ lineHeight: 1.4 }}>{i.error ? 'Not available right now' : i.flow ? `${i.date} · ${i.why}` : i.why}</div>
+                  <div className="s" style={{ lineHeight: 1.4 }}>{i.error ? 'Not available right now' : i.flow ? `${i.date} · ${i.why} · tap for the full FII / DII page` : i.why}</div>
                 </div>
               )
             })}

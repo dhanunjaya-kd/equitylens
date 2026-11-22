@@ -36,6 +36,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 @app.on_event("startup")
 def _background_jobs():
     premarket.start_background()      # builds the pre-market page before the open; refreshes its backtest weekly
+    from . import fiidii
+    fiidii.start_background()         # saves FII/DII cash figures every evening; fills positions history once
 
 
 @app.middleware("http")
@@ -507,6 +509,14 @@ def ai_picks(body: dict = Body(...)):
 @app.get("/api/movers")
 def movers_get(market: str = "IN", tf: str = "1D", universe: str = ""):
     return movers.get(market, tf, universe.upper())
+
+
+@app.get("/api/fiidii")
+def fiidii_get(market: str = "IN"):
+    from . import fiidii
+    if config.DEMO and not fiidii.cash_history():
+        fiidii.demo_fill()
+    return fiidii.us() if market.upper() == "US" else fiidii.india()
 
 
 @app.get("/api/watch/quotes")

@@ -274,7 +274,10 @@ export default function SmartMoney({ tab }) {
   return (
     <div className="movers">
       <div className="card">
-        <h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Smart Money</h3>
+        <div className="row between" style={{ gap: 8 }}>
+          <h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Smart Money</h3>
+          <button className="btn small" onClick={() => go('fiidii')}>🏦 {mk === 'US' ? 'Big money in futures' : 'FII / DII'}</button>
+        </div>
         <div className="small muted">{mk === 'US' ? 'What company insiders are doing with their own shares (SEC Form 4).' : 'Who is really buying: delivery, big-investor deals, insider trades and exchange red flags. Official NSE data.'}</div>
         {mk === 'IN' && <div className="list-chips" style={{ marginTop: 10 }}>{IN_TABS.map(([k, l]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`money/${k}`)}>{l}</button>)}</div>}
         {mk === 'IN' && <div className="row wrapflex" style={{ gap: 8, marginTop: 10 }}><UniverseChips /><FnoToggle /></div>}
