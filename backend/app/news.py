@@ -168,19 +168,43 @@ def parse_feed(text: str) -> list[dict]:
         tag = strip(el.tag)
         if tag not in ("item", "entry"):
             continue
-        f = {}
-        for ch in el:
+        f, imgs = {}, []
+        for ch in el.iter():
+            if ch is el:
+                continue
             t = strip(ch.tag)
-            if t == "link":
+            if t == "link" and ch in list(el):
                 f["link"] = ch.get("href") or (ch.text or "").strip() or f.get("link")
-            elif t not in f:
+            elif t in ("content", "thumbnail") and ch.get("url"):
+                if (ch.get("medium") or "image") == "image" and not (ch.get("type") or "image").startswith(("video", "audio")):
+                    imgs.append((int(ch.get("width") or 0), ch.get("url")))
+            elif t == "enclosure" and ch.get("url") and (ch.get("type") or "").startswith("image"):
+                imgs.append((0, ch.get("url")))
+            elif ch in list(el) and t not in f:
                 f[t] = (ch.text or "").strip()
+                if t == "encoded":
+                    f["content"] = f.get("content") or f[t]
         title = clean(f.get("title", ""), 220)
         when = _when(f.get("pubDate") or f.get("published") or f.get("updated") or f.get("date") or "")
+        raw = " ".join(f.get(k, "") for k in ("description", "summary", "content", "encoded"))
+        for m in re.findall(r"<img[^>]+src=[\"']([^\"']+)", htmllib.unescape(raw)):
+            imgs.append((0, m))
+        image = pick_image(imgs)
         if title and when:
             out.append({"title": title, "url": f.get("link") or "", "summary": clean(f.get("description") or f.get("summary") or f.get("content") or ""),
-                        "time": when.isoformat()})
+                        "time": when.isoformat(), "image": image})
     return out
+
+
+def pick_image(cands: list) -> Optional[str]:
+    """The publisher's own picture for the item (largest offered); no tracking pixels, icons or logos."""
+    ok = [(w, u.strip()) for w, u in cands if u and u.strip().startswith(("https://", "http://"))
+          and not re.search(r"(1x1|pixel|spacer|blank\.gif|/logo|favicon|\.svg(\?|$)|feedburner|doubleclick)", u, re.I)]
+    if not ok:
+        return None
+    ok.sort(key=lambda x: -x[0])
+    u = ok[0][1]
+    return "https://" + u[7:] if u.startswith("http://") else u
 
 
 def _fetch(url: str, headers: Optional[dict] = None) -> str:
@@ -249,7 +273,14 @@ def parse_sec_8k(text: str, cik_to_ticker: dict) -> list[dict]:
 COMMON = {"target", "general", "progressive", "southern", "booking", "match", "block", "ball", "gap", "fox", "news", "live", "global",
           "first", "united", "american", "national", "public", "capital", "energy", "power", "indian", "india", "bank", "group",
           "state", "steel", "cement", "motors", "best", "home", "dollar", "general", "eastern", "western", "central", "pacific",
-          "alliance", "realty", "finance", "infra", "tech", "life", "care", "trust", "union", "royal", "metro", "star", "apex"}
+          "alliance", "realty", "finance", "infra", "tech", "life", "care", "trust", "union", "royal", "metro", "star", "apex",
+          "south", "north", "west", "east", "southwest", "northeast", "new", "york", "great", "city", "world", "asia", "china",
+          "japan", "korea", "europe", "the", "and", "of", "services", "industries", "investment", "investments", "insurance",
+          "markets", "market", "exchange", "trade", "oil", "gas", "petroleum", "chemicals", "pharma", "foods", "hotels", "airlines",
+          "railway", "railways", "ports", "infrastructure", "housing", "credit", "money", "fund", "funds", "data", "systems", "software",
+          "health", "healthcare", "hospital", "hospitals", "auto", "automobile", "automobiles", "electric", "electricals", "cables",
+          "textiles", "paper", "sugar", "agro", "media", "entertainment", "communications", "telecom", "network", "digital", "solar",
+          "green", "renewable", "renewables", "water", "air", "sea", "land", "gold", "silver", "metal", "metals", "mining", "minerals"}
 TAIL = {"limited", "ltd", "inc", "corp", "corporation", "company", "co", "plc", "the", "class", "a", "b", "c", "holdings", "group"}
 CAPS_STOP = {"NIFTY", "SENSEX", "BSE", "NSE", "RBI", "SEBI", "GST", "IPO", "FII", "FPI", "DII", "GDP", "CPI", "WPI", "IIP", "PMI", "USA",
              "FOMC", "OPEC", "IMF", "ECB", "BOJ", "CEO", "CFO", "EPS", "QIP", "OFS", "ETF", "AI", "EV", "EVS", "FY", "LIVE", "NEWS",
@@ -270,12 +301,14 @@ def build_tagger(names: dict) -> callable:
             cands.add(" ".join(words[:2]))
         if len(words[0]) >= 5 and words[0].lower() not in COMMON:
             cands.add(words[0])
+        full = " ".join(words)
         for a in cands:
-            if len(a) < 4 or a.lower() in COMMON:
-                continue
+            ws = a.lower().split()
+            if len(a) < 4 or (all(w in COMMON for w in ws) and not (a == full and len(ws) >= 3)):
+                continue                                          # "Central Bank", "South West": everyday words only
             alias.setdefault(a, set()).add(sym)
     alias = {a: next(iter(s)) for a, s in alias.items() if len(s) == 1}
-    rx = {a: re.compile(r"(?<![A-Za-z0-9])" + re.escape(a) + r"(?![A-Za-z0-9])", 0 if " " not in a else re.I) for a in alias}
+    rx = {a: re.compile(r"(?<![A-Za-z0-9])" + re.escape(a) + r"(?![A-Za-z0-9])") for a in alias}     # as the name is written
     plain = {s.replace("US:", ""): s for s in names}
 
     def tag(text: str) -> list[str]:
@@ -348,8 +381,10 @@ def cluster(items: list[dict]) -> list[dict]:
             if all(s["name"] != it["source"] for s in hit["sources"]):
                 hit["sources"].append({"name": it["source"], "url": it["url"]})
             hit["symbols"] = list(dict.fromkeys(hit["symbols"] + it["symbols"]))
+            if not hit.get("image") and it.get("image"):
+                hit["image"], hit["image_by"] = it["image"], it["source"]
         else:
-            out.append(dict(it, _tk=tk, sources=[{"name": it["source"], "url": it["url"]}]))
+            out.append(dict(it, _tk=tk, sources=[{"name": it["source"], "url": it["url"]}], image_by=it["source"] if it.get("image") else None))
     for o in out:
         o.pop("_tk", None)
     return out
@@ -422,7 +457,7 @@ def refresh() -> dict:
                 for m in (("IN", "US") if mkt == "GLOBAL" else (mkt,)):
                     syms += taggers[m](f"{e['title']} {e['summary'][:240]}")
                 it = {"id": _id(fid, e["url"] or e["title"]), "kind": "news", "market": mkt, "title": e["title"], "summary": e["summary"],
-                      "url": e["url"], "time": e["time"], "symbols": syms[:6], "source": name}
+                      "url": e["url"], "time": e["time"], "symbols": syms[:6], "source": name, "image": e.get("image")}
                 cat = _keep(it, mo)
                 if cat:
                     it["category"] = cat
@@ -448,6 +483,8 @@ def refresh() -> dict:
         for it in fresh:
             if it["time"] >= cut and it["id"] not in saved:
                 saved[it["id"]] = it
+            elif it["id"] in saved and it.get("image") and not saved[it["id"]].get("image"):
+                saved[it["id"]]["image"] = it["image"]                 # items saved before pictures were read
         saved = {k: v for k, v in saved.items() if v["time"] >= cut}
         store.put_company("NEWS::ITEMS", saved)
         STATE["last"] = time.time()

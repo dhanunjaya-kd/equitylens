@@ -112,6 +112,31 @@ def test_payload_in_demo():
     assert any(i["symbols"] == ["US:TSTUS"] for i in u["items"]) and all(i["market"] in ("US", "GLOBAL") for i in u["items"])
 
 
+def test_no_tag_from_everyday_words():
+    tag = news.build_tagger({"CENTRALBK": "Central Bank of India", "SOUTHWEST": "South West Pinnacle Exploration Ltd",
+                             "SBIN": "State Bank of India", "RELIANCE": "Reliance Industries Ltd"})
+    assert tag("China's central bank anchors the yuan") == []                               # not Central Bank of India
+    assert tag("S. Korea rolls out measures; South West monsoon") == []
+    assert tag("Central Bank of India Q2 profit rises") == ["CENTRALBK"]
+    assert tag("State Bank of India raises deposit rates") == ["SBIN"]
+    assert tag("Reliance Industries to invest in green hydrogen") == ["RELIANCE"]
+
+
+def test_pictures_come_from_the_feed():
+    rss = """<rss xmlns:media="http://search.yahoo.com/mrss/" version="2.0"><channel>
+<item><title>Markets rally</title><link>https://e.com/1</link><pubDate>Sun, 22 Nov 2026 10:00:00 +0530</pubDate>
+<media:content url="https://img.e.com/small.jpg" medium="image" width="300"/><media:content url="https://img.e.com/big.jpg" medium="image" width="1200"/></item>
+<item><title>Rupee falls</title><link>https://e.com/2</link><pubDate>Sun, 22 Nov 2026 10:00:00 +0530</pubDate>
+<description><![CDATA[<img src="http://img.e.com/r.jpg" /> The rupee fell.]]></description></item>
+<item><title>Gold steady</title><link>https://e.com/3</link><pubDate>Sun, 22 Nov 2026 10:00:00 +0530</pubDate>
+<enclosure url="https://img.e.com/g.png" type="image/png"/><media:thumbnail url="https://e.com/pixel.gif?1x1"/></item>
+<item><title>No picture</title><link>https://e.com/4</link><pubDate>Sun, 22 Nov 2026 10:00:00 +0530</pubDate></item>
+</channel></rss>"""
+    got = {x["title"]: x["image"] for x in news.parse_feed(rss)}
+    assert got == {"Markets rally": "https://img.e.com/big.jpg", "Rupee falls": "https://img.e.com/r.jpg",
+                   "Gold steady": "https://img.e.com/g.png", "No picture": None}
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):
