@@ -768,7 +768,7 @@ def payload() -> dict:
         "sectors": sect, "sectors_backfill": dict(STATE["sectors"]),
         "mf": {"days": [{"date": d, **v} for d, v in md.items()][-400:], "months": [dict(m, checked=mf_checks.get(m["month"])) for m in _monthly(md, None)],
                "periods": sorted(per[1]["rows"], key=lambda r: -int((re.findall(r"\d{4}", r["period"]) or ["0"])[0])) if per else [],
-               "last": max(md) if md else None, "backfill": dict(STATE["mf"])},
+               "last": max(md) if md else None, "first": min(md) if md else None, "count": len(md), "backfill": dict(STATE["mf"])},
         "errors": dict(STATE["errors"]),
     }
 

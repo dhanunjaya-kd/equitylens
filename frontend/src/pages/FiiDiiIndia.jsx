@@ -407,11 +407,11 @@ function Sources({ d }) {
   const rows = [
     ['NSE same-evening FII / DII', d.saved_days ? `${d.saved_days} day${d.saved_days === 1 ? '' : 's'} saved` : null, (d.error || '').startsWith('NSE cash') ? d.error : null],
     ['NSE derivatives positions', d.positions.days_saved ? `${d.positions.days_saved.toLocaleString('en-IN')} trading days` : null, (d.error || '').startsWith('NSE positions') ? d.error : null],
-    ['NSDL confirmed FPI, daily', F.nsdl.days ? `${F.nsdl.days.toLocaleString('en-IN')} reporting days (${dm(F.nsdl.first)} – ${dm(F.nsdl.last)}) · ${F.nsdl.months.filter((m) => m.checked).length} of ${F.nsdl.months.length} months match NSDL's month totals` : null,
+    ['NSDL confirmed FPI, daily', F.nsdl.days ? `${F.nsdl.days.toLocaleString('en-IN')} reporting days (${dm(F.nsdl.first)} – ${dm(F.nsdl.last)}) · ${F.nsdl.months.filter((m) => m.checked).length} of ${F.nsdl.months.filter((m) => m.checked !== null && m.checked !== undefined).length} finished months match NSDL's month totals` : null,
       [E.nsdl, E.nsdl_archive, F.nsdl.unchecked.length ? `${F.nsdl.unchecked.map(mon).join(', ')}: days do not add up to NSDL's total` : null].filter(Boolean).join(' · ') || null],
     ['NSDL FPI derivatives, daily', F.nsdl.deriv.length ? `${F.nsdl.deriv.length.toLocaleString('en-IN')} reporting days` : null, null],
     ['NSDL / CDSL sector reports', F.sectors ? `${F.sectors.reports} fortnights (from ${dm(F.sectors.first)})` : null, E.sectors],
-    ['SEBI mutual fund trades', F.mf.days.length ? `${F.mf.days.length} days (to ${dm(F.mf.last)})` : null, E.mf || (F.mf.backfill?.archive === false ? 'older months not available from SEBI; building forward' : null)],
+    ['SEBI mutual fund trades', F.mf.count ? `${F.mf.count.toLocaleString('en-IN')} trading days (${dm(F.mf.first)} – ${dm(F.mf.last)})` : null, E.mf || (F.mf.backfill?.archive === false ? 'older months not available from SEBI; building forward' : null)],
   ]
   return (
     <details className="card small fd-src">
