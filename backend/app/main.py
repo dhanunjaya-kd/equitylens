@@ -519,6 +519,12 @@ def fiidii_get(market: str = "IN"):
     return fiidii.us() if market.upper() == "US" else fiidii.india()
 
 
+@app.get("/api/fiidii/stocks")
+def fiidii_stocks(quarter: Optional[str] = None):
+    from . import instholdings
+    return instholdings.get(quarter)
+
+
 @app.get("/api/watch/quotes")
 def watch_quotes(symbols: str = ""):
     """Last close, 1D/1W/1M change and distance from the 52-week high for each stock in a watchlist (daily bars,

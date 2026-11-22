@@ -91,7 +91,7 @@ function App() {
         {route.page === 'account' && <Account />}
         {route.page === 'calendar' && <Calendar tab={route.tab} />}
         {route.page === 'money' && <SmartMoney tab={route.tab} />}
-        {route.page === 'fiidii' && <FiiDii />}
+        {route.page === 'fiidii' && <FiiDii tab={route.tab} />}
         {route.page === 'guide' && <Guide />}
         {route.page === 'portfolio' && <Portfolio />}
         {route.page === 'settings' && <Settings />}

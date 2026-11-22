@@ -123,4 +123,17 @@ except Exception:
     ok = False
     print("FAILED")
     traceback.print_exc()
+print("10) Institutional flows (NSE FII/DII, NSDL daily FPI, sector report, SEBI mutual funds) ...")
+try:
+    from app import fiidii, fpi
+    from datetime import date
+    print("   NSE cash:", fiidii.fetch_cash())
+    print("   NSDL current month: reporting days =", fpi.fetch_nsdl_current(), fpi.STATE["errors"].get("nsdl", ""))
+    print("   SEBI mutual funds: days =", fpi.fetch_mf_current(), fpi.STATE["errors"].get("mf", ""))
+    rep = next((r for r in (fpi.fetch_sector_report(x) for x in fpi._fortnights(3)) if r), {})
+    print("   sector report:", rep.get("end"), f"sectors={len(rep.get('sectors', []))}", rep.get("source", "NOT READ"))
+except Exception:
+    ok = False
+    print("   FAILED")
+    traceback.print_exc()
 print("\nALL GOOD" if ok else "\nSOME CHECKS FAILED - send me the output above")

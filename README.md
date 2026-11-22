@@ -318,12 +318,21 @@ Sidebar → **Heatmap** (on a phone: Market Movers → 🗺️ Heatmap). Every N
 
 ### 🏦 FII / DII — what foreign and domestic institutions are doing
 
-Sidebar → **FII / DII** (on a phone: Smart Money → 🏦 FII / DII, or tap the FII/DII tile on Pre-market).
+Sidebar → **FII / DII** (on a phone: Smart Money → 🏦 FII / DII, or tap the FII/DII tile on Pre-market). Four tabs in the India view:
 
-**🇮🇳 India**
-- **Cash market:** NSE's provisional FII/FPI and DII buy, sell and net (₹ crore) for the latest day, this month's totals, streaks and a daily bar chart with NIFTY 50. NSE publishes only the latest day, so EquityLens saves it every evening after 6 pm; the chart starts on the first day your copy saved and earlier days are not shown rather than estimated.
-- **Derivatives positions:** NSE's participant-wise open interest (FII, DII, Pro, Client): index futures % long, net index futures, calls and puts, stock futures, change vs the previous day, and the FII index-futures long share over time. About 5 years of these daily files download once in the background (~20 minutes; the page fills in as it goes).
-- **Does it predict NIFTY?** A reading counts as extreme when it is in the bottom or top 10% of its own previous year (only earlier days). The index move is counted from the next session's close, because the figures come out after the market shuts. A result is called higher or lower than usual only when its 90% likely range is wholly above or below the every-day rate, with at least 10 cases; otherwise it says too few or not clearly different.
+- **Money flows**
+  - NSE's same-evening FII and DII figures, saved every evening. NSE only publishes the latest day, so this history starts on install day; it is the only public source for daily DII.
+  - **5 years of confirmed foreign (FPI) buying and selling from NSDL**, day by day or month by month, with NIFTY 50.
+  - A month-by-month table: FPI through the stock exchanges, FPI including IPOs and other primary-market buying, mutual funds (SEBI) and NIFTY's move that month.
+  - **Mutual funds** (the biggest part of DII) from SEBI, which publishes about two weeks late, with yearly totals.
+- **F&O positions:** NSE participant-wise open interest (FII, DII, Pro, Client), downloaded once for about 5 years. Shows the FII index-futures long %, index futures net by group, and FII index calls and puts over time.
+- **Sectors (FPI):** NSDL's fortnightly sector report for about 5 years. Shows each sector's net buying in the latest and previous fortnight, its last 24 fortnights, holdings and share of all FPI holdings.
+- **Stocks:** the stocks where FIIs or DIIs raised or cut their holding in the latest quarter, from the shareholding data of the stocks EquityLens has scanned (no extra download).
+- **Does it predict NIFTY?**
+  - For FPI net buying and the FII futures long %: a reading counts as extreme when it is in the bottom or top 10% of its own previous year (only earlier days).
+  - The index move is counted from the first close after the figures were public.
+  - A result is called higher or lower than usual only when its 90% likely range is wholly above or below the every-day rate, with at least 10 cases.
+- **Checks:** every row is checked as it is read (bought − sold = net; the sectors must add up to NSDL's Grand Total). A page that fails is not used. **Data status** at the bottom shows which sources have data and any problem.
 
 **🇺🇸 US — big money in index futures**
 - The CFTC's weekly Traders in Financial Futures report for the S&P 500 and Nasdaq-100 E-mini: asset managers, leveraged funds (hedge funds), dealers, other reportables and small traders, with long, short, net as % of open interest, change vs last week and where this week sits in 3 years. About 8 years of weeks download once.
@@ -630,7 +639,7 @@ All free and public. No logins, no paid feeds.
 | F&O stocks and lot sizes | NSE F&O market-lots file | — |
 | Delivery % | NSE daily bhavcopy with deliverable quantity | — |
 | Bulk & block deals | NSE bulk / block deal files | — |
-| Institutional activity | NSE FII/DII provisional cash figures · NSE participant-wise open interest files | CFTC Commitments of Traders (Traders in Financial Futures) |
+| Institutional activity | NSE FII/DII provisional cash figures · NSE participant-wise open interest files · NSDL daily FPI investments and fortnightly sector reports (CDSL mirror) · SEBI mutual fund trading figures | CFTC Commitments of Traders (Traders in Financial Futures) |
 | Insider trades | NSE insider-trading (SEBI PIT) disclosures | SEC Form 4 |
 | Surveillance flags | NSE surveillance indicator file (REG_IND) | — |
 | Results calendar | NSE event calendar (board meetings) | Nasdaq earnings calendar |
@@ -668,7 +677,7 @@ python run_tests.py
 | `test_premarket.py` | The opening call uses only sessions closed before the NIFTY day, dates stay in each market's time zone, the backtest finds a real link and rejects noise, frozen calls are checked against the real open |
 | `test_pricemap.py` | ZigZag keeps only major swings and never the one still forming, volume profile, unfilled gaps, today's low is not a level, hold-rate maths on each stock's own ATR scale (held, broken, unresolved, 5 days apart), random-price zones (same width, never on a real zone, repeatable, kept out of the real figures, compared at the same distance so distance can't fake an edge), in-app run status, the level backtest uses no future prices and counts each test once, its pass rule at the edges, market / sector / stock answer, value ranges tied to P/E state, the fall still running is excluded, fewer than 10 cases gives no percentages, turn signals use no future prices, sector mapping, the AI's numbers are checked |
 | `test_heatmap.py` | Heatmap rows carry every period and never a guessed market cap, market cap from NSE issued shares only when there is no scan, reading NSE's sector and shares, which stocks still need a lookup, sector totals add up, sector index mapping (India and US), US closes dated on New York time, US shares from SEC, watchlist prices |
-| `test_fiidii.py` | Reading NSE's FII/DII figures, participant open interest (Indian comma grouping, TOTAL row skipped) and CFTC report columns, every contract has two sides, test starts only after the figures are public, extremes use only earlier readings, events kept apart, verdicts need 10 cases |
+| `test_fiidii.py` | Reading NSE's FII/DII figures, participant open interest (Indian comma grouping, TOTAL row skipped) and CFTC report columns, every contract has two sides, test starts only after the figures are public, extremes use only earlier readings, events kept apart, verdicts need 10 cases, NSDL daily rows and sector reports read and checked (bought − sold = net, sectors add up to the total), SEBI mutual fund days and yearly rows, holding change per stock from the shareholding table |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_api.py` | Every endpoint, including error paths |
 

@@ -139,6 +139,69 @@ def test_payloads_in_demo():
     assert "not_included" in u
 
 
+# ---------------------------------------------------------------- NSDL / CDSL / SEBI pages and holdings
+FIX = Path(__file__).parent / "fixtures"
+
+
+def test_nsdl_daily_reads_equity_and_checks_every_row():
+    from app import fpi
+    days, bad = fpi.parse_nsdl_daily((FIX / "nsdl_daily.html").read_text())
+    assert set(days) == {"2024-12-02", "2024-12-03"}                       # 04-Dec fails 100 - 50 = 70 and is dropped
+    assert bad == 1
+    d = days["2024-12-02"]
+    assert d["exch"] == {"buy": 16983.42, "sell": 19982.44, "net": -2999.02}  # brackets = negative
+    assert d["primary"]["net"] == 2008.7 and d["sub"]["net"] == -990.32
+    assert "2024-12-01" not in days                                         # derivative table's date not read as equity
+
+
+def test_sector_report_columns_and_total_check():
+    from app import fpi
+    html = (FIX / "fpi_sectors.html").read_text()
+    r = fpi.parse_sectors(html)
+    assert r["end"] == "2025-07-31" and r["net_period"] == ["2025-07-16", "2025-07-31"] and r["prev_period"] == ["2025-07-01", "2025-07-15"]
+    auto = r["sectors"][0]
+    assert auto == {"name": "Automobile and Auto Components", "auc_start": 509003.0, "net_prev": -1159.0, "net": -2425.0, "auc": 501618.0}
+    assert len(r["sectors"]) == 3 and r["total"]["net"] == -2425 - 300 + 2500
+    broken = html.replace(">-2,425<", ">-9,425<", 1)                       # a sector no longer adds up to the Grand Total
+    assert fpi.parse_sectors(broken) == {}
+
+
+def test_sebi_mutual_funds_days_and_years():
+    from app import fpi
+    days, periods = fpi.parse_sebi_mf((FIX / "sebi_mf.html").read_text())
+    assert days == {"2026-11-03": {"buy": 12500.4, "sell": 10200.1, "net": 2300.3}, "2026-11-04": {"buy": 9000.0, "sell": 9800.0, "net": -800.0}}
+    assert [p["period"] for p in periods] == ["April 2005-Mar 2006", "April 2002-Mar 2003"]
+    assert periods[1]["net"] == -2066.7
+
+
+def test_numbers():
+    from app import fpi
+    assert fpi.num("5,09,003") == 509003 and fpi.num("(2,999.02)") == -2999.02 and fpi.num("-1,159") == -1159
+    assert fpi.num("") is None and fpi.num("-") is None and fpi.num("abc") is None
+
+
+def test_holding_change_from_shareholding_table():
+    from app import instholdings
+    c = {"tables": {"shareholding_quarterly": {"columns": ["Mar 2026", "Jun 2026", "Sep 2026"],
+                                               "rows": {"Promoters": [50, 50, 50], "FIIs": [20.0, 21.5, 20.25], "DIIs": [10.0, None, 12.0]}}}}
+    r = instholdings.stock_change(c)
+    assert r["quarter"] == "Sep 2026" and r["prev_quarter"] == "Jun 2026"
+    assert r["fii"] == 20.25 and r["fii_chg"] == -1.25
+    assert r["dii_chg"] is None                                             # no previous figure: no change claimed
+    assert instholdings.stock_change({"tables": {}}) is None
+
+
+def test_fpi_payload_in_demo():
+    from app import fpi
+    fpi.demo_fill()
+    p = fpi.payload()
+    m = p["nsdl"]["months"][-1]
+    assert m["exch"] == round(sum(r["net"] for r in p["nsdl"]["rows"] if r["date"][:7] == m["month"]), 2)
+    s = p["sectors"]
+    assert abs(sum(x["net"] for x in s["sectors"]) - s["total"]["net"]) < 1
+    assert all(len(x["hist"]) == len(s["periods"]) for x in s["sectors"])
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

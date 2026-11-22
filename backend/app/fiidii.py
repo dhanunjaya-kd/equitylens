@@ -12,7 +12,10 @@ US
                 dealers, asset managers / institutions, leveraged funds, other reportables, non-reportable,
                 for E-mini S&P 500 (#13874A) and E-mini Nasdaq-100 (#209742). About 8 years kept.
 
-Does it predict the index?  (rules fixed before any result, 22 Nov 2026)
+Longer history (NSDL confirmed FPI figures, sector reports, SEBI mutual fund trades): see fpi.py.
+Stocks institutions added or cut: see instholdings.py.
+
+Does it predict the index?  (rules fixed before any result, 22 Nov 2026; the NSDL FPI test uses the same rules)
   A reading is "extreme" when it is in the bottom or top 10% of its own previous year (250 sessions in India,
   52 weeks in the US; only data before that day). Each extreme day (at least 5 sessions / 1 week apart) is
   followed for 5 and 21 sessions (US: 4 weeks from the Friday the report came out). Its record = how often the
@@ -34,7 +37,7 @@ from typing import Optional
 
 import requests
 
-from . import config, flows, premarket, store
+from . import config, flows, fpi, premarket, store
 
 IST = flows.IST
 PART_URL = flows.ARCH + "/content/nsccl/fao_participant_oi_{d}.csv"
@@ -390,8 +393,19 @@ def india(fetch: bool = True) -> dict:
     share_series = [(d, derived(p)["FII"]["fut_idx_share"]) for d, p in parts if "FII" in p and derived(p)["FII"]["fut_idx_share"] is not None]
     nifty = _closes("^NSEI")
     test_part = extreme_test(share_series, nifty, LOOKBACK_IN, (5, 21), start_shift=1) if len(share_series) > LOOKBACK_IN and nifty else None
-    cash_series = [(r["date"], r["fii"]) for r in cash_rows if r["fii"] is not None]
-    test_cash = extreme_test(cash_series, nifty, LOOKBACK_IN, (5, 21), start_shift=1) if len(cash_series) > LOOKBACK_IN and nifty else None
+    if fetch and not config.DEMO:
+        threading.Thread(target=fpi.refresh_daily, daemon=True).start()   # NSDL + SEBI pages, at most every 3 hours
+    extra = fpi.payload()
+    fpi_series = [(r["date"], r["net"]) for r in extra["nsdl"]["rows"]]
+    # NSDL's reporting date carries the previous day's trades and is public that day: count from the next close
+    test_fpi = extreme_test(fpi_series, nifty, LOOKBACK_IN, (5, 21), start_shift=1) if len(fpi_series) > LOOKBACK_IN and nifty else None
+    series = []
+    for d, p in parts:
+        x = derived(p)
+        g = lambda w, k: (x.get(w) or {}).get(k)
+        series.append({"date": d, "fii_fut": g("FII", "fut_idx_net"), "client_fut": g("Client", "fut_idx_net"), "pro_fut": g("Pro", "fut_idx_net"),
+                       "dii_fut": g("DII", "fut_idx_net"), "fii_call": g("FII", "idx_call_net"), "fii_put": g("FII", "idx_put_net"),
+                       "fii_share": g("FII", "fut_idx_share")})
     return {
         "market": "IN", "latest": latest, "saved_days": len(days), "first_saved": days[0] if days else None,
         "cash": cash_rows[-260:],
@@ -404,11 +418,12 @@ def india(fetch: bool = True) -> dict:
                                         for k in ("fut_idx_net", "fut_idx_share", "idx_call_net", "idx_put_net", "fut_stk_net")} for w in dp},
                       "change_1w": {w: {k: (dp[w][k] - week[w][k]) if week.get(w) and dp[w][k] is not None and week[w][k] is not None else None
                                         for k in ("fut_idx_share",)} for w in dp},
-                      "fii_share_series": share_series[-260:], "days_saved": len(parts)},
-        "nifty": [(d, nifty[d]) for d in sorted(nifty)[-260:]] if nifty else [],
+                      "fii_share_series": share_series[-260:], "days_saved": len(parts), "series": series},
+        "nifty": [(d, nifty[d]) for d in sorted(nifty)[-1300:]] if nifty else [],
+        "fpi": extra,
         "history_from": parts[0][0] if parts else None,
-        "tests": {"fii_futures_share": test_part, "fii_cash": test_cash,
-                  "cash_days_needed": max(0, LOOKBACK_IN + 1 - len(cash_series)),
+        "tests": {"fii_futures_share": test_part, "fpi_net": test_fpi,
+                  "fpi_days_needed": max(0, LOOKBACK_IN + 1 - len(fpi_series)),
                   "part_days_needed": max(0, LOOKBACK_IN + 1 - len(share_series))},
         "backfill": dict(STATE["in"]), "error": STATE["error"],
     }
@@ -486,7 +501,9 @@ def _loop():
             now = datetime.now(IST)
             if now.weekday() < 5 and now.hour >= 18:
                 fetch_cash()
+            fpi.refresh_daily()
             _backfill_in()
+            fpi.backfill_all()
             _backfill_us()
         except Exception as e:  # noqa: BLE001
             STATE["error"] = str(e)
@@ -547,6 +564,7 @@ def _demo_cot(t: date) -> dict:
 def demo_fill() -> None:
     """Demo mode: build the saved history so the page and the tests have something to show."""
     _demo_cash()
+    fpi.demo_fill()
     for d in [date(2026, 11, 20) - timedelta(days=k) for k in range(HIST_DAYS)]:
         if d.weekday() < 5:
             part_day(d)
