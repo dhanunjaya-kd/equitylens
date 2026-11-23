@@ -98,7 +98,7 @@ function Edge({ t, e }) {
   if (!t || t.rules_version !== e.rules_version || e.rule === 'avoid_business') return null
   const p = t.by_rule?.[e.rule]?.passed
   if (p === true) return <div className="small" style={{ marginTop: 6, color: 'var(--good)' }}>This rule passed the test set before the backtest.</div>
-  if (p === false) return <div className="small" style={{ marginTop: 6, color: 'var(--warn)' }}>No proven edge yet: this rule failed the test set before the backtest.</div>
+  if (p === false) return <div className="small" style={{ marginTop: 6, color: 'var(--warn)' }}>No proven edge on past data: this rule failed the test that was fixed before the backtest was run.</div>
   if (t.by_rule?.[e.rule]) return <div className="small muted" style={{ marginTop: 6 }}>Not enough data yet to test this rule.</div>
   return null
 }

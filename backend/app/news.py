@@ -88,7 +88,8 @@ RULES = [
                   r"recession", r"consumer confidence", r"housing starts")),
     ("global", R(r"\bwar\b", r"sanction", r"tariff", r"\bopec", r"crude", r"oil prices?", r"brent", r"china", r"europe", r"\becb\b",
                  r"\bboj\b", r"bank of japan", r"bank of england", r"geopolit", r"ukraine", r"russia", r"israel", r"iran", r"middle east",
-                 r"gaza", r"\bg7\b", r"\bg20\b", r"\bimf\b", r"world bank", r"gold prices?", r"dollar index", r"trade war", r"election")),
+                 r"gaza", r"west asia", r"saudi", r"yemen", r"houthis?", r"red sea", r"hormuz", r"taiwan", r"north korea", r"pakistan",
+                 r"refiner", r"\bg7\b", r"\bg20\b", r"\bimf\b", r"world bank", r"gold prices?", r"dollar index", r"trade war", r"election")),
     ("markets", R(r"sensex", r"nifty", r"\bdow\b", r"s&p 500", r"nasdaq", r"stock market", r"markets?\b", r"stocks?\b", r"shares?\b",
                   r"rupee", r"\bfiis?\b", r"\bfpis?\b", r"\bdiis?\b", r"\bvix\b", r"closing bell", r"opening bell", r"wall street",
                   r"equities", r"rally", r"sell-?off", r"bse\b", r"\bnse\b")),
@@ -424,10 +425,13 @@ def cluster(items: list[dict]) -> list[dict]:
             if all(s["name"] != it["source"] for s in hit["sources"]):
                 hit["sources"].append({"name": it["source"], "url": it["url"]})
             hit["symbols"] = list(dict.fromkeys(hit["symbols"] + it["symbols"]))
+            if it.get("market") and it["market"] not in hit["markets"]:
+                hit["markets"].append(it["market"])
             if not hit.get("image") and it.get("image"):
                 hit["image"], hit["image_by"] = it["image"], it["source"]
         else:
-            out.append(dict(it, _tk=tk, sources=[{"name": it["source"], "url": it["url"]}], image_by=it["source"] if it.get("image") else None))
+            out.append(dict(it, _tk=tk, sources=[{"name": it["source"], "url": it["url"]}], image_by=it["source"] if it.get("image") else None,
+                            markets=[it["market"]] if it.get("market") else []))
     for o in out:
         o.pop("_tk", None)
     return out
@@ -614,11 +618,26 @@ def breaking_from(items: list[dict], index_items: list[dict], now: Optional[date
     return out
 
 
+# A war, attack, disaster or oil shock moves markets everywhere: it is breaking for India AND the US, whichever
+# publisher reports it. Other events (a rate cut, a crash, a shutdown) stay with the market whose publishers carry them.
+WORLD = re.compile(r"\b(wars?|attack(?:s|ed)?|missiles?|air ?strikes?|strikes on|invasion|invades?|bomb(?:ing|ings|s)?|blasts?|"
+                   r"explosions?|terror\w*|coup|martial law|assassinat\w*|earthquake|tsunami|nuclear|sanctions?|evacuat\w*|"
+                   r"hostages?|ceasefire|escalat\w*|retaliat\w*|crude|oil|opec|refiner(?:y|ies)|strait of hormuz|red sea)\b", re.I)
+
+
+def event_pool(market: str) -> list[dict]:
+    """Every saved news story, one per story, with all its publishers from every feed; kept for this market when a
+    feed for this market (or a world feed) carries it, or when it is a world event."""
+    market = market.upper()
+    every = cluster([dict(v) for v in _saved().values()])
+    return [i for i in every if set(i.get("markets") or []) & {market, "GLOBAL"} or WORLD.search(i["title"])]
+
+
 def breaking_now(market: str) -> list[dict]:
     market = market.upper()
     if config.DEMO and not _saved():
         demo_fill()
-    items = cluster([dict(v) for v in _saved().values() if v["market"] in (market, "GLOBAL")])
+    items = event_pool(market)
     try:
         from . import indices
         idx = indices.get(market)["items"]
@@ -680,7 +699,7 @@ def get(market: str) -> dict:
         idx = [] if config.DEMO else indices.get(market)["items"]
     except Exception:  # noqa: BLE001
         idx = []
-    return {"market": market, "items": items[:400], "count": len(items), "breaking": breaking_from(items, idx)[:5],
+    return {"market": market, "items": items[:400], "count": len(items), "breaking": breaking_from(event_pool(market), idx)[:5],
             "top": sorted([i for i in recent if i["covered"] >= 2 or i["kind"] == "official"], key=lambda i: (-i["covered"], i["time"]))[:6],
             "mentioned": [{"symbol": s, "n": n, "d1": (px.get(s) or {}).get("d1"), "name": (px.get(s) or {}).get("name")} for s, n in mentioned],
             "movers": sorted(movers.values(), key=lambda x: -abs(x["d1"]))[:8],

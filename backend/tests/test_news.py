@@ -1,4 +1,5 @@
 """News (offline):  python tests/test_news.py"""
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import sys
@@ -155,6 +156,27 @@ def test_share_picture_from_article_page():
     assert news.og_image(page2, "https://site.com/news/1") == "https://site.com/pics/a.jpg"
     assert news.og_image("<head><meta property='og:image' content='https://site.com/logo.svg'></head>") is None
     assert news.og_image("<head></head>") is None
+
+
+def test_world_event_is_breaking_in_both_markets():
+    from app import store
+    now = datetime.now(timezone.utc)
+    t1, t2 = (now - timedelta(hours=1)).isoformat(), (now - timedelta(minutes=50)).isoformat()
+    mk = lambda i, m, src, title, t: {"id": i, "kind": "news", "market": m, "category": "global", "title": title, "summary": "",
+                                       "time": t, "source": src, "url": "", "symbols": []}
+    title = "Yemen's Houthis claim attacks on Saudi oil refinery as Trump warns of new strikes"
+    saved = {"a": mk("a", "US", "CNBC · Top news", title, t1), "b": mk("b", "GLOBAL", "CNBC · World", title, t2),
+             "c": mk("c", "US", "CNBC · Top news", "US regional bank collapses, shares halted", t1),
+             "d": mk("d", "US", "MarketWatch · Top stories", "US regional bank collapses, trading halted", t2)}
+    old = store.get_company("NEWS::ITEMS")
+    store.put_company("NEWS::ITEMS", saved)
+    try:
+        india, us = news.breaking_now("IN"), news.breaking_now("US")
+    finally:
+        store.put_company("NEWS::ITEMS", old[1] if old else {})
+    assert [i["title"] for i in india] == [title]                                      # the war story, with both publishers
+    assert len(india[0]["sources"]) == 2
+    assert {i["title"][:16] for i in us} == {title[:16], "US regional bank"}           # a US-only event stays with the US
 
 
 def test_breaking_needs_a_serious_event_and_two_sources():

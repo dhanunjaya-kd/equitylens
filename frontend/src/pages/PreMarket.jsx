@@ -53,8 +53,8 @@ function CallCard({ d }) {
         <div className="tile">
           <div className="k">Open-direction calls right (backtest)</div>
           <div className="v">{a ? pctOf(a.gap_hit) : '—'}</div>
-          <div className="s">{a ? `${num(a.up_calls + a.down_calls)} calls, ${t.from?.slice(0, 4)}–${t.to?.slice(0, 4)} · always guessing the common side: ${pctOf(a.gap_naive)}` : 'Backtest not run yet'}</div>
-          {t && <div className="s" style={{ color: t.gap_passed ? 'var(--good)' : 'var(--warn)', fontWeight: 600 }}>{t.gap_passed ? 'Passed the test set before the backtest' : 'No proven edge (failed the test set before the backtest)'}</div>}
+          <div className="s">{a ? `Past data: ${num(a.up_calls + a.down_calls)} calls on every NIFTY day ${t.from?.slice(0, 4)}–${t.to?.slice(0, 4)} · always guessing the common side: ${pctOf(a.gap_naive)}` : 'Backtest not run yet'}</div>
+          {t && <Periods t={t} />}
         </div>
         <div className="tile">
           <div className="k">Live calls checked</div>
@@ -72,12 +72,32 @@ function CallCard({ d }) {
   )
 }
 
+// The overnight call's backtest, period by period, with the rule it had to pass (fixed before the backtest was run).
+function Periods({ t }) {
+  const rows = [['2016–20', t.first_half], [`2021–${t.to?.slice(2, 4)}`, t.second_half]]
+  const ok = (h) => h?.gap_hit != null && h.gap_hit > 55 && h.gap_hit - h.gap_naive >= 5
+  const short = rows.filter(([, h]) => !ok(h)).map(([k]) => k)
+  return (
+    <>
+      {rows.map(([k, h]) => (
+        <div key={k} className="s">{ok(h) ? '✓' : '✗'} {k}: right {pctOf(h?.gap_hit)} vs {pctOf(h?.gap_naive)} by guessing ({num((h?.up_calls || 0) + (h?.down_calls || 0))} calls)</div>
+      ))}
+      <div className="s" style={{ color: t.gap_passed ? 'var(--good)' : 'var(--warn)', fontWeight: 600 }}>
+        {t.gap_passed ? 'Proven on past data: 5+ points better than guessing in both periods'
+          : `Not proven on past data: it had to be 5+ points better than guessing in both periods; ${short.join(' and ')} fell short`}
+      </div>
+    </>
+  )
+}
+
 function Check0845({ d }) {
   const c = d.check_0845, t2 = d.track2
   if (!c) return null
   const a = t2?.all
   const status = c.proven ? ['var(--good)', 'Passed its test: this is the main call now']
-    : t2 ? ['var(--warn)', `Not proven yet · ${t2.from?.slice(0, 7)} to ${t2.to?.slice(0, 7)}: right ${pctOf(a?.v2?.gap_hit)} vs the overnight call ${pctOf(a?.v1?.gap_hit)} vs always guessing ${pctOf(a?.v2?.gap_naive)}`]
+    : t2 ? ['var(--warn)', `Not proven on past data · tested on ${num(t2.days)} days (${t2.from?.slice(0, 7)} to ${t2.to?.slice(0, 7)}, all the hourly history free sources keep): `
+      + `right ${pctOf(a?.v2?.gap_hit)} vs the overnight call ${pctOf(a?.v1?.gap_hit)} vs always guessing ${pctOf(a?.v2?.gap_naive)}. `
+      + `It had to beat the overnight call by 5+ points in both halves; it beat it by ${a?.v2?.gap_hit != null && a?.v1?.gap_hit != null ? (a.v2.gap_hit - a.v1.gap_hit).toFixed(1) : '—'}, so the overnight call stays the main call.`]
     : ['var(--muted)', 'Being tested on the last two years of hourly prices']
   return (
     <div className="tile" style={{ marginTop: 12 }}>
