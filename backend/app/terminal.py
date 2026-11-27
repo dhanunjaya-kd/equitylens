@@ -83,15 +83,58 @@ def _cached(key: str, ttl: float, fn):
     return val
 
 
-def _nse(path: str, params: dict, raw: str, referer: str):
-    text = flows._nse_text(f"{NSE}{path}", params, headers={"Referer": referer})
-    if text is None:
-        raise TermError("NSE has nothing for this (404)")
-    _save_raw(raw, text)
+def _note_failure(raw: str, path: str, params: dict, what: str) -> None:
+    """Keep what NSE answered when a request fails (status, start of the reply), for the source check."""
     try:
-        return json.loads(text)
+        RAW_DIR.mkdir(parents=True, exist_ok=True)
+        log = RAW_DIR / "failures.json"
+        rows = json.loads(log.read_text(encoding="utf-8")) if log.exists() else []
+        rows = (rows + [{"at": datetime.now(IST).isoformat(timespec="seconds"), "kind": raw, "path": path, "params": params,
+                         "what": what[:400]}])[-40:]
+        log.write_text(json.dumps(rows, indent=1), encoding="utf-8")
+    except (OSError, ValueError):
+        pass
+
+
+def _nse_once(path: str, params: dict, raw: str, referer: str):
+    """One NSE request with the app's cookie session and pacing. Records the status and reply when it fails."""
+    with flows._lock:
+        w = 1.0 - (time.time() - flows._last[0])
+        if w > 0:
+            time.sleep(w)
+        flows._last[0] = time.time()
+    try:
+        r = calendars._nse_session().get(f"{NSE}{path}", params=params, headers={"Referer": referer}, timeout=config.REQUEST_TIMEOUT)
+    except Exception as e:  # noqa: BLE001
+        calendars._nse["s"] = None
+        _note_failure(raw, path, params, f"not reachable: {e}")
+        raise TermError(f"NSE not reachable: {e}") from e
+    body = r.text or ""
+    if r.status_code != 200 or not body.strip() or body.lstrip().startswith("<"):
+        _note_failure(raw, path, params, f"HTTP {r.status_code}: {body[:300]}")
+        if r.status_code in (401, 403):
+            calendars._nse["s"] = None            # expired cookies: a fresh session next time
+        raise TermError(f"NSE answered HTTP {r.status_code} for {path}")
+    _save_raw(raw, body)
+    try:
+        return json.loads(body)
     except ValueError as e:
+        _note_failure(raw, path, params, f"not JSON: {body[:300]}")
         raise TermError("NSE answered with something that is not JSON (format changed?)") from e
+
+
+def _nse(path: str, params: dict, raw: str, referer: str, fallbacks: tuple = ()):
+    """Try NSE's address, then any newer addresses for the same data; the first that answers is used."""
+    errors = []
+    for p, prm, rw in ((path, params, raw),) + tuple(fallbacks):
+        for attempt in range(2):
+            try:
+                return _nse_once(p, prm, rw, referer)
+            except TermError as e:
+                errors.append(str(e))
+                if "401" not in str(e) and "403" not in str(e):
+                    break                          # a 404 / format error won't change on a retry
+    raise TermError("; ".join(dict.fromkeys(errors)))
 
 
 def clean(sym: str) -> str:
@@ -151,14 +194,19 @@ def stock(symbol: str) -> dict:
     ref = f"{NSE}/get-quotes/equity?symbol={quote(sym)}"
     out = {"symbol": sym, "sources": []}
     try:
-        out["quote"] = _cached(f"q::{sym}", TTL["quote"], lambda: parse_quote(_nse("/api/quote-equity", {"symbol": sym}, "nse_quote.json", ref)))
+        out["quote"] = _cached(f"q::{sym}", TTL["quote"], lambda: parse_quote(_nse(
+            "/api/quote-equity", {"symbol": sym}, "nse_quote.json", ref,
+            fallbacks=(("/api/NextApi/apiClient/GetQuoteApi", {"functionName": "getSymbolData", "marketType": "N", "series": "EQ", "symbol": sym},
+                        "nse_quote_next.json"),))))
         out["sources"].append({"name": "NSE quote", "ok": True})
     except Exception as e:  # noqa: BLE001
         out["quote"] = None
         out["sources"].append({"name": "NSE quote", "ok": False, "error": str(e)[:160]})
     try:
         out["trade"] = _cached(f"t::{sym}", TTL["trade"], lambda: parse_trade(
-            _nse("/api/quote-equity", {"symbol": sym, "section": "trade_info"}, "nse_trade.json", ref)))
+            _nse("/api/quote-equity", {"symbol": sym, "section": "trade_info"}, "nse_trade.json", ref,
+                 fallbacks=(("/api/NextApi/apiClient/GetQuoteApi", {"functionName": "getSymbolData", "marketType": "N", "series": "EQ",
+                             "symbol": sym}, "nse_trade_next.json"),))))
         out["sources"].append({"name": "NSE depth and trade info", "ok": True})
     except Exception as e:  # noqa: BLE001
         out["trade"] = None
@@ -268,7 +316,10 @@ def fno(symbol: str, expiry: Optional[str] = None) -> dict:
         out["sources"].append({"name": "NSE option chain", "ok": False, "error": str(e)[:160]})
     try:
         ref = f"{NSE}/get-quotes/derivatives?symbol={quote(sym)}"
-        out["deriv"] = _cached(f"d::{sym}", TTL["deriv"], lambda: parse_deriv(_nse("/api/quote-derivative", {"symbol": sym}, "nse_deriv.json", ref)))
+        out["deriv"] = _cached(f"d::{sym}", TTL["deriv"], lambda: parse_deriv(_nse(
+            "/api/quote-derivative", {"symbol": sym}, "nse_deriv.json", ref,
+            fallbacks=(("/api/NextApi/apiClient/GetQuoteApi", {"functionName": "getSymbolDerivativesData", "symbol": sym},
+                        "nse_deriv_next.json"),))))
         out["sources"].append({"name": "NSE futures", "ok": True})
     except Exception as e:  # noqa: BLE001
         out["deriv"] = None
@@ -328,13 +379,36 @@ def _yahoo(sym: str, interval: str, rng: str) -> dict:
     return parse_yahoo(res)
 
 
-FRAMES = {"1m": ("1m", "1d"), "5m": ("5m", "5d"), "15m": ("15m", "1mo"), "1h": ("60m", "3mo"), "1D": ("1d", "2y")}
+FRAMES = {"1m": ("1m", "1d"), "5m": ("5m", "5d"), "15m": ("15m", "1mo"), "30m": ("30m", "1mo"), "1h": ("60m", "3mo"),
+          "4h": ("60m", "6mo"), "1D": ("1d", "2y"), "1W": ("1wk", "10y")}
+
+
+def group_hours(bars: list[dict], offset: int, n: int = 4) -> list[dict]:
+    """4-hour candles from hourly ones: within each trading day, hours 1-4 form the first candle, 5-8 the next
+    (NSE: 09:15-13:15 and 13:15-15:30)."""
+    out, day, k = [], None, 0
+    for b in bars:
+        d = datetime.fromtimestamp(b["t"] + offset, timezone.utc).date()
+        if d != day:
+            day, k = d, 0
+        if k % n == 0:
+            out.append(dict(b))
+        else:
+            o = out[-1]
+            o.update(h=max(o["h"], b["h"]), l=min(o["l"], b["l"]), c=b["c"], v=(o["v"] or 0) + (b["v"] or 0))
+        k += 1
+    return out
 
 
 def candles(symbol: str, frame: str = "5m") -> dict:
-    iv, rng = FRAMES.get(frame, FRAMES["5m"])
+    frame = frame if frame in FRAMES else "5m"
+    iv, rng = FRAMES[frame]
     ys = yahoo_symbol(symbol)
     out = _cached(f"k::{ys}::{frame}", TTL["candles"], lambda: _yahoo(ys, iv, rng))
+    if frame == "4h":
+        out = dict(out, bars=group_hours(out["bars"], out["offset"]), vwap=[])
+    elif frame in ("1D", "1W"):
+        out = dict(out, vwap=[])
     return dict(out, symbol=clean(symbol), yahoo=ys, frame=frame, source="Yahoo Finance chart feed (may lag a little)")
 
 

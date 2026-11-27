@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, createChart } from 'lightweight-charts'
+import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, createChart, createTextWatermark } from 'lightweight-charts'
 import { api, cssVar, num, ok, signed } from '../util'
 import { chime } from '../components/BreakingBar'
 
@@ -8,7 +8,6 @@ import { chime } from '../components/BreakingBar'
 const LS = 'eql_term_watch'
 const DEFAULT_WATCH = ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'TCS', 'INFY', 'SBIN', 'US:AAPL', 'US:NVDA']
 const INDEX = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY']
-const FRAMES = ['1m', '5m', '15m', '1h', '1D']
 const loadW = () => { try { return JSON.parse(localStorage.getItem(LS)) || DEFAULT_WATCH } catch { return DEFAULT_WATCH } }
 const saveW = (w) => { try { localStorage.setItem(LS, JSON.stringify(w)) } catch { /* ignore */ } }
 const isUSs = (s) => s.startsWith('US:')
@@ -29,44 +28,98 @@ function usePoll(fn, ms, deps) {
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-// ---------------------------------------------------------------- chart
-function Chart({ sym, frame }) {
+// ---------------------------------------------------------------- chart (TradingView-style: no grid, OHLC legend, watermark)
+const UP = '#089981', DOWN = '#f23645'
+const FRAME_LABEL = { '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h', '4h': '4h', '1D': 'D', '1W': 'W' }
+const loadO = () => { try { return { vwap: true, ema20: false, ema50: false, vol: true, line: false, ...JSON.parse(localStorage.getItem('eql_term_opts')) } } catch { return { vwap: true, ema20: false, ema50: false, vol: true, line: false } } }
+const ema = (vals, n) => { const k = 2 / (n + 1); let e = null; return vals.map((v, i) => { e = e === null ? v : v * k + e * (1 - k); return i >= n - 1 ? e : null }) }
+
+function Chart({ sym, frame, setFrame, name }) {
   const box = useRef()
-  const chartRef = useRef(null)
+  const ref = useRef(null)
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')
+  const [opt, setOpt] = useState(loadO)
+  const [leg, setLeg] = useState(null)
+  const flip = (k) => { const o = { ...opt, [k]: !opt[k] }; setOpt(o); try { localStorage.setItem('eql_term_opts', JSON.stringify(o)) } catch { /* ignore */ } }
   usePoll(() => api(`/api/term/candles/${encodeURIComponent(sym)}?frame=${frame}`).then((x) => { setD(x); setErr('') }).catch((e) => setErr(e.message)),
-    frame === '1D' ? 300000 : 30000, [sym, frame])
+    ['1D', '1W'].includes(frame) ? 300000 : 30000, [sym, frame])
   useEffect(() => {
     if (!box.current) return undefined
-    const line = cssVar('--line'), card = cssVar('--card'), muted = cssVar('--muted')
+    const dark = document.documentElement.dataset.theme !== 'light'
+    const bg = dark ? '#0f1216' : '#ffffff', txt = dark ? '#b2b5be' : '#131722', border = dark ? '#2a2e39' : '#e0e3eb'
     const chart = createChart(box.current, {
-      autoSize: true, layout: { background: { type: ColorType.Solid, color: card }, textColor: muted, fontSize: 11, attributionLogo: false },
-      grid: { vertLines: { color: cssVar('--grid') }, horzLines: { color: cssVar('--grid') } }, crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: line }, timeScale: { borderColor: line, timeVisible: true, secondsVisible: false, rightOffset: 3 },
+      autoSize: true,
+      layout: { background: { type: ColorType.Solid, color: bg }, textColor: txt, fontSize: 12, attributionLogo: false,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif' },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+      crosshair: { mode: CrosshairMode.Normal, vertLine: { color: dark ? '#758696' : '#9598a1', labelBackgroundColor: dark ? '#2a2e39' : '#131722' },
+        horzLine: { color: dark ? '#758696' : '#9598a1', labelBackgroundColor: dark ? '#2a2e39' : '#131722' } },
+      rightPriceScale: { borderColor: border, scaleMargins: { top: 0.1, bottom: 0.2 } },
+      timeScale: { borderColor: border, timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
     })
-    const c = chart.addSeries(CandlestickSeries, { upColor: '#22c55e', downColor: '#ef4444', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444' })
-    const v = chart.addSeries(HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false })
-    v.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
-    c.priceScale().applyOptions({ scaleMargins: { top: 0.06, bottom: 0.22 } })
-    const w = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'VWAP', crosshairMarkerVisible: false })
-    chartRef.current = { chart, c, v, w, fitted: false }
-    return () => { chart.remove(); chartRef.current = null }
-  }, [sym, frame])
+    createTextWatermark(chart.panes()[0], { horzAlign: 'center', vertAlign: 'center',
+      lines: [{ text: sym.replace('US:', ''), color: dark ? 'rgba(178,181,190,0.07)' : 'rgba(19,23,34,0.06)', fontSize: 64, fontStyle: 'bold' }] })
+    const main = opt.line
+      ? chart.addSeries(LineSeries, { color: '#2962ff', lineWidth: 2, priceLineColor: '#2962ff' })
+      : chart.addSeries(CandlestickSeries, { upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN })
+    const vol = opt.vol ? chart.addSeries(HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false }) : null
+    if (vol) vol.priceScale().applyOptions({ scaleMargins: { top: 0.86, bottom: 0 } })
+    const line = (color, title) => chart.addSeries(LineSeries, { color, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, title })
+    const s = { vwap: opt.vwap ? line('#ff9800', 'VWAP') : null, e20: opt.ema20 ? line('#2962ff', 'EMA 20') : null, e50: opt.ema50 ? line('#e040fb', 'EMA 50') : null }
+    ref.current = { chart, main, vol, s, fitted: false }
+    chart.subscribeCrosshairMove((p) => {
+      const r = ref.current
+      if (!r || !p || !p.time || !r.byTime) { setLeg(null); return }
+      setLeg(r.byTime.get(p.time) || null)
+    })
+    return () => { chart.remove(); ref.current = null }
+  }, [sym, frame, opt.line, opt.vol, opt.vwap, opt.ema20, opt.ema50]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const r = chartRef.current
+    const r = ref.current
     if (!r || !d) return
     const off = d.offset || 0
-    const t = (b) => b.t + off                                    // show exchange local time on the axis
-    r.c.setData(d.bars.map((b) => ({ time: t(b), open: b.o, high: b.h, low: b.l, close: b.c })))
-    r.v.setData(d.bars.map((b) => ({ time: t(b), value: b.v, color: b.c >= b.o ? '#22c55e55' : '#ef444455' })))
-    r.w.setData(frame === '1D' ? [] : d.bars.map((b, i) => (ok(d.vwap[i]) ? { time: t(b), value: d.vwap[i] } : { time: t(b) })))
-    if (!r.fitted) { r.chart.timeScale().fitContent(); r.fitted = true }
-  }, [d, frame])
+    const T = (b) => b.t + off                                   // exchange local time on the axis
+    const daily = ['1D', '1W'].includes(frame)
+    r.main.setData(d.bars.map((b) => (opt.line ? { time: T(b), value: b.c } : { time: T(b), open: b.o, high: b.h, low: b.l, close: b.c })))
+    if (r.vol) r.vol.setData(d.bars.map((b) => ({ time: T(b), value: b.v, color: b.c >= b.o ? 'rgba(8,153,129,0.45)' : 'rgba(242,54,69,0.45)' })))
+    if (r.s.vwap) r.s.vwap.setData(daily ? [] : d.bars.map((b, i) => (ok(d.vwap[i]) ? { time: T(b), value: d.vwap[i] } : { time: T(b) })))
+    const closes = d.bars.map((b) => b.c)
+    ;[[r.s.e20, 20], [r.s.e50, 50]].forEach(([se, n]) => { if (se) { const e = ema(closes, n); se.setData(d.bars.map((b, i) => (e[i] === null ? { time: T(b) } : { time: T(b), value: e[i] }))) } })
+    r.byTime = new Map(d.bars.map((b, i) => [T(b), { ...b, prev: i ? d.bars[i - 1].c : (d.prev ?? b.o) }]))
+    if (!r.fitted) {
+      const n = d.bars.length
+      if (n > 160) r.chart.timeScale().setVisibleLogicalRange({ from: n - 150, to: n + 5 }); else r.chart.timeScale().fitContent()
+      r.fitted = true
+    }
+  }, [d, frame, opt.line, opt.vol, opt.vwap, opt.ema20, opt.ema50])
+  const last = d?.bars?.length ? { ...d.bars[d.bars.length - 1], prev: d.bars.length > 1 ? d.bars[d.bars.length - 2].c : d.prev } : null
+  const L = leg || last
+  const ch = L && ok(L.prev) ? L.c - L.prev : null
+  const exch = isUSs(sym) ? 'US' : isIdx(sym) ? 'NSE index' : 'NSE'
+  const f2 = (v) => (ok(v) ? num(v, 2) : '—')
   return (
-    <div className="term-chart-wrap">
-      <div ref={box} className="term-chart" />
-      <div className="small muted term-src">{err ? <span style={{ color: 'var(--bad)' }}>{err}</span> : d ? `${d.source} · ${d.yahoo}${frame !== '1D' ? ' · VWAP from these candles' : ''}` : 'Loading candles…'}</div>
+    <div className="tv">
+      <div className="tv-bar">
+        <div className="tv-frames">{Object.entries(FRAME_LABEL).map(([k, l]) => <button key={k} className={frame === k ? 'on' : ''} onClick={() => setFrame(k)}>{l}</button>)}</div>
+        <span className="tv-sep" />
+        <button className={`tv-btn ${!opt.line ? 'on' : ''}`} onClick={() => opt.line && flip('line')} title="Candles">▮▯</button>
+        <button className={`tv-btn ${opt.line ? 'on' : ''}`} onClick={() => !opt.line && flip('line')} title="Line">∿</button>
+        <span className="tv-sep" />
+        {[['vwap', 'VWAP'], ['ema20', 'EMA 20'], ['ema50', 'EMA 50'], ['vol', 'Volume']].map(([k, l]) => <button key={k} className={`tv-btn ${opt[k] ? 'on' : ''}`} onClick={() => flip(k)}>{l}</button>)}
+        <span className="grow" />
+        <button className="tv-btn" title="Fit all candles" onClick={() => ref.current?.chart.timeScale().fitContent()}>⤢ Fit</button>
+      </div>
+      <div className="tv-wrap">
+        <div ref={box} className="tv-chart" />
+        <div className="tv-legend">
+          <div className="t1"><b>{name || sym.replace('US:', '')}</b> · {FRAME_LABEL[frame]} · {exch}</div>
+          {L && <div className="t2">O<span style={{ color: tone(L.c - L.o) }}>{f2(L.o)}</span> H<span style={{ color: tone(L.c - L.o) }}>{f2(L.h)}</span> L<span style={{ color: tone(L.c - L.o) }}>{f2(L.l)}</span> C<span style={{ color: tone(L.c - L.o) }}>{f2(L.c)}</span>
+            {ok(ch) && <span style={{ color: tone(ch) }}> {signed(ch, 2)} ({signed((ch / L.prev) * 100, 2, '%')})</span>}
+            {ok(L.v) && opt.vol && <span className="muted"> · Vol {big(L.v)}</span>}</div>}
+        </div>
+      </div>
+      <div className="small muted term-src">{err ? <span style={{ color: 'var(--bad)' }}>{err}</span> : d ? `${d.source} · ${d.yahoo}${opt.vwap && !['1D', '1W'].includes(frame) ? ' · VWAP from these candles' : ''}` : 'Loading candles…'}</div>
     </div>
   )
 }
@@ -86,7 +139,7 @@ function QuotePanel({ sym, live, onHead }) {
     const y = d.yq
     const bars = y?.bars || []
     const hi = bars.length ? Math.max(...bars.map((b) => b.h)) : null, lo = bars.length ? Math.min(...bars.map((b) => b.l)) : null
-    const cur = y?.currency === 'USD' ? '$' : y?.currency === 'INR' ? '₹' : ''
+    const cur = isIdx(sym) ? '' : y?.currency === 'USD' ? '$' : y?.currency === 'INR' ? '₹' : ''
     return (
       <div className="card term-panel">
         <h3>Quote</h3>
@@ -237,7 +290,7 @@ function Alerts({ sym, head, alerts, setAlerts }) {
 export default function Terminal() {
   const [watch, setWatch] = useState(loadW)
   const [sym, setSym] = useState(() => loadW()[0] || 'NIFTY')
-  const [frame, setFrame] = useState('5m')
+  const [frame, setFrame] = useState(() => { try { return localStorage.getItem('eql_term_frame') || '5m' } catch { return '5m' } })
   const [tab, setTab] = useState('chain')
   const [head, setHead] = useState(null)
   const [wq, setWq] = useState({})
@@ -277,7 +330,6 @@ export default function Terminal() {
           <span className={`ipo-cd ${live ? 'warm' : ''}`}>{isUSs(sym) ? 'US · Yahoo' : nseOpen() ? '🟢 NSE open · live every 3 s' : 'NSE closed · last prices'}</span>
           {head?.time && <span className="small muted">as of {head.time} ({head.src})</span>}
         </div>
-        <div className="ipo-seg">{FRAMES.map((f) => <button key={f} className={frame === f ? 'on' : ''} onClick={() => setFrame(f)}>{f}</button>)}</div>
       </div>
       <div className="term-grid">
         <div className="card term-watch">
@@ -297,7 +349,7 @@ export default function Terminal() {
           })}
           <div className="small muted" style={{ marginTop: 6 }}>Watchlist prices: Yahoo, every 15 s</div>
         </div>
-        <div className="card term-center"><Chart sym={sym} frame={frame} /></div>
+        <div className="card term-center"><Chart sym={sym} frame={frame} setFrame={(f) => { setFrame(f); try { localStorage.setItem('eql_term_frame', f) } catch { /* ignore */ } }} name={head?.name} /></div>
         <QuotePanel sym={sym} live={live} onHead={setHead} />
       </div>
       <div className="card">

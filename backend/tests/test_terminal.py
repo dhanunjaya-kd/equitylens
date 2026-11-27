@@ -74,6 +74,26 @@ def test_yahoo_candles_and_vwap():
     assert T.yahoo_symbol("reliance") == "RELIANCE.NS" and T.yahoo_symbol("US:AAPL") == "AAPL" and T.yahoo_symbol("NIFTY") == "^NSEI"
 
 
+def test_real_nse_option_chain_v3():
+    import json
+    js = json.loads((Path(__file__).parent / "fixtures" / "term" / "nse_chain_v3.json").read_text(encoding="utf-8"))
+    c = T.parse_chain(js)                                    # NIFTY, saved by the app on 27 Nov 2026 09:29
+    assert (c["expiry"], c["spot"], c["time"], c["atm"]) == ("01-Dec-2026", 25820.3, "27-Nov-2026 09:29:00", 25800.0)
+    assert len(c["rows"]) == 149 and c["ok"] and c["pcr"] == 0.97 and c["max_pain"] == 25800.0
+    atm = next(r for r in c["rows"] if r["strike"] == 25800.0)
+    assert (atm["ce_ltp"], atm["pe_ltp"], atm["ce_oi"], atm["pe_oi"], atm["ce_iv"]) == (181.55, 166.8, 103873.0, 156127.0, 15.8)
+    assert len(c["expiries"]) == 18 and c["expiries"][0] == "01-Dec-2026"
+
+
+def test_four_hour_candles_from_hourly():
+    from datetime import datetime, timezone
+    t0 = int(datetime(2026, 11, 27, 3, 45, tzinfo=timezone.utc).timestamp())     # 09:15 IST
+    day1 = [{"t": t0 + i * 3600, "o": 10 + i, "h": 11 + i, "l": 9 + i, "c": 10.5 + i, "v": 100} for i in range(7)]
+    out = T.group_hours(day1, 19800)
+    assert len(out) == 2 and out[0]["o"] == 10 and out[0]["c"] == 13.5 and out[0]["h"] == 14 and out[0]["v"] == 400
+    assert out[1]["o"] == 14 and out[1]["v"] == 300
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

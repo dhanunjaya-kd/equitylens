@@ -8,9 +8,17 @@ const marketOpen = () => { const d = istNow(); const m = d.getHours() * 60 + d.g
 const crore = (v) => (ok(v) ? `${v < 0 ? '−' : '+'}₹${num(Math.abs(v))} Cr` : '—')
 const tone = (v) => (!ok(v) ? 'var(--muted)' : v > 0 ? 'var(--good)' : v < 0 ? 'var(--bad)' : 'var(--muted)')
 
-function TodayTile({ icon, k, children, onClick }) {
-  return <div className={`today-tile ${onClick ? 'link' : ''}`} onClick={onClick}><div className="k">{icon} {k}</div><div className="b">{children}</div></div>
+function TodayTile({ icon, tint, k, children, onClick, cls = '' }) {
+  return (
+    <div className={`today-tile ${onClick ? 'link' : ''} ${cls}`} onClick={onClick}>
+      <div className="hd"><span className={`ic ${tint}`}>{icon}</span><span className="k">{k}</span></div>
+      {children}
+    </div>
+  )
 }
+const Big = ({ children, c }) => <div className="big" style={c ? { color: c } : null}>{children}</div>
+const Sub = ({ children, c }) => <div className="sub" style={c ? { color: c } : null}>{children}</div>
+const dayLabel = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
 function TodayStrip({ mk }) {
   const [d, setD] = useState(null)
@@ -29,48 +37,58 @@ function TodayStrip({ mk }) {
   if (!d) return null
   const up = (moves || []).slice().sort((a, b) => b.ret['1D'] - a.ret['1D'])
   const pm = d.premarket, fd = d.fiidii, ip = d.ipo, rs = d.results
+  const open = marketOpen()
+  const callC = pm?.call === 'up' ? 'var(--good)' : pm?.call === 'down' ? 'var(--bad)' : 'var(--muted)'
+  const fmax = fd ? Math.max(1, Math.abs(fd.fii || 0), Math.abs(fd.dii || 0)) : 1
+  const Flow = ({ k, v }) => (
+    <div className="flow">
+      <div className="row between"><span>{k}</span><b style={{ color: tone(v) }}>{crore(v)}</b></div>
+      <div className="fbar"><i style={{ width: `${(Math.abs(v || 0) / fmax) * 100}%`, background: tone(v) }} /></div>
+    </div>
+  )
   return (
     <div className="today">
-      <div className="row between" style={{ marginBottom: 6 }}>
-        <b>📅 Today</b>
-        <span className="small muted">{marketOpen() ? '🟢 market open · updates every minute' : 'updates every 10 minutes'}{at ? ` · ${at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+      <div className="today-head">
+        <div><b>Today</b> <span className="muted">· {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
+        <span className="small muted"><i className={`dot ${open ? 'on' : ''}`} />{open ? 'Market open · updates every minute' : 'Market closed · updates every 10 minutes'}{at ? ` · ${at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
       </div>
-      <div className="today-grid">
+      <div className={`today-grid ${mk === 'US' ? 'us' : ''}`}>
         {mk !== 'US' && (
-          <TodayTile icon="🌅" k="NIFTY opening call" onClick={() => go('premarket')}>
-            {pm ? <b style={{ color: pm.call === 'up' ? 'var(--good)' : pm.call === 'down' ? 'var(--bad)' : 'var(--muted)' }}>{pm.label}</b> : <span className="muted">No call frozen for today yet</span>}
-            {pm?.built && <div className="small muted">made {pm.built}</div>}
+          <TodayTile icon="🌅" tint={pm?.call === 'down' ? 'red' : pm?.call === 'up' ? 'green' : 'grey'} k="NIFTY opening call" onClick={() => go('premarket')} cls={`hero ${pm?.call || ''}`}>
+            {pm ? <><Big c={callC}>{pm.call === 'up' ? '▲ ' : pm.call === 'down' ? '▼ ' : ''}{pm.label}</Big><Sub>Made {String(pm.built || '').slice(-5)} · see its track record</Sub></>
+              : <><Big c="var(--muted)">No call yet</Big><Sub>It is made between 08:20 and 09:15</Sub></>}
           </TodayTile>
         )}
         {mk !== 'US' && fd && (
-          <TodayTile icon="🏦" k={`FII / DII · ${new Date(fd.date + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`} onClick={() => go('fiidii')}>
-            <div>FII <b style={{ color: tone(fd.fii) }}>{crore(fd.fii)}</b></div><div>DII <b style={{ color: tone(fd.dii) }}>{crore(fd.dii)}</b></div>
+          <TodayTile icon="🏦" tint="blue" k={`FII / DII · ${dayLabel(fd.date)}`} onClick={() => go('fiidii')}>
+            <Flow k="FII" v={fd.fii} /><Flow k="DII" v={fd.dii} />
           </TodayTile>
         )}
         {mk !== 'US' && ip && (
-          <TodayTile icon="🚀" k="IPOs" onClick={() => go('ipo')}>
-            <div><b>{ip.open}</b> open ({ip.open_main} mainboard)</div>
-            {ip.closing_today.length > 0 ? <div className="small" style={{ color: 'var(--warn)' }}>Closing today: {ip.closing_today.map((x) => `${x.symbol}${ok(x.times) ? ` ${num(x.times, 2)}x` : ''}`).join(', ')}</div>
-              : ip.opening_next[0] ? <div className="small muted">Next: {ip.opening_next[0].symbol} opens {new Date(ip.opening_next[0].start + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div> : null}
+          <TodayTile icon="🚀" tint="amber" k="IPOs open" onClick={() => go('ipo')}>
+            <Big>{ip.open} <small>· {ip.open_main} mainboard</small></Big>
+            {ip.closing_today.length > 0 ? <Sub c="var(--warn)">Closing today: {ip.closing_today.map((x) => `${x.symbol}${ok(x.times) ? ` ${num(x.times, 2)}x` : ''}`).join(', ')}</Sub>
+              : ip.opening_next[0] ? <Sub>Next: {ip.opening_next[0].symbol} opens {dayLabel(ip.opening_next[0].start)}</Sub> : <Sub>None closing today</Sub>}
           </TodayTile>
         )}
         {mk !== 'US' && rs && (
-          <TodayTile icon="📊" k="Results today" onClick={() => go('calendar')}>
-            <div><b>{rs.count}</b> {rs.count === 1 ? 'company' : 'companies'}</div>
-            {rs.mine.length > 0 ? <div className="small" style={{ color: 'var(--accent)' }}>★ yours: {rs.mine.join(', ')}</div>
-              : rs.top.length > 0 ? <div className="small muted">{rs.top.slice(0, 3).map((x) => x.symbol).join(', ')}</div> : null}
+          <TodayTile icon="📊" tint="violet" k="Results today" onClick={() => go('calendar')}>
+            <Big>{rs.count}</Big>
+            {rs.mine.length > 0 ? <Sub c="var(--accent)">★ Yours: {rs.mine.join(', ')}</Sub>
+              : <Sub>{rs.top.length ? rs.top.slice(0, 3).map((x) => x.symbol).join(', ') : 'No board meetings for results today'}</Sub>}
           </TodayTile>
         )}
         {up.length > 0 && (
-          <TodayTile icon="⭐" k="Watchlist today" onClick={() => go('watch')}>
+          <TodayTile icon="⭐" tint="amber" k="Your watchlist" onClick={() => go('watch')}>
             {[up[0], up.length > 1 ? up[up.length - 1] : null].filter(Boolean).map((r) => (
-              <div key={r.symbol} className="row between"><span>{ticker(r.symbol)}</span><b style={{ color: tone(r.ret['1D']) }}>{signed(r.ret['1D'], 1, '%')}</b></div>
+              <div key={r.symbol} className="row between mv"><span>{ticker(r.symbol)}</span><b style={{ color: tone(r.ret['1D']) }}>{signed(r.ret['1D'], 1, '%')}</b></div>
             ))}
-            <div className="small muted">{up.filter((r) => r.ret['1D'] > 0).length} up · {up.filter((r) => r.ret['1D'] < 0).length} down</div>
+            <Sub>{up.filter((r) => r.ret['1D'] > 0).length} up · {up.filter((r) => r.ret['1D'] < 0).length} down</Sub>
           </TodayTile>
         )}
-        <TodayTile icon="🔴" k="Breaking" onClick={() => go('news')}>
-          {d.breaking?.length ? d.breaking.slice(0, 2).map((b, i) => <div key={i} className="small today-news">{b.title}</div>) : <span className="muted small">Nothing market-wide right now</span>}
+        <TodayTile icon="⚠️" tint="red" k="Breaking" onClick={() => go('news')} cls="news">
+          {d.breaking?.length ? <><div className="headline">{d.breaking[0].title}</div>{d.breaking[0].sources?.[0]?.name && <Sub>{d.breaking[0].sources.map((x) => x.name).slice(0, 2).join(' · ')}</Sub>}</>
+            : <Sub>Nothing market-wide right now</Sub>}
         </TodayTile>
       </div>
     </div>

@@ -781,14 +781,34 @@ a.nw-title:hover { color: var(--accent); }
 .top-ic.av { border-radius: 50%; color: var(--accent); font-weight: 800; font-size: 15px; background: var(--card2); }
 
 /* Home: Today strip */
-.today { margin: 6px 0 4px; }
-.today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
-.today-tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.today { margin: 8px 0 6px; }
+.today-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: 15px; }
+.today-head .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: 1px; }
+.today-head .dot.on { background: var(--good); box-shadow: 0 0 0 3px rgba(34, 197, 94, .18); }
+.today-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(5, minmax(0, 1fr)); gap: 10px; }
+.today-grid.us { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.today-tile { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; min-width: 0; transition: border-color .15s, transform .15s; }
 .today-tile.link { cursor: pointer; }
-.today-tile.link:hover { border-color: var(--accent); }
-.today-tile .k { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
-.today-tile .b { font-size: 13.5px; line-height: 1.45; }
-.today-news { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 3px; }
+.today-tile.link:hover { border-color: var(--accent); transform: translateY(-1px); }
+.today-tile .hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.today-tile .ic { width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; flex: none; }
+.today-tile .ic.green { background: rgba(34, 197, 94, .14); } .today-tile .ic.red { background: rgba(239, 68, 68, .14); }
+.today-tile .ic.blue { background: rgba(56, 189, 248, .14); } .today-tile .ic.amber { background: rgba(245, 158, 11, .15); }
+.today-tile .ic.violet { background: rgba(167, 139, 250, .16); } .today-tile .ic.grey { background: var(--card2); }
+.today-tile .k { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.today-tile .big { font-size: 22px; font-weight: 800; line-height: 1.15; }
+.today-tile .big small { font-size: 12.5px; font-weight: 400; color: var(--muted); }
+.today-tile .sub { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.35; }
+.today-tile.hero.up { border-color: rgba(34, 197, 94, .55); } .today-tile.hero.down { border-color: rgba(239, 68, 68, .55); }
+.today-tile .flow { font-size: 13px; margin-bottom: 6px; }
+.today-tile .flow b { white-space: nowrap; margin-left: 6px; }
+.today-tile .fbar { height: 6px; border-radius: 3px; background: var(--card2); margin-top: 3px; overflow: hidden; }
+.today-tile .fbar i { display: block; height: 100%; border-radius: 3px; opacity: .85; }
+.today-tile .mv { font-size: 13.5px; padding: 1px 0; }
+.today-tile.news { border-left: 3px solid var(--bad); }
+.today-tile .headline { font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 1400px) { .today-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .today-grid, .today-grid.us { grid-template-columns: repeat(2, minmax(0, 1fr)); } .today-tile.hero { grid-column: 1 / -1; } .today-tile .big { font-size: 19px; } }
 .auto-tbl td { vertical-align: top; }
 
 /* Live terminal */
@@ -829,3 +849,22 @@ a.nw-title:hover { color: var(--accent); }
 .term-oc .oi span { position: relative; }
 @media (max-width: 1250px) { .term-grid { grid-template-columns: 200px minmax(0, 1fr); } .term-grid > .term-panel { grid-column: 1 / -1; } }
 @media (max-width: 760px) { .term-grid { grid-template-columns: minmax(0, 1fr); } .term-watch { max-height: 220px; } .term-chart { height: 340px; } }
+
+/* Terminal chart, TradingView-style */
+.term-center { padding: 0; overflow: hidden; }
+.tv { display: flex; flex-direction: column; }
+.tv-bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tv-frames { display: flex; gap: 1px; }
+.tv-frames button, .tv-btn { background: none; border: 0; color: var(--muted); font-size: 13px; padding: 5px 8px; border-radius: 6px; }
+.tv-frames button:hover, .tv-btn:hover { background: var(--card2); color: var(--text); }
+.tv-frames button.on { color: var(--accent); background: rgba(45, 212, 191, .12); font-weight: 700; }
+.tv-btn.on { color: var(--text); background: var(--card2); }
+.tv-sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+.tv-wrap { position: relative; }
+.tv-chart { height: 560px; width: 100%; }
+.tv-legend { position: absolute; top: 8px; left: 10px; z-index: 2; pointer-events: none; font-size: 12.5px; line-height: 1.55; }
+.tv-legend .t1 { font-size: 14px; color: var(--text); }
+.tv-legend .t2 { font-variant-numeric: tabular-nums; color: var(--muted); }
+.tv-legend .t2 span { margin: 0 6px 0 2px; }
+.term-center .term-src { padding: 6px 10px; border-top: 1px solid var(--line); }
+@media (max-width: 760px) { .tv-chart { height: 380px; } .tv-legend .t2 { font-size: 11px; } }
