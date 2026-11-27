@@ -32,6 +32,7 @@ import SmartMoney from './pages/SmartMoney'
 import FiiDii from './pages/FiiDii'
 import News from './pages/News'
 import IPO from './pages/IPO'
+import Terminal from './pages/Terminal'
 import Guide from './pages/Guide'
 import Portfolio from './pages/Portfolio'
 import { Settings } from './pages/AI'
@@ -82,7 +83,7 @@ function App() {
           {desk && <TopActions page={route.page} theme={theme} onTheme={flipTheme} />}
         </div>
       </header>
-      <main className="wrap" key={market + theme}>
+      <main className={route.page === 'terminal' ? 'wrap wrap-wide' : 'wrap'} key={market + theme}>
         <BreakingBar market={route.page === 'stock' ? (isUS(route.symbol) ? 'US' : 'IN') : market} />
         {route.page !== 'settings' && <IndexStrip market={route.page === 'stock' ? (isUS(route.symbol) ? 'US' : 'IN') : market} />}
         {route.page === 'home' && <Home />}
@@ -99,6 +100,7 @@ function App() {
         {route.page === 'fiidii' && <FiiDii tab={route.tab} />}
         {route.page === 'news' && <News />}
         {route.page === 'ipo' && <IPO tab={route.tab} />}
+        {route.page === 'terminal' && <Terminal />}
         {route.page === 'guide' && <Guide />}
         {route.page === 'portfolio' && <Portfolio />}
         {route.page === 'settings' && <Settings />}

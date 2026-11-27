@@ -431,6 +431,33 @@ def automation_set(task: str, on: bool = True):
         raise HTTPException(404, "No such task")
 
 
+@app.get("/api/term/stock/{symbol}")
+def term_stock(symbol: str):
+    from . import terminal
+    return terminal.stock(symbol)
+
+
+@app.get("/api/term/fno/{symbol}")
+def term_fno(symbol: str, expiry: Optional[str] = None):
+    from . import terminal
+    return terminal.fno(symbol, expiry)
+
+
+@app.get("/api/term/candles/{symbol}")
+def term_candles(symbol: str, frame: str = "5m"):
+    from . import terminal
+    try:
+        return terminal.candles(symbol, frame)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"Prices not available: {e}")
+
+
+@app.get("/api/term/watch")
+def term_watch(symbols: str = ""):
+    from . import terminal
+    return terminal.watch(symbols.split(","))
+
+
 @app.get("/api/today")
 def today_get(market: str = "IN", symbols: str = ""):
     from . import today

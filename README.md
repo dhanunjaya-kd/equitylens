@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-220_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-225_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -54,6 +54,7 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 
 | | Added | Where |
 |:-:|---|---|
+| 📈 | **Live terminal** (a screen, no orders): watchlist, intraday candles with VWAP, NSE quote, circuit band, 5-level market depth and delivery %, option chain by expiry with OI bars, PCR and max pain, futures with basis, price alerts; NSE stocks, NIFTY / BANKNIFTY / FINNIFTY / MIDCPNIFTY, stock F&O and US stocks | Sidebar → Terminal |
 | 🔁 | **Automation**: nightly Top Picks scan, IPO lists every 15 minutes, data checks after each month end (much faster repeat runs on all CPU cores); one list of everything that runs by itself, with on/off switches | Settings → Automation |
 | 📅 | **Today strip** on Home: NIFTY opening call, FII / DII, IPOs closing today, results today (yours first), watchlist movers, breaking — updates itself every minute in market hours | Home |
 | 🚀 | **IPO research (India, phase 1)**: open, upcoming and recently listed NSE issues, checked category bids, listing moves, SEBI draft filings and a source check | Sidebar → IPO research |
@@ -733,7 +734,7 @@ cd backend
 python run_tests.py
 ```
 
-220 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+225 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -758,6 +759,7 @@ python run_tests.py
 | `test_ipo.py` | NSE's real open / upcoming / past answers and one SME issue's details, SEBI's real DRHP page: SME vs mainboard, issue size in ₹ only when confirmed as shares, times only when it equals bids ÷ shares offered, categories and bids-by-price add up to NSE's total, fresh + OFS adds up, NSE's 'issue price' outside its own range rejected, bonds and old issues re-listed later dropped, listing moves on the listing date only |
 | `test_btrun.py` | Fast data checks: a repeat run that reuses closed months gives exactly the same rows as a full run (level test and entry backtest), changed old prices / P/E / rules throw the saved months away, the price archive keeps its first day and restarts on a split, parallel run = one-by-one run, checks start by themselves after a month end outside market hours, once a day |
 | `test_automation.py` | Nightly scan and IPO refresh schedules, one scan at a time and never during the entry backtest, on/off switches, every task listed, the Today strip uses saved data only |
+| `test_terminal.py` | Terminal readers: change = price − previous close, market depth in order (best bid below best ask), option chain by expiry, PCR and max pain from OI, futures basis, Yahoo intraday candles and session VWAP |
 | `test_api.py` | Every endpoint, including error paths |
 
 ---
@@ -794,6 +796,7 @@ equitylens/
 │   │   ├── nextday.py        08:45 check (and its test), day map, evening preview
 │   │   ├── pricemap.py       price map: zones and hold rates, fall cases, sector check, turn signals
 │   │   ├── jobs.py           runs the long backtests from the app, with progress, and by themselves after each month end
+│   │   ├── terminal.py       live terminal: NSE quote, depth, option chain, futures; Yahoo intraday candles
 │   │   ├── automation.py     nightly Top Picks scan, IPO refresh, one list of every background task (Settings → Automation)
 │   │   ├── today.py          Home 'Today' strip from saved data
 │   │   ├── btrun.py          fast data checks: fixed-start price archive, saved closed months, parallel downloads and CPU workers
@@ -839,6 +842,7 @@ equitylens/
 | `GET /api/heatmap?market=&tf=&universe=` · `GET /api/heatmap/sector?market=&sector=` | Heatmap data, and one sector's index |
 | `GET /api/pricemap/{symbol}?refresh=` · `POST /api/ai/pricemap/{symbol}` | Price map for one stock, AI research on it |
 | `GET /api/fiidii?market=IN\|US` · `GET /api/fiidii/stocks?quarter=` | FII / DII page data · stocks institutions added or cut |
+| `GET /api/term/stock/{symbol}` · `/api/term/fno/{symbol}?expiry=` · `/api/term/candles/{symbol}?frame=` · `/api/term/watch?symbols=` | Terminal: NSE quote + depth · option chain + futures · intraday candles · watchlist prices |
 | `GET /api/automation` · `POST /api/automation/{task}?on=` · `GET /api/today?market=&symbols=` | Everything that runs by itself, with switches (owner only) · Home 'Today' strip |
 | `GET /api/ipo?market=IN&refresh=` · `GET /api/ipo/detail/{symbol}?series=` | IPO page (lists + source check) · one issue's category bids, facts and documents |
 | `GET /api/news?market=` · `GET /api/news/breaking?market=` | News page · breaking items only |
