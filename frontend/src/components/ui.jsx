@@ -220,15 +220,39 @@ export function SideNav({ page, market, onMarket, theme, onTheme }) {
     ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare], ['guide', 'guide', 'Beginner guide', I.book]]
     .filter(([k]) => market !== 'US' || !IN_ONLY.includes(k))
     .map(([k, path, label, icon]) => [k, path, market === 'US' && k === 'fiidii' ? 'Institutions' : label, icon])
+  // Icons only until the mouse rests on the panel; then it opens over the page. The pin keeps it open (remembered).
+  const [pinned, setPinned] = useState(() => { try { return localStorage.getItem('eql_nav_pin') === '1' } catch { return false } })
+  const [hover, setHover] = useState(false)
+  const timer = useRef(null)
+  useEffect(() => {
+    document.body.classList.toggle('nav-pinned', pinned)
+    try { localStorage.setItem('eql_nav_pin', pinned ? '1' : '0') } catch { /* ignore */ }
+    const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 200)   // charts re-measure the new page width
+    return () => clearTimeout(t)
+  }, [pinned])
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const enter = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setHover(true), 150) }
+  const leave = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setHover(false), 120) }
+  const nav = (path) => { go(path); if (!pinned) { clearTimeout(timer.current); setHover(false) } }
+  const wide = pinned || hover
+  const other = market === 'IN' ? 'US' : 'IN'
   return (
-    <aside className="sidenav">
-      <div className="brand side" onClick={() => go('')}><img src="/icon.svg" alt="" />Equity<span>Lens</span></div>
-      <div style={{ margin: '4px 6px 18px' }}><MarketToggle market={market} onChange={onMarket} /></div>
+    <aside className={`sidenav ${wide ? 'wide' : 'slim'} ${pinned ? 'pinned' : hover ? 'over' : ''}`} onMouseEnter={enter} onMouseLeave={leave}>
+      <div className="brand side" onClick={() => nav('')} title="EquityLens"><img src="/icon.svg" alt="" /><i className="sn-label sn-brand">Equity<span>Lens</span></i></div>
+      <button className={`sn-pin ${pinned ? 'on' : ''}`} onClick={() => setPinned(!pinned)} title={pinned ? 'Unpin: show icons only' : 'Pin: keep the menu open'} aria-label={pinned ? 'Unpin menu' : 'Pin menu open'}>
+        <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z" /><path d="M12 14v6" /></g></svg>
+      </button>
+      <div className="sn-mkt"><MarketToggle market={market} onChange={onMarket} /></div>
+      <button className="sn-mkt-mini" onClick={() => onMarket(other)} title={`${market === 'IN' ? 'Indian' : 'US'} market. Click for ${other === 'IN' ? 'Indian' : 'US'}`}>
+        <span className="fl">{market === 'IN' ? '🇮🇳' : '🇺🇸'}</span>{market === 'IN' ? 'IN' : 'US'}
+      </button>
       {items.map(([k, path, label, icon]) => (
-        <button key={k} className={`sn ${page === k ? 'on' : ''}`} onClick={() => go(path)}><svg viewBox="0 0 24 24">{icon}</svg>{label}</button>
+        <button key={k} className={`sn ${page === k ? 'on' : ''}`} onClick={() => nav(path)} title={wide ? undefined : label} aria-label={label}>
+          <svg viewBox="0 0 24 24">{icon}</svg><span className="sn-label">{label}</span>
+        </button>
       ))}
       <div className="grow" />
-      <div className="small muted" style={{ padding: '10px 12px 0', lineHeight: 1.5 }}>Research aid, not investment advice.</div>
+      <div className="small muted sn-foot">Research aid, not investment advice.</div>
     </aside>
   )
 }
