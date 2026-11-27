@@ -234,7 +234,8 @@ export const applyTheme = (t) => {
 export const logoUrl = (sym, name = '') => `/api/logo/${encodeURIComponent(sym)}${name ? `?name=${encodeURIComponent(name)}` : ''}`
 
 // 🎯 F&O-only switch (India): one setting shared by every list page
-export const getFno = () => readLS('eql_fno', '0') === '1'
+// NSE F&O exists only in the Indian view: in the US view the switch is hidden, so it must not filter anything there
+export const getFno = () => getMarket() === 'IN' && readLS('eql_fno', '0') === '1'
 export const setFnoLS = (v) => { try { localStorage.setItem('eql_fno', v ? '1' : '0') } catch { /* ignore */ } ; window.dispatchEvent(new Event('eql-fno')) }
 
 // 🏛️ Stock list (India): NIFTY 50 · NIFTY 100 · NIFTY 500 · All NSE — shared by every list page

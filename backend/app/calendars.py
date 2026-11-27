@@ -37,6 +37,21 @@ class CalendarError(Exception):
     pass
 
 
+
+def us_eastern_now() -> datetime:
+    """New York time without the system time-zone database (Windows Python often has none):
+    daylight time from the 2nd Sunday of March 02:00 to the 1st Sunday of November 02:00 (US rule since 2007)."""
+    utc = datetime.now(timezone.utc)
+    y = utc.year
+    def sunday(month, nth):
+        d = datetime(y, month, 1, tzinfo=timezone.utc)
+        d += timedelta(days=(6 - d.weekday()) % 7)
+        return d + timedelta(days=7 * (nth - 1))
+    start = sunday(3, 2) + timedelta(hours=7)    # 02:00 EST = 07:00 UTC
+    end = sunday(11, 1) + timedelta(hours=6)     # 02:00 EDT = 06:00 UTC
+    off = -4 if start <= utc < end else -5
+    return utc.astimezone(timezone(timedelta(hours=off)))
+
 def _pace(gap: float = 0.4) -> None:
     with _lock:
         w = gap - (time.time() - _last[0])

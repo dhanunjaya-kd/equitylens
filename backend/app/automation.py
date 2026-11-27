@@ -1,7 +1,8 @@
 """Automation: every background task in one place (Settings -> Automation), plus the ones added here:
 
   * Top Picks scan, India: every weekday evening from 19:30 IST (after the day's prices and filings are out)
-  * Top Picks scan, US:    Tuesday-Saturday from 07:00 IST (after the US close); off by default
+  * Top Picks scan, US:    Tuesday-Saturday from 07:00 IST (after the US close); on by default since settings v2
+                           (it was off before, which left the US Top Picks list nearly empty)
   * IPO lists:             every 15 minutes, weekdays 09:00-17:30 IST, so the Home page and the IPO page open instantly
 
 A scan reuses a company's saved financials when they are under SCAN_REUSE_HOURS old, so each nightly scan only
@@ -19,7 +20,8 @@ from . import calendars, config, store
 
 IST = calendars.IST
 KEY = "AUTO::tasks"
-TOGGLES = {"scan_in": True, "scan_us": False, "ipo": True}
+TOGGLES = {"scan_in": True, "scan_us": True, "ipo": True}
+VERSION = 2
 LOOP_S = 5 * 60
 _started = [False]
 
@@ -27,7 +29,11 @@ _started = [False]
 def settings() -> dict:
     hit = store.get_company(KEY)
     s = hit[1] if hit else {}
-    return {"enabled": {k: s.get("enabled", {}).get(k, v) for k, v in TOGGLES.items()}, "last": s.get("last", {})}
+    out = {"v": VERSION, "enabled": {k: s.get("enabled", {}).get(k, v) for k, v in TOGGLES.items()}, "last": s.get("last", {})}
+    if hit and s.get("v", 1) < 2:          # v1 saved the old default (US scan off) as if it were a choice: turn it on once
+        out["enabled"]["scan_us"] = True
+        _save(out)
+    return out
 
 
 def _save(s: dict) -> None:
@@ -88,11 +94,12 @@ def tick(now: Optional[datetime] = None, ts: Optional[float] = None) -> list[str
 
 
 def _ipo_refresh() -> None:
-    try:
-        from . import ipo
-        ipo.india(refresh=True)
-    except Exception:  # noqa: BLE001
-        pass
+    from . import ipo
+    for fn in (lambda: ipo.india(refresh=True), lambda: ipo.us()):    # US months keep their own 30-min / 6-hour cache
+        try:
+            fn()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _loop() -> None:
@@ -132,7 +139,7 @@ def status() -> dict:
          "enabled": None, "last": _ts(pm_keys[0]) if pm_keys else None},
         {"id": "fiidii", "name": "FII / DII figures", "schedule": "weekdays from 18:00, every 30 minutes", "enabled": None,
          "last": _ts("FIIDII::CASH")},
-        {"id": "ipo", "name": "IPO lists (NSE, SEBI)", "schedule": "every 15 minutes, weekdays 09:00–17:30", "enabled": s["enabled"]["ipo"],
+        {"id": "ipo", "name": "IPO lists (NSE, SEBI, Nasdaq)", "schedule": "every 15 minutes, weekdays 09:00–17:30", "enabled": s["enabled"]["ipo"],
          "last": _ts("IPO::current::v2")},
         {"id": "scan_in", "name": "Top Picks scan · NIFTY 500", "schedule": "weekday evenings from 19:30 (financials older than "
          f"{config.SCAN_REUSE_HOURS:g} hours are downloaded again)", "enabled": s["enabled"]["scan_in"],

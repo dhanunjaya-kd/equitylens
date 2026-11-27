@@ -676,8 +676,7 @@ def us_listing_move(bars: list[dict], priced: str, price: float):
 def us(refresh: bool = False) -> dict:
     if config.DEMO:
         return {"market": "US", "upcoming": [], "priced": [], "filed": [], "withdrawn": [], "sources": [], "stats": listed_stats([]), "demo": True}
-    from zoneinfo import ZoneInfo
-    today = datetime.now(ZoneInfo("America/New_York")).date()
+    today = calendars.us_eastern_now().date()
     months, sources = _us_months(today), []
     live = set(months[-2:])     # this month and next change often; older months are settled
     merged = {"priced": {}, "upcoming": {}, "filed": {}, "withdrawn": {}}

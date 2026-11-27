@@ -41,10 +41,18 @@ def test_tick_starts_one_scan_and_waits_for_the_entry_backtest():
         automation.set_enabled("scan_in", False)
         assert automation.tick(at(2026, 11, 30, 20), 4.0) == []
         assert automation.settings()["enabled"]["scan_in"] is False
-        assert automation.tick(at(2026, 11, 30, 10), 5000.0) == ["ipo"]
+        assert automation.tick(at(2026, 11, 30, 10), 5000.0) == ["ipo"]            # Monday morning: no US scan
+        assert automation.tick(at(2026, 12, 1, 8), 9000.0) == ["scan_us"] and started == ["IN", "US"]
     finally:
         service.start_scan, jobs.status, automation._ipo_refresh = real
         config.DEMO = demo
+
+
+def test_old_settings_turn_the_us_scan_on_once():
+    store.put_company(automation.KEY, {"enabled": {"scan_in": True, "scan_us": False, "ipo": True}, "last": {}})
+    assert automation.settings()["enabled"]["scan_us"] is True                   # v1 default saved as a choice
+    automation.set_enabled("scan_us", False)
+    assert automation.settings()["enabled"]["scan_us"] is False                  # a real choice after that stays
 
 
 def test_status_lists_every_task():
