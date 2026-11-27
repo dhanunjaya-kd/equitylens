@@ -770,3 +770,12 @@ a.nw-title:hover { color: var(--accent); }
   .ipo-facts { grid-template-columns: 1fr; }
   .ipo-kpi .v { font-size: 18px; }
 }
+
+/* desktop top-right actions: theme, account, settings */
+.top-actions { display: flex; gap: 8px; align-items: center; margin-left: 6px; }
+.top-ic { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.top-ic svg { width: 19px; height: 19px; }
+.top-ic:hover { color: var(--text); border-color: var(--accent); }
+.top-ic.on { color: var(--accent); border-color: var(--accent); background: rgba(45, 212, 191, .12); }
+.top-ic.av { border-radius: 50%; color: var(--accent); font-weight: 800; font-size: 15px; background: var(--card2); }

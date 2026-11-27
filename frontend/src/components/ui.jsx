@@ -183,6 +183,24 @@ export function MarketToggle({ market, onChange }) {
   )
 }
 
+// Desktop top-right: theme, account, settings (moved out of the side panel)
+export function TopActions({ page, theme, onTheme }) {
+  const u = me()
+  return (
+    <div className="top-actions">
+      <button className="top-ic" title={theme === 'dark' ? 'Light mode' : 'Dark mode'} aria-label={theme === 'dark' ? 'Light mode' : 'Dark mode'} onClick={onTheme}>
+        <svg viewBox="0 0 24 24">{theme === 'dark'
+          ? <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></g>
+          : <path fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />}</svg>
+      </button>
+      {u && <button className={`top-ic av ${page === 'account' ? 'on' : ''}`} title={u.name || u.email || 'My account'} aria-label="My account" onClick={() => go('account')}>{(u.name || u.email || '?').slice(0, 1).toUpperCase()}</button>}
+      <button className={`top-ic ${page === 'settings' ? 'on' : ''}`} title="Settings" aria-label="Settings" onClick={() => go('settings')}>
+        <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></g></svg>
+      </button>
+    </div>
+  )
+}
+
 export function SideNav({ page, market, onMarket, theme, onTheme }) {
   const items = [['home', '', 'Search', I.search], ['premarket', 'premarket', 'Pre-market', I.sun], ['movers', 'movers', 'Market Movers', I.fire], ['news', 'news', 'News', I.news], ['ipo', 'ipo', 'IPO research', I.rocket], ['heatmap', 'heatmap', 'Heatmap', I.grid], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['fiidii', 'fiidii', 'FII / DII', I.bank], ['portfolio', 'portfolio', 'My Portfolio', I.brief], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
     ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare], ['guide', 'guide', 'Beginner guide', I.book]]
@@ -194,9 +212,6 @@ export function SideNav({ page, market, onMarket, theme, onTheme }) {
         <button key={k} className={`sn ${page === k ? 'on' : ''}`} onClick={() => go(path)}><svg viewBox="0 0 24 24">{icon}</svg>{label}</button>
       ))}
       <div className="grow" />
-      <button className="sn" onClick={onTheme}><span style={{ width: 22, textAlign: 'center' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
-      {me() && <button className={`sn ${page === 'account' ? 'on' : ''}`} onClick={() => go('account')}><span className="avatar sm" aria-hidden="true">{(me().name || me().email || '?').slice(0, 1).toUpperCase()}</span>{me().name || 'My account'}</button>}
-      <button className={`sn ${page === 'settings' ? 'on' : ''}`} onClick={() => go('settings')}><span style={{ width: 22, textAlign: 'center' }}>⚙️</span>Settings</button>
       <div className="small muted" style={{ padding: '10px 12px 0', lineHeight: 1.5 }}>Research aid, not investment advice.</div>
     </aside>
   )

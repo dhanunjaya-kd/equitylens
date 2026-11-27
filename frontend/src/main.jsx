@@ -13,7 +13,7 @@ if (/^index-[\w-]+\.js$/.test(LOADED)) {
 import './styles.css'
 import { polyfillCountryFlagEmojis } from 'country-flag-emoji-polyfill'
 import flagFont from 'country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url'
-import { BottomNav, MarketToggle, SearchBox, SideNav } from './components/ui'
+import { BottomNav, MarketToggle, SearchBox, SideNav, TopActions } from './components/ui'
 import { applyTheme, getMarket, getTheme, go, isDesktop, isUS, marketCurrency, parseHash, setCurrency, setMarketLS, me } from './util'
 import Home from './pages/Home'
 import Stock from './pages/Stock'
@@ -79,6 +79,7 @@ function App() {
           {!desk && me() && <button className="avatar-btn" title="My account" aria-label="My account" onClick={() => go('account')}>{(me().name || me().email || '?').slice(0, 1).toUpperCase()}</button>}
           {!desk && <button className="star" title="Settings" onClick={() => go('settings')}>⚙️</button>}
           {desk && <div className="small muted" style={{ whiteSpace: 'nowrap' }}>{market === 'US' ? '🇺🇸 US market · $' : '🇮🇳 Indian market · ₹'}</div>}
+          {desk && <TopActions page={route.page} theme={theme} onTheme={flipTheme} />}
         </div>
       </header>
       <main className="wrap" key={market + theme}>
