@@ -34,6 +34,9 @@ export const FIELDS = [
   ['surveillance', 'Under NSE surveillance', 'Trend & money (live)', 'bool'],
 ]
 const F = Object.fromEntries(FIELDS.map(([k, l, g, u]) => [k, { label: l, group: g, unit: u }]))
+// fields that only exist for NSE stocks (promoters, pledges, delivery, F&O, NSE surveillance): not offered in the US view
+const IN_ONLY_F = new Set(['promoter', 'promoter_change', 'inst_change', 'pledged', 'fno', 'dp', 'deliv_x', 'surveillance'])
+const fieldsFor = (mk) => FIELDS.filter((f) => mk !== 'US' || !IN_ONLY_F.has(f[0])).map((f) => (mk === 'US' && f[0] === 'market_cap' ? [f[0], 'Market cap ($ M)', f[2], f[3]] : f))
 
 // ⭐ EquityLens signature scans: each combines the business, the price trend and the money flow
 export const SIGNATURE = [
@@ -161,8 +164,8 @@ export default function Screener() {
               const k = e.target.value
               setRules(rules.map((x, j) => (j === i ? (F[k].unit === 'bool' ? [k, '=', 1] : [k, x[1] === '=' ? '>=' : x[1], x[2]]) : x)))
             }}>
-              {[...new Set(FIELDS.map((f) => f[2]))].map((g) => (
-                <optgroup key={g} label={g}>{FIELDS.filter((f) => f[2] === g).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</optgroup>
+              {[...new Set(fieldsFor(mk).map((f) => f[2]))].map((g) => (
+                <optgroup key={g} label={g}>{fieldsFor(mk).filter((f) => f[2] === g).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</optgroup>
               ))}
             </select>
             {F[r[0]]?.unit === 'bool' ? (
@@ -187,7 +190,7 @@ export default function Screener() {
         <div className="row between" style={{ padding: '12px 14px' }}>
           <b>{rows ? `${res.length} match${res.length === 1 ? '' : 'es'}` : 'Loading…'} <span className="small muted">of {base.length}{mk === 'IN' ? ` scanned ${univ === 'ALL' ? '' : univLabel(univ) + ' '}${fno ? 'F&O ' : ''}stocks` : ''}</span></b>
           <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ maxWidth: 190 }}>
-            {FIELDS.filter((f) => f[3] !== 'bool').map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}
+            {fieldsFor(mk).filter((f) => f[3] !== 'bool').map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}
           </select>
         </div>
         {stale && <div className="small t-warn" style={{ padding: '0 14px 10px' }}>Most stocks were scanned before forensic and valuation fields existed. Run a new scan on Top Picks to fill them.</div>}

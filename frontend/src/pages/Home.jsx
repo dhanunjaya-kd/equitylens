@@ -4,7 +4,11 @@ import { api, flag, getMarket, go, pct, recent, ticker, watchlist, signed, num, 
 
 // 'Today' strip: the day's key facts from data the app already keeps; refreshes itself (every minute in market hours).
 const istNow = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-const marketOpen = () => { const d = istNow(); const m = d.getHours() * 60 + d.getMinutes(); return d.getDay() > 0 && d.getDay() < 6 && m >= 555 && m <= 930 }
+const inOpen = (d, a, b) => { const m = d.getHours() * 60 + d.getMinutes(); return d.getDay() > 0 && d.getDay() < 6 && m >= a && m <= b }
+// NSE 09:15–15:30 IST · NYSE/Nasdaq 09:30–16:00 New York time (DST handled by the browser's own time-zone data)
+const marketOpen = (mk = 'IN') => (mk === 'US' ? inOpen(new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })), 570, 960) : inOpen(istNow(), 555, 930))
+const usd = (v) => (ok(v) ? (v >= 1000 ? `$${num(v / 1000, 1)} B` : `$${num(v, 0)} M`) : null)
+const TIME = { BMO: 'before open', AMC: 'after close' }
 const crore = (v) => (ok(v) ? `${v < 0 ? '−' : '+'}₹${num(Math.abs(v))} Cr` : '—')
 const tone = (v) => (!ok(v) ? 'var(--muted)' : v > 0 ? 'var(--good)' : v < 0 ? 'var(--bad)' : 'var(--muted)')
 
@@ -31,13 +35,14 @@ function TodayStrip({ mk }) {
   }
   useEffect(() => {
     load()
-    const t = setInterval(load, marketOpen() ? 60000 : 600000)
+    const t = setInterval(load, marketOpen(mk) ? 60000 : 600000)
     return () => clearInterval(t)
   }, [mk]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!d) return null
   const up = (moves || []).slice().sort((a, b) => b.ret['1D'] - a.ret['1D'])
   const pm = d.premarket, fd = d.fiidii, ip = d.ipo, rs = d.results
-  const open = marketOpen()
+  const open = marketOpen(mk)
+  const ur = mk === 'US' ? d.results : null, ui = mk === 'US' ? d.ipo : null, bm = mk === 'US' ? d.bigmoney : null
   const callC = pm?.call === 'up' ? 'var(--good)' : pm?.call === 'down' ? 'var(--bad)' : 'var(--muted)'
   const fmax = fd ? Math.max(1, Math.abs(fd.fii || 0), Math.abs(fd.dii || 0)) : 1
   const Flow = ({ k, v }) => (
@@ -50,7 +55,7 @@ function TodayStrip({ mk }) {
     <div className="today">
       <div className="today-head">
         <div><b>Today</b> <span className="muted">· {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
-        <span className="small muted"><i className={`dot ${open ? 'on' : ''}`} />{open ? 'Market open · updates every minute' : 'Market closed · updates every 10 minutes'}{at ? ` · ${at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+        <span className="small muted"><i className={`dot ${open ? 'on' : ''}`} />{mk === 'US' ? '🇺🇸 ' : ''}{open ? 'Market open · updates every minute' : 'Market closed · updates every 10 minutes'}{at ? ` · ${at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
       </div>
       <div className={`today-grid ${mk === 'US' ? 'us' : ''}`}>
         {mk !== 'US' && (
@@ -76,6 +81,28 @@ function TodayStrip({ mk }) {
             <Big>{rs.count}</Big>
             {rs.mine.length > 0 ? <Sub c="var(--accent)">★ Yours: {rs.mine.join(', ')}</Sub>
               : <Sub>{rs.top.length ? rs.top.slice(0, 3).map((x) => x.symbol).join(', ') : 'No board meetings for results today'}</Sub>}
+          </TodayTile>
+        )}
+        {ur && (
+          <TodayTile icon="📊" tint="violet" k={`US earnings · ${dayLabel(ur.day)}`} onClick={() => go('calendar')}>
+            <Big>{ur.sp500} <small>S&P 500 · {ur.count} in all</small></Big>
+            {ur.mine.length > 0 ? <Sub c="var(--accent)">★ Yours: {ur.mine.map((x) => x.replace('US:', '')).join(', ')}</Sub>
+              : <Sub>{ur.top.length ? ur.top.slice(0, 3).map((x) => `${x.symbol.replace('US:', '')}${TIME[x.timing] ? ` (${TIME[x.timing]})` : ''}`).join(', ') : 'No companies report today'}</Sub>}
+          </TodayTile>
+        )}
+        {ui && (
+          <TodayTile icon="🚀" tint="amber" k="US IPOs" onClick={() => go('ipo')}>
+            <Big>{ui.this_week} <small>expected to price this week</small></Big>
+            {ui.next[0] ? <Sub>Next: {ui.next[0].symbol || ui.next[0].company} · {dayLabel(ui.next[0].expected)}{usd(ui.next[0].value_m) ? ` · ${usd(ui.next[0].value_m)}` : ''}</Sub>
+              : ui.last[0] ? <Sub>Last priced: {ui.last[0].symbol || ui.last[0].company} · {dayLabel(ui.last[0].priced)}{ok(ui.last[0].price) ? ` at $${num(ui.last[0].price, 2)}` : ''}</Sub> : <Sub>None on the calendar</Sub>}
+          </TodayTile>
+        )}
+        {bm && (
+          <TodayTile icon="🏦" tint="blue" k={`Big money · S&P 500 futures · ${dayLabel(bm.date)}`} onClick={() => go('fiidii')}>
+            {[['Asset managers', bm.asset_mgr], ['Hedge funds', bm.lev_funds]].map(([k, g]) => (
+              <div key={k} className="row between mv"><span>{k}</span><b style={{ color: tone(g.net_pct) }}>{signed(g.net_pct, 1, '%')}{ok(g.change) ? <small className="muted"> ({signed(g.change, 1, '')} wk)</small> : null}</b></div>
+            ))}
+            <Sub>Net long as % of open interest (CFTC, weekly)</Sub>
           </TodayTile>
         )}
         {up.length > 0 && (

@@ -78,7 +78,25 @@ def test_today_uses_saved_data_and_never_invents():
     b = today._breadth("IN")
     assert (b["advances"], b["declines"], b["unchanged"], b["above200"], b["new_highs"], b["count"]) == (3, 3, 3, 56, 1, 9)
     page = today.get("US")
-    assert "premarket" not in page and "breaking" in page
+    assert "premarket" not in page and "breaking" in page and "results" in page
+
+
+def test_today_us_parts_from_saved_data():
+    assert today._us_ipos("2026-11-27") is None and today._us_bigmoney() is None      # nothing saved: no tile
+    store.put_company("IPO::US::2026-11", {"items": {
+        "upcoming": [{"deal": "1", "symbol": "NEWX", "company": "Newx", "expected": "2026-12-02", "value_m": 12.5},
+                     {"deal": "2", "symbol": "LATE", "company": "Late", "expected": "2026-12-20"},
+                     {"deal": "3", "symbol": "OLD", "company": "Old", "expected": "2026-11-20"}],
+        "priced": [{"deal": "4", "symbol": "ABCD", "company": "Abcd", "priced": "2026-11-20", "final_price": 16.0}]}})
+    u = today._us_ipos("2026-11-27")
+    assert u["this_week"] == 1 and u["upcoming"] == 2 and u["next"][0]["symbol"] == "NEWX" and u["last"][0]["price"] == 16.0
+    from app import fiidii
+    t = fiidii._tuesdays(2)
+    for k, (al, as_) in zip(t[::-1], ((600, 400), (700, 300))):
+        store.put_company(f"COT::{k.isoformat()}", {"w": {"date": k.isoformat(), "13874A": {"oi": 1000, "asset_mgr": {"long": al, "short": as_},
+                          "lev_funds": {"long": 100, "short": 300}, "dealer": {"long": 0, "short": 0}, "other": {"long": 0, "short": 0}, "nonrep": {"long": 0, "short": 0}}}})
+    b = today._us_bigmoney()
+    assert b["asset_mgr"] == {"net_pct": 40.0, "change": 20.0} and b["lev_funds"]["net_pct"] == -20.0
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 except the day's results calendar, which is cached). Each part is independent: one failing leaves the rest."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from . import calendars, store
@@ -62,6 +62,57 @@ def _results(today, mine: set) -> Optional[dict]:
             "top": [{"symbol": r["symbol"], "name": r.get("name")} for r in rows[:5]]}
 
 
+# ------------------------------------------------------------------ US parts (saved data only, except the cached earnings day)
+def _us_results(day, mine: set) -> Optional[dict]:
+    got = calendars.earnings("US", day, 1)
+    rows = got["rows"]
+    idx = [r for r in rows if r.get("in_index")]
+    pick = sorted(idx or rows, key=lambda r: -(r.get("market_cap") or 0))
+    return {"day": day.isoformat(), "count": len(rows), "sp500": len(idx), "mine": [r["symbol"] for r in rows if r["symbol"] in mine],
+            "before": sum(1 for r in idx if r.get("timing") == "BMO"), "after": sum(1 for r in idx if r.get("timing") == "AMC"),
+            "top": [{"symbol": r["symbol"], "name": r.get("name"), "timing": r.get("timing")} for r in pick[:4]]}
+
+
+def _us_ipos(day: str) -> Optional[dict]:
+    """From the Nasdaq IPO calendar months the IPO page saved (IPO::US::YYYY-MM)."""
+    from . import ipo
+    up, priced, seen = [], [], set()
+    for mon in ipo._us_months(date.fromisoformat(day)):
+        hit = store.get_company(f"IPO::US::{mon}")
+        for k, rows in ((hit[1].get("items") if hit else None) or {}).items():
+            for x in rows:
+                key = (k, x.get("deal") or x.get("company"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                if k == "upcoming" and x.get("expected") and x["expected"] >= day:
+                    up.append(x)
+                elif k == "priced" and x.get("priced") and x["priced"] <= day:
+                    priced.append(x)
+    if not seen:
+        return None
+    up.sort(key=lambda x: x["expected"])
+    priced.sort(key=lambda x: x["priced"], reverse=True)
+    wk = (date.fromisoformat(day) + timedelta(days=7)).isoformat()
+    return {"this_week": sum(1 for x in up if x["expected"] <= wk), "upcoming": len(up),
+            "next": [{"symbol": x.get("symbol"), "company": x["company"], "expected": x["expected"], "value_m": x.get("value_m")} for x in up[:2]],
+            "last": [{"symbol": x.get("symbol"), "company": x["company"], "priced": x["priced"], "price": x.get("final_price")} for x in priced[:1]]}
+
+
+def _us_bigmoney() -> Optional[dict]:
+    """Latest CFTC week saved (no download here): asset managers' and hedge funds' net in S&P 500 futures."""
+    from . import fiidii
+    rows = [w for w in fiidii.cot_history() if (w.get("13874A") or {}).get("oi")]
+    if not rows:
+        return None
+    def net(w, g):
+        m = w["13874A"]
+        return round(100 * (m[g]["long"] - m[g]["short"]) / m["oi"], 1)
+    last, prev = rows[-1], (rows[-2] if len(rows) > 1 else None)
+    return {"date": last.get("date") or last["tuesday"],
+            **{g: {"net_pct": net(last, g), "change": round(net(last, g) - net(prev, g), 1) if prev else None} for g in ("asset_mgr", "lev_funds")}}
+
+
 def get(market: str = "IN", symbols: str = "") -> dict:
     from . import news
     now = datetime.now(IST)
@@ -72,6 +123,10 @@ def get(market: str = "IN", symbols: str = "") -> dict:
     if market == "IN":
         parts.update(premarket=lambda: _premarket(day.isoformat()), fiidii=_fiidii,
                      ipo=lambda: _ipos(day.isoformat()), results=lambda: _results(day, mine))
+    elif market == "US":
+        et = calendars.us_eastern_now()
+        out["us_now"] = et.isoformat(timespec="minutes")
+        parts.update(results=lambda: _us_results(et.date(), mine), ipo=lambda: _us_ipos(et.date().isoformat()), bigmoney=_us_bigmoney)
     for k, f in parts.items():
         try:
             out[k] = f()

@@ -129,8 +129,9 @@ def test_demo_page_is_empty_not_invented():
     assert page["demo"] and page["open"] == [] and page["listed"] == []
 
 
-# Nasdaq IPO calendar: shape as documented by its public JSON (data.priced / upcoming.upcomingTable / filed / withdrawn).
-# Replace with a saved real answer (data/ipo_raw/nasdaq_ipo_YYYY-MM.json) once the app has fetched one.
+# Nasdaq IPO calendar: the real answers for Oct-Dec 2026 are in fixtures/ipo/nasdaq_ipo_*.json (saved by the app on
+# 27 Nov 2026). Their "upcoming" table was empty that week (Thanksgiving), so the small NQ sample below, in the same
+# layout, covers upcoming rows and a deal size that fails the shares × price check.
 NQ = {"data": {
     "priced": {"rows": [
         {"dealID": "1-1", "proposedTickerSymbol": "ABCD", "companyName": "Abcd Therapeutics, Inc.", "proposedExchange": "NASDAQ Global",
@@ -156,6 +157,20 @@ def test_us_calendar_parse():
     assert got["filed"][0]["company"] == "Filer & Co" and got["filed"][0]["filed"] == "2026-11-25"
     assert got["withdrawn"][0]["withdrawn"] == "2026-11-10"
     assert ipo.parse_us_month({}) == {"priced": [], "upcoming": [], "filed": [], "withdrawn": []}
+
+
+def test_real_nasdaq_months():
+    nov = ipo.parse_us_month(J("nasdaq_ipo_2026-11.json"))
+    assert {k: len(v) for k, v in nov.items()} == {"priced": 5, "upcoming": 0, "filed": 20, "withdrawn": 8}
+    ant = nov["priced"][0]
+    assert (ant["symbol"], ant["priced"], ant["final_price"], ant["shares"], ant["value_m"]) == ("ANT", "2026-11-19", 83.0, 980e6, 81340.0)
+    assert all(x["value_note"] is None for x in nov["priced"])                       # every real deal size passes the check
+    w = nov["withdrawn"][0]
+    assert w["company"] == "SONIC LIGHTING, INC." and (w["filed"], w["withdrawn"]) == ("2025-10-10", "2026-11-25")
+    assert nov["filed"][0]["symbol"] is None and nov["filed"][0]["value_m"] == 17.5  # no ticker yet: kept, shown as such
+    octo = ipo.parse_us_month(J("nasdaq_ipo_2026-10.json"))
+    assert len(octo["priced"]) == 17 and sum(1 for x in octo["priced"] if x["final_price"] is None) == 2
+    assert ipo.parse_us_month(J("nasdaq_ipo_2026-12.json")) == {"priced": [], "upcoming": [], "filed": [], "withdrawn": []}
 
 
 def test_us_listing_needs_fresh_series():
