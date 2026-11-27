@@ -40,6 +40,8 @@ def _background_jobs():
     fiidii.start_background()         # saves FII/DII cash figures every evening; fills positions history once
     from . import news
     news.start_background()           # filings, central banks and publishers' feeds every 10 minutes
+    from . import jobs
+    jobs.start_background()           # data checks run by themselves after each month end, outside market hours
 
 
 @app.middleware("http")
@@ -410,6 +412,21 @@ def premarket_backtest():
 @app.post("/api/ai/premarket")
 def ai_premarket(market: str = "IN", refresh: bool = False):
     return _ai(ai.premarket_brief, premarket.build(market), refresh)
+
+
+@app.get("/api/jobs/auto")
+def jobs_auto():
+    from . import jobs
+    return jobs.auto_status()
+
+
+@app.post("/api/jobs/auto/{name}")
+def jobs_auto_set(name: str, on: bool = True):
+    from . import jobs
+    try:
+        return jobs.set_auto(name, on)
+    except KeyError:
+        raise HTTPException(404, "No such job")
 
 
 @app.get("/api/jobs/{name}")

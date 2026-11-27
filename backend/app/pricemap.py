@@ -861,9 +861,12 @@ def _band(d) -> Optional[int]:
     return None
 
 
-def level_samples(bars: list[dict], liquid=None, chance: bool = True) -> list[dict]:
+def level_samples(bars: list[dict], liquid=None, chance: bool = True, after: Optional[str] = None,
+                  seen: Optional[set] = None) -> list[dict]:
     """One stock: at each month end, the nearest support and resistance zone (from prices up to that day only),
-    their bucket, and how their NEXT test ended; plus a random-price zone next to each for the chance test."""
+    their bucket, and how their NEXT test ended; plus a random-price zone next to each for the chance test.
+    `after` + `seen` continue an earlier run: month ends on or before `after` are skipped, and `seen` holds the
+    tests already counted (side, source, test date), so each test is still counted once."""
     import random
     import zlib
     t = [b["t"] for b in bars]
@@ -873,14 +876,15 @@ def level_samples(bars: list[dict], liquid=None, chance: bool = True) -> list[di
     n = len(c)
     atr = atr_series(h, l, c)
     mas = {50: technicals.sma(c, 50), 200: technicals.sma(c, 200)}
-    seen, out = set(), []
+    seen = set() if seen is None else seen
+    out = []
 
     def nxt(lo, hi, side, i, ma=None):
         r = tests(h, l, c, atr, lo, hi, side, i + 1, min(n, i + 1 + LOOK), ma=ma)
         return r["events"][0] if r["events"] else None
 
     for i in month_ends(bars):
-        if i < SWING_BARS + 20 or (liquid and not liquid(bars, i)):
+        if i < SWING_BARS + 20 or (after and t[i] <= after) or (liquid and not liquid(bars, i)):
             continue
         lad = level_ladder(bars[:i + 1])
         for row in lad["support"][:1] + lad["resistance"][:1]:
@@ -888,7 +892,7 @@ def level_samples(bars: list[dict], liquid=None, chance: bool = True) -> list[di
             ev = nxt(row["lo"], row["hi"], row["kind"], i, ma)
             if ev:
                 j, outcome = ev
-                key = (row["kind"], row["source"], j)
+                key = (row["kind"], row["source"], t[j])
                 if key not in seen:
                     seen.add(key)
                     out.append({"date": t[j], "seen": t[i], "side": row["kind"], "source": row["source"],
@@ -903,7 +907,7 @@ def level_samples(bars: list[dict], liquid=None, chance: bool = True) -> list[di
                 ev = nxt(pz[0], pz[1], row["kind"], i)
                 if ev:
                     j, outcome = ev
-                    key = (row["kind"], "random", j)
+                    key = (row["kind"], "random", t[j])
                     if key not in seen:
                         seen.add(key)
                         out.append({"date": t[j], "seen": t[i], "side": row["kind"], "source": "random", "placebo": True,

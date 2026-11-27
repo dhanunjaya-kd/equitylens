@@ -1,6 +1,6 @@
 """Track record of the entry decision engine (app/entry.py) on all NSE stocks.
 
-    python tools\\entry_backtest.py                  (all NSE: 2-3 hours the first time; reuses saved data after)
+    python tools\\entry_backtest.py                  (all NSE: 2-3 hours the first time; repeat runs reuse every closed month)
     python tools\\entry_backtest.py --universe N500  (NIFTY 500 only, about 30 minutes the first time)
     python tools\\entry_backtest.py --limit 40       (quick trial on 40 stocks)
 
@@ -15,48 +15,30 @@ The business check is NOT applied here: past business scores aren't available wi
 look-ahead. So this measures the value and timing rules; the business check is an extra
 filter on top live.
 
+Runs on app/btrun.py: a fixed-start price archive, saved results for months whose 36-month window has closed,
+prices downloaded 4 at a time and stocks worked out on all CPU cores (--workers N to change). The app also starts
+it by itself after each month end (app/jobs.py).
+
 Saves the summary to the app (it appears on every stock page) and to data/entry_track.json.
 """
 from __future__ import annotations
 
 import argparse
-import bisect
 import json
 import statistics
 import sys
+import threading
 import time
 from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app import config, entry, service, store, technicals, universe  # noqa: E402
+from app import btrun, config, entry, service, store, technicals, universe  # noqa: E402
 
 SPLIT = "2021-01-01"     # rules fixed before looking: 2016-2020 = first half, 2021 on = second half
 MIN_MONTH_CALLS = 5      # a month counts only with at least this many calls
-MIN_TRADED_VALUE = 1e7   # Rs 1 crore median daily traded value (previous 3 months), fixed before the all-NSE run
-LIQ_DAYS = 63
 GROUPS = {"N500": "NIFTY 500", "OTHER": "Outside NIFTY 500"}
 UNIVERSES = {"ALL": "All NSE stocks", "N500": "NIFTY 500 stocks"}
-
-
-def month_ends(bars, start="2016-01-01"):
-    out = []
-    for k in range(len(bars) - 1):
-        if bars[k]["t"] >= start and bars[k]["t"][:7] != bars[k + 1]["t"][:7]:
-            out.append(k)
-    return out
-
-
-def fwd(bars, i, n):
-    return bars[i + n]["c"] / bars[i]["c"] - 1 if i + n < len(bars) else None
-
-
-def bench_ret(nifty, d0, n_days):
-    ts = [b["t"] for b in nifty]
-    a = bisect.bisect_right(ts, d0) - 1
-    if a < 0 or a + n_days >= len(nifty):
-        return None
-    return nifty[a + n_days]["c"] / nifty[a]["c"] - 1
 
 
 def pe_series(sym):
@@ -148,80 +130,59 @@ def value_test(by_state):
     return None if None in vt else all(vt)
 
 
-def liquid(bars, i):
-    vals = sorted(b["c"] * (b.get("v") or 0) for b in bars[max(0, i - LIQ_DAYS + 1):i + 1])
-    return vals[len(vals) // 2] >= MIN_TRADED_VALUE
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--universe", choices=list(UNIVERSES), default="ALL")
+    ap.add_argument("--workers", type=int, default=0, help="CPU workers (default: all cores but one)")
     a = ap.parse_args()
     if config.DEMO:
         sys.exit("Turn demo mode off first.")
+    store.init()
     n500 = {u["symbol"] for u in universe.index_list("N500")}
     syms = [u["symbol"] for u in universe.index_list(a.universe)]
     if a.universe == "ALL" and len(syms) <= len(n500):
         sys.exit("Could not download NSE's full list of stocks (EQUITY_L.csv). Try again in a few minutes.")
     if a.limit:
         syms = syms[: a.limit]
-    nifty = technicals._latest_daily("^NSEI")
+    nifty, _ = btrun.archived("^NSEI", technicals._latest_daily("^NSEI"))
     print(f"{len(syms)} stocks ({UNIVERSES[a.universe]}), NIFTY bars {nifty[0]['t']} -> {nifty[-1]['t']} · entry rules v{entry.RULES_VERSION}")
 
-    rows, skipped, illiquid, t0 = [], defaultdict(int), 0, time.time()
-    for n, sym in enumerate(syms, 1):
-        try:
-            bars, _, ohlc = technicals.get_bars(sym)
-            if not ohlc or len(bars) < 400:
-                skipped["short or close-only price history"] += 1
-                continue
+    rows, skipped, t0 = [], defaultdict(int), time.time()
+    illiquid = 0
+    pe_lock = threading.Lock()
+
+    def fetch(sym):
+        fresh, _, ohlc = technicals.get_bars(sym)
+        if not ohlc or len(fresh) < 400:
+            return None, "short or close-only price history"
+        bars, _ = btrun.archived(sym, fresh)
+        with pe_lock:                     # screener.in: one stock at a time, with the usual pause
             pes = pe_series(sym)
-        except Exception as e:  # noqa: BLE001
-            skipped[f"fetch failed: {type(e).__name__}"] += 1
-            continue
         if len(pes) < entry.MIN_PE_POINTS:
-            skipped["P/E history too short"] += 1
-            continue
-        if not any(b.get("v") for b in bars[-LIQ_DAYS:]):
-            skipped["no volume data"] += 1
-            continue
-        group = "N500" if sym in n500 else "OTHER"
-        pe_dates = [d for d, _ in pes]
-        c = [b["c"] for b in bars]
-        cum = [0.0]
-        for x in c:
-            cum.append(cum[-1] + x)
-        sma200 = lambda j: (cum[j + 1] - cum[j - 199]) / 200 if j >= 199 else None
-        for i in month_ends(bars):
-            d = bars[i]["t"]
-            k = bisect.bisect_right(pe_dates, d)
-            if k < entry.MIN_PE_POINTS:
-                continue
-            if not liquid(bars, i):
-                illiquid += 1
-                continue
-            hist = [v for _, v in pes[:k]]
-            try:
-                v = entry.decide(bars, i, pe_hist=hist, pe_now=hist[-1])
-            except Exception:  # noqa: BLE001 - one bad bar must not stop a 500-stock run
-                skipped["bad price data on a date"] += 1
-                continue
-            if v["verdict"] == "NA":
-                continue
-            r12, b12 = fwd(bars, i, 252), bench_ret(nifty, d, 252)
-            row = {"sym": sym, "group": group, "date": d, "verdict": v["verdict"], "rule": v["rule"], "state": v["checks"]["value"]["state"],
-                   "r6": fwd(bars, i, 126), "r12": r12, "r24": fwd(bars, i, 504), "r36": fwd(bars, i, 756),
-                   "x12": (r12 - b12) if r12 is not None and b12 is not None else None}
-            if v["rule"] == "avoid_falling" and r12 is not None:
-                # What waiting would have done: buy at the first close back above the 200-day average; if
-                # that never happens within 12 months, the money stays in cash (0%). Same end date as buying now.
-                j = next((j for j in range(i + 1, i + 253) if c[j] > sma200(j)), None)
-                row["turned"] = j is not None
-                row["r12_wait"] = c[i + 252] / c[j] - 1 if j is not None else 0.0
-            rows.append(row)
-        if n % 10 == 0:
-            print(f"  {n}/{len(syms)} stocks · {len(rows)} monthly verdicts · {(time.time() - t0) / 60:.1f} min", flush=True)
+            return None, "P/E history too short"
+        if not any(b.get("v") for b in bars[-btrun.LIQ_DAYS:]):
+            return None, "no volume data"
+        hit = store.get_company(f"BTCACHE::entry::{sym}")
+        return (bars, pes, nifty, hit[1] if hit else None), None
+
+    def on_result(sym, res, why):
+        nonlocal illiquid
+        if res is None:
+            skipped[why] += 1
+            return
+        got, counts, cache = res
+        if cache:
+            store.put_company(f"BTCACHE::entry::{sym}", cache)
+        illiquid += counts["illiquid"]
+        if counts["bad"]:
+            skipped["bad price data on a date"] += counts["bad"]
+        grp = "N500" if sym in n500 else "OTHER"
+        rows.extend(dict(r, sym=sym, group=grp) for r in got)
+
+    btrun.run(syms, fetch, btrun.entry_stock, on_result, workers=a.workers, progress=lambda: f"{len(rows)} monthly verdicts")
+    if not rows:
+        sys.exit(f"No results (skipped: {dict(skipped)}). The saved result was kept as it was.")
 
     peers(rows, "r12", "p12")
     peers(rows, "r24", "p24")

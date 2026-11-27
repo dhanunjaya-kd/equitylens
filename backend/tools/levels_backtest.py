@@ -19,6 +19,10 @@ The rules were fixed before any run (21 Nov 2026) and are in app/pricemap.py (LE
   - A month end is skipped when the stock was illiquid (median daily traded value over the previous 3 months
     under Rs 1 crore), same as the entry backtest.
 
+Runs on app/btrun.py: a fixed-start price archive, saved results for months whose forward window has closed,
+prices downloaded 4 at a time and stocks worked out on all CPU cores (--workers N to change). The app also starts
+it by itself after each month end (app/jobs.py).
+
 Saves the result to the app (it appears on every Price map) and to data/levels_track.json.
 """
 from __future__ import annotations
@@ -31,30 +35,16 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app import config, pricemap, store, technicals, universe  # noqa: E402
+from app import btrun, config, pricemap, store, technicals, universe  # noqa: E402
 
-MIN_TRADED_VALUE = 1e7
-LIQ_DAYS = 63
 UNIVERSES = {"ALL": "All NSE stocks", "N500": "NIFTY 500 stocks"}
-
-
-def liquid(bars, i):
-    vals = sorted(b["c"] * (b.get("v") or 0) for b in bars[max(0, i - LIQ_DAYS + 1):i + 1])
-    return vals[len(vals) // 2] >= MIN_TRADED_VALUE
-
-
-def work(args):
-    sym, bars = args
-    try:
-        return sym, [dict(r, sym=sym) for r in pricemap.level_samples(bars, liquid)], None
-    except Exception as e:  # noqa: BLE001 - one bad stock must not stop the run
-        return sym, [], f"{type(e).__name__}"
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--universe", choices=list(UNIVERSES), default="ALL")
+    ap.add_argument("--workers", type=int, default=0, help="CPU workers (default: all cores but one)")
     a = ap.parse_args()
     if config.DEMO:
         sys.exit("Turn demo mode off first.")
@@ -65,40 +55,39 @@ def main():
         sys.exit("Could not download NSE's full list of stocks (EQUITY_L.csv). Try again in a few minutes.")
     if a.limit:
         syms = syms[: a.limit]
-    print(f"{len(syms)} stocks ({UNIVERSES[a.universe]}) · level rules v{pricemap.LEVEL_RULES_VERSION}")
+    print(f"{len(syms)} stocks ({UNIVERSES[a.universe]}) · level rules v{pricemap.LEVEL_RULES_VERSION} · {a.workers or btrun.default_workers()} CPU workers")
     skipped, t0 = defaultdict(int), time.time()
     rows: list = []
-    done = 0
+    ntests = [0]
 
-    def jobs():
-        for k, sym in enumerate(syms, 1):
-            if k % 10 == 0:
-                print(f"  {k}/{len(syms)} stocks · {len(rows)} level tests · {(time.time() - t0) / 60:.1f} min", flush=True)
-            try:
-                bars, _, ohlc = technicals.get_bars(sym)
-            except Exception as e:  # noqa: BLE001
-                skipped[f"fetch failed: {type(e).__name__}"] += 1
-                continue
-            if not ohlc or len(bars) < pricemap.SWING_BARS + 300:
-                skipped["short or close-only price history"] += 1
-                continue
-            if not any(b.get("v") for b in bars[-LIQ_DAYS:]):
-                skipped["no volume data"] += 1
-                continue
-            yield sym, bars
+    def fetch(sym):
+        fresh, _, ohlc = technicals.get_bars(sym)
+        if not ohlc:
+            return None, "short or close-only price history"
+        bars, _ = btrun.archived(sym, fresh)
+        if len(bars) < pricemap.SWING_BARS + 300:
+            return None, "short or close-only price history"
+        if not any(b.get("v") for b in bars[-btrun.LIQ_DAYS:]):
+            return None, "no volume data"
+        hit = store.get_company(f"BTCACHE::levels::{sym}")
+        return (bars, hit[1] if hit else None), None
 
-    def take(got_list):
-        nonlocal rows, done
-        for sym, got, err in got_list:
-            done += 1
-            if err:
-                skipped[f"error: {err}"] += 1
-            for r in got:
-                r["group"] = "N500" if sym in n500 else "OTHER"
-            rows += got
+    def on_result(sym, res, why):
+        nonlocal rows
+        if res is None:
+            skipped[why] += 1
+            return
+        got, cache = res
+        if cache:
+            store.put_company(f"BTCACHE::levels::{sym}", cache)
+        grp = "N500" if sym in n500 else "OTHER"
+        rows += [dict(r, sym=sym, group=grp) for r in got]
+        ntests[0] += sum(1 for r in got if not r.get("placebo") and not r.get("skip"))
 
-    for job in jobs():
-        take([work(job)])
+    btrun.run(syms, fetch, btrun.level_stock, on_result, workers=a.workers,
+              progress=lambda: f"{ntests[0]} level tests")
+    if not rows:
+        sys.exit(f"No results (skipped: {dict(skipped)}). The saved result was kept as it was.")
 
     res = pricemap.summarize_levels(rows)
     groups = {g: pricemap.summarize_levels([r for r in rows if r["group"] == g]) for g in ("N500", "OTHER")}

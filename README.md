@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-209_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-216_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -731,7 +731,7 @@ cd backend
 python run_tests.py
 ```
 
-209 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+216 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -754,6 +754,7 @@ python run_tests.py
 | `test_fiidii.py` | Reading NSE's FII/DII figures, participant open interest (Indian comma grouping, TOTAL row skipped) and CFTC report columns, every contract has two sides, test starts only after the figures are public, extremes use only earlier readings, events kept apart, verdicts need 10 cases, NSDL daily rows and sector reports read and checked (bought − sold = net, sectors add up to the total), SEBI mutual fund days and yearly rows, holding change per stock from the shareholding table |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
 | `test_ipo.py` | NSE's real open / upcoming / past answers and one SME issue's details, SEBI's real DRHP page: SME vs mainboard, issue size in ₹ only when confirmed as shares, times only when it equals bids ÷ shares offered, categories and bids-by-price add up to NSE's total, fresh + OFS adds up, NSE's 'issue price' outside its own range rejected, bonds and old issues re-listed later dropped, listing moves on the listing date only |
+| `test_btrun.py` | Fast data checks: a repeat run that reuses closed months gives exactly the same rows as a full run (level test and entry backtest), changed old prices / P/E / rules throw the saved months away, the price archive keeps its first day and restarts on a split, parallel run = one-by-one run, checks start by themselves after a month end outside market hours, once a day |
 | `test_api.py` | Every endpoint, including error paths |
 
 ---
@@ -789,7 +790,8 @@ equitylens/
 │   │   ├── premarket.py      overnight board, NIFTY opening call, its backtest and frozen live calls
 │   │   ├── nextday.py        08:45 check (and its test), day map, evening preview
 │   │   ├── pricemap.py       price map: zones and hold rates, fall cases, sector check, turn signals
-│   │   ├── jobs.py           runs the long backtests from the app, with progress
+│   │   ├── jobs.py           runs the long backtests from the app, with progress, and by themselves after each month end
+│   │   ├── btrun.py          fast data checks: fixed-start price archive, saved closed months, parallel downloads and CPU workers
 │   │   ├── heatmap.py        heatmap rows by sector and each sector's index
 │   │   ├── sectors.py        NSE sector and issued shares for every stock (looked up once, saved)
 │   │   ├── usshares.py       US shares outstanding from SEC filings (all companies in a few requests)
