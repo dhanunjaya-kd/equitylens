@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-199_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-209_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -41,6 +41,7 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 | 🗺️ | **Heatmap** | Every stock as a box with its logo, grouped by NSE / S&P sector, sized by market cap, coloured by 1D to 1Y move |
 | 🧭 | **Smart money** | Delivery %, bulk & block deals, promoter / insider trades and exchange surveillance flags |
 | 🏦 | **FII / DII** | Daily FII and DII figures, 5 years of confirmed foreign flows, F&O positions of FIIs, DIIs, pros and clients, sector flows, mutual funds, stocks institutions added or cut, and whether any of it predicted NIFTY · US: CFTC positions of funds and banks |
+| 🚀 | **IPO research** | Open, upcoming and recently listed NSE issues, live bids by investor category (each checked against bids ÷ shares offered), listing-day and since-listing moves, and companies that filed with SEBI |
 | 📰 | **News** | Company filings, RBI / Fed and business news for India and the US, market-moving items only, with real pictures, a **Breaking** bar and **Telegram alerts** |
 | 📅 | **Calendar** | Results and economic events with official dates, countdowns and what each one means |
 | 🏆 | **Discovery** | Rank the whole NIFTY 500 / S&P 500, build your own screens, up to 10 named watchlists, compare |
@@ -53,6 +54,7 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 
 | | Added | Where |
 |:-:|---|---|
+| 🚀 | **IPO research (India, phase 1)**: open, upcoming and recently listed NSE issues, checked category bids, listing moves, SEBI draft filings and a source check | Sidebar → IPO research |
 | 📰 | **News for India and the US**: company filings (NSE, SEC 8-K), RBI / Fed releases, business news and major global events; noise and routine filings left out; one story shown once with all its sources; publishers' own pictures; real price moves | Sidebar → News |
 | 🔴 | **Breaking bar** on every page: serious market-wide events reported by two or more sources, central-bank announcements, index moves of 2%+ | Every page |
 | 📨 | **Telegram alerts**: breaking news, your watchlist stocks' filings, RBI / Fed releases, sent to your own Telegram | Settings → Telegram alerts |
@@ -365,6 +367,23 @@ Sidebar → **FII / DII** (on a phone: Smart Money → 🏦 FII / DII, or tap th
 - The CFTC's weekly Traders in Financial Futures report for the S&P 500 and Nasdaq-100 E-mini: asset managers, leveraged funds (hedge funds), dealers, other reportables and small traders, with long, short, net as % of open interest, change vs last week and where this week sits in 3 years. About 8 years of weeks download once.
 - The same tested record for asset managers and leveraged funds, counted from the first trading day after the Friday release.
 - Weekly US fund flows and monthly foreign purchases of US stocks are not included yet.
+
+### 🚀 IPO research — India (phase 1)
+
+Sidebar → **IPO research** (on the phone: Market Movers → 🚀 IPOs).
+
+| Tab | What it shows | Source |
+|---|---|---|
+| Open now | Price band, dates, days left, subscription so far; tap an issue for bids by investor category, NSE's issue facts and documents | NSE |
+| Upcoming | Issues NSE has announced but not opened | NSE |
+| Recently listed | Listing-day open and close and the latest close against the final issue price (last 120 days) | NSE + daily prices |
+| Filed with SEBI | Companies that filed a draft offer document (DRHP) — filing is not approval | SEBI |
+
+What is never guessed: subscription *times* is shown only when it agrees with NSE's bids ÷ shares offered (or is worked out from those two figures); a row that disagrees is left out with the reason. NSE's issue size is shown in NSE's own words because its unit is not always stated. A listing move is measured only when NSE gives one final issue price and the first price bar falls on the listing date. Mainboard and SME issues are kept apart (SME is marked).
+
+**Source check:** every source's latest raw answer is saved in `backend/data/ipo_raw/`, and the page lists each source with the fields it should carry and any it did not. If NSE or SEBI changes a format, the page says so instead of showing a wrong number.
+
+Coming next: the IPO report from the offer document (RHP) — financials, where the money goes, valuation against listed peers, red flags with page numbers — then the tested past-IPO record, after-listing lock-ins and US IPOs.
 
 ### 📰 News — market-moving items only, India and US
 
@@ -695,6 +714,7 @@ All free and public. No logins, no paid feeds.
 | Results calendar | NSE event calendar (board meetings) | Nasdaq earnings calendar |
 | Economic calendar | Nasdaq economic calendar + RBI, MoSPI and DPIIT official schedules | Nasdaq economic calendar + Federal Reserve FOMC schedule |
 | Documents | Annual reports, concalls, announcements (company page) | 10-K, 10-Q, 8-K (SEC) |
+| IPOs | NSE current, upcoming and past issues · NSE bids by category and issue details · SEBI draft offer documents (DRHP) | — (later phase) |
 | News | NSE corporate announcements · RBI press releases · publishers' RSS feeds | SEC 8-K current filings · Federal Reserve press releases · publishers' RSS feeds |
 | Logos | Financial Modeling Prep public logo images, or the company's website icon | same |
 
@@ -709,7 +729,7 @@ cd backend
 python run_tests.py
 ```
 
-199 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+209 offline tests run against saved copies of each source's real format, so they pass without internet (the IPO readers' tests use rows in the expected shapes until the first live run saves NSE's and SEBI's real answers). The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -731,6 +751,7 @@ python run_tests.py
 | `test_news.py` | Breaking needs a serious event and two sources (or a central bank, or a 2% index move), world events show in both India and US, Telegram alerts sent once and only for new items, RSS and Atom feeds read with times, only market news kept (tips, lifestyle dropped), routine filings dropped, order amounts in crore, SEC 8-K items, unambiguous stock tags (also "Take-Two" and "Coca-Cola" written with or without a hyphen), the same story shown once with all sources |
 | `test_fiidii.py` | Reading NSE's FII/DII figures, participant open interest (Indian comma grouping, TOTAL row skipped) and CFTC report columns, every contract has two sides, test starts only after the figures are public, extremes use only earlier readings, events kept apart, verdicts need 10 cases, NSDL daily rows and sector reports read and checked (bought − sold = net, sectors add up to the total), SEBI mutual fund days and yearly rows, holding change per stock from the shareholding table |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
+| `test_ipo.py` | Price bands, subscription times kept only when it agrees with bids ÷ shares offered, any NSE field naming, missing-field report, category bids, NSE issue facts and documents, SEBI DRHP table, listing moves measured only on the listing date, demo shows nothing invented |
 | `test_api.py` | Every endpoint, including error paths |
 
 ---
@@ -773,6 +794,7 @@ equitylens/
 │   │   ├── fiidii.py         FII / DII: NSE cash figures, F&O positions, CFTC (US), tested "does it predict"
 │   │   ├── fpi.py            NSDL daily FPI flows and derivatives, sector reports, SEBI mutual funds (all checked)
 │   │   ├── instholdings.py   stocks FIIs / DIIs added or cut, from scanned shareholding
+│   │   ├── ipo.py            IPO research: NSE issues, category bids, SEBI DRHP list, listing moves, source check
 │   │   ├── news.py           filings, central banks and publishers' feeds; tags, de-duplication, breaking
 │   │   ├── alerts.py         Telegram alerts (breaking, watchlist filings, RBI / Fed)
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
@@ -808,6 +830,7 @@ equitylens/
 | `GET /api/heatmap?market=&tf=&universe=` · `GET /api/heatmap/sector?market=&sector=` | Heatmap data, and one sector's index |
 | `GET /api/pricemap/{symbol}?refresh=` · `POST /api/ai/pricemap/{symbol}` | Price map for one stock, AI research on it |
 | `GET /api/fiidii?market=IN\|US` · `GET /api/fiidii/stocks?quarter=` | FII / DII page data · stocks institutions added or cut |
+| `GET /api/ipo?market=IN&refresh=` · `GET /api/ipo/detail/{symbol}?series=` | IPO page (lists + source check) · one issue's category bids, facts and documents |
 | `GET /api/news?market=` · `GET /api/news/breaking?market=` | News page · breaking items only |
 | `GET /api/alerts` · `POST /api/alerts` · `POST /api/alerts/find-chat` · `POST /api/alerts/test` | Telegram alerts settings, find your chat, send a test (owner only) |
 | `GET /api/jobs/{levels\|entry}` · `POST /api/jobs/{levels\|entry}/start` | Run the level test or the entry backtest from the app (owner only), with progress |

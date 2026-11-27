@@ -521,6 +521,23 @@ def fiidii_get(market: str = "IN"):
     return fiidii.us() if market.upper() == "US" else fiidii.india()
 
 
+@app.get("/api/ipo")
+def ipo_get(market: str = "IN", refresh: bool = False):
+    from . import ipo
+    if market.upper() != "IN":
+        return {"open": [], "upcoming": [], "listed": [], "drhp": [], "sources": [], "not_yet": "US IPOs come in a later phase"}
+    return ipo.india(refresh)
+
+
+@app.get("/api/ipo/detail/{symbol}")
+def ipo_detail(symbol: str, series: str = "EQ", refresh: bool = False):
+    from . import ipo
+    try:
+        return ipo.detail(symbol, series, refresh)
+    except ipo.IpoError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/api/news")
 def news_get(market: str = "IN"):
     from . import news

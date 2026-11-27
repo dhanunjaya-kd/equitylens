@@ -31,6 +31,7 @@ import BreakingBar from './components/BreakingBar'
 import SmartMoney from './pages/SmartMoney'
 import FiiDii from './pages/FiiDii'
 import News from './pages/News'
+import IPO from './pages/IPO'
 import Guide from './pages/Guide'
 import Portfolio from './pages/Portfolio'
 import { Settings } from './pages/AI'
@@ -96,6 +97,7 @@ function App() {
         {route.page === 'money' && <SmartMoney tab={route.tab} />}
         {route.page === 'fiidii' && <FiiDii tab={route.tab} />}
         {route.page === 'news' && <News />}
+        {route.page === 'ipo' && <IPO tab={route.tab} />}
         {route.page === 'guide' && <Guide />}
         {route.page === 'portfolio' && <Portfolio />}
         {route.page === 'settings' && <Settings />}

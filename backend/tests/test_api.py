@@ -113,6 +113,13 @@ def test_flows_endpoints():
 
 
 
+def test_ipo_endpoints():
+    r = C.get("/api/ipo?market=IN")
+    assert r.status_code == 200 and r.json()["open"] == []          # demo: nothing invented
+    assert C.get("/api/ipo?market=US").json()["not_yet"]
+    assert C.get("/api/ipo/detail/%20").status_code == 400
+
+
 def test_portfolio_endpoints():
     import base64
     assert C.get("/api/brokers").json()["brokers"]

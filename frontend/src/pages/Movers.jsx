@@ -122,7 +122,7 @@ export default function Movers() {
     <div className="movers">
       <div className="card">
         <div className="row between wrapflex">
-          <div><h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Market Movers <button className="btn small" style={{ marginLeft: 8, verticalAlign: 'middle' }} onClick={() => go('heatmap')}>🗺️ Heatmap</button><button className="btn small" style={{ marginLeft: 6, verticalAlign: 'middle' }} onClick={() => go('news')}>📰 News</button></h3>
+          <div><h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Market Movers <button className="btn small" style={{ marginLeft: 8, verticalAlign: 'middle' }} onClick={() => go('heatmap')}>🗺️ Heatmap</button><button className="btn small" style={{ marginLeft: 6, verticalAlign: 'middle' }} onClick={() => go('news')}>📰 News</button>{mk !== 'US' && <button className="btn small" style={{ marginLeft: 6, verticalAlign: 'middle' }} onClick={() => go('ipo')}>🚀 IPOs</button>}</h3>
             <div className="small muted">{mk === 'US' ? 'S&P 500' : (univ === 'ALL' && d?.universe === 'ALL' ? 'All NSE stocks' : univ === 'ALL' ? 'NIFTY 500' : univ.replace('N', 'NIFTY '))} · {d?.rows?.length || 0} stocks · {d?.session ? <>{d.live ? <b style={{ color: 'var(--good)' }}>● Live session </b> : 'Session '}{new Date(d.session + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} · </> : null}{d?.updated ? `updated ${ago(d.updated)}` : 'loading…'}</div></div>
           <button className="btn small" disabled={st.running} onClick={async () => { await api(`/api/movers/refresh?market=${mk}`, { method: 'POST' }); load() }}>{st.running ? 'Refreshing…' : '↻ Refresh'}</button>
         </div>
