@@ -224,20 +224,21 @@ export function SideNav({ page, market, onMarket, theme, onTheme }) {
   const [pinned, setPinned] = useState(() => { try { return localStorage.getItem('eql_nav_pin') === '1' } catch { return false } })
   const [hover, setHover] = useState(false)
   const timer = useRef(null)
-  useEffect(() => {
-    document.body.classList.toggle('nav-pinned', pinned)
-    try { localStorage.setItem('eql_nav_pin', pinned ? '1' : '0') } catch { /* ignore */ }
-    const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 200)   // charts re-measure the new page width
-    return () => clearTimeout(t)
-  }, [pinned])
-  useEffect(() => () => clearTimeout(timer.current), [])
-  const enter = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setHover(true), 150) }
-  const leave = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setHover(false), 120) }
-  const nav = (path) => { go(path); if (!pinned) { clearTimeout(timer.current); setHover(false) } }
+  // The menu never covers the page: when it opens (pinned or on hover) the page column narrows beside it
   const wide = pinned || hover
+  useEffect(() => { try { localStorage.setItem('eql_nav_pin', pinned ? '1' : '0') } catch { /* ignore */ } }, [pinned])
+  useEffect(() => {
+    document.body.classList.toggle('nav-wide', wide)
+    const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 220)   // charts re-measure the new page width
+    return () => clearTimeout(t)
+  }, [wide])
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const enter = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setHover(true), 220) }
+  const leave = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setHover(false), 200) }
+  const nav = (path) => { go(path); if (!pinned) { clearTimeout(timer.current); setHover(false) } }
   const other = market === 'IN' ? 'US' : 'IN'
   return (
-    <aside className={`sidenav ${wide ? 'wide' : 'slim'} ${pinned ? 'pinned' : hover ? 'over' : ''}`} onMouseEnter={enter} onMouseLeave={leave}>
+    <aside className={`sidenav ${wide ? 'wide' : 'slim'} ${pinned ? 'pinned' : ''}`} onMouseEnter={enter} onMouseLeave={leave}>
       <div className="brand side" onClick={() => nav('')} title="EquityLens"><img src="/icon.svg" alt="" /><i className="sn-label sn-brand">Equity<span>Lens</span></i></div>
       <button className={`sn-pin ${pinned ? 'on' : ''}`} onClick={() => setPinned(!pinned)} title={pinned ? 'Unpin: show icons only' : 'Pin: keep the menu open'} aria-label={pinned ? 'Unpin menu' : 'Pin menu open'}>
         <svg viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z" /><path d="M12 14v6" /></g></svg>

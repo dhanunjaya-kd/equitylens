@@ -191,13 +191,10 @@ html, body { overflow-x: clip; }
 .sidenav { display: none; }
 @media (min-width: 1100px) {
   body { padding-bottom: 0; font-size: 15.5px; }
-  .shell.desk { display: grid; grid-template-columns: 68px minmax(0, 1fr); min-height: 100vh; }
-  body.nav-pinned .shell.desk { grid-template-columns: 240px minmax(0, 1fr); }
+  .shell.desk { display: grid; grid-template-columns: 68px minmax(0, 1fr); min-height: 100vh; transition: grid-template-columns .18s ease; }
+  body.nav-wide .shell.desk { grid-template-columns: 240px minmax(0, 1fr); }
   .sidenav { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; align-self: start; height: 100vh; padding: 20px 10px;
-    border-right: 1px solid var(--line); background: var(--side); width: 68px; overflow: hidden; z-index: 50;
-    transition: width .18s ease, box-shadow .18s ease; }
-  .sidenav.wide { width: 240px; }
-  .sidenav.over { box-shadow: 8px 0 28px rgba(0, 0, 0, .28); }
+    border-right: 1px solid var(--line); background: var(--side); width: 100%; overflow: hidden; z-index: 50; }
   .sidenav .sn-label { white-space: nowrap; transition: opacity .12s ease; }
   .sidenav.slim .sn-label, .sidenav.slim .sn-foot, .sidenav.slim .sn-pin { opacity: 0; pointer-events: none; }
   .brand.side { font-size: 19px; padding: 0 9px 18px; cursor: pointer; white-space: nowrap; }
@@ -222,10 +219,10 @@ html, body { overflow-x: clip; }
   .sn:hover { background: var(--card); color: var(--text); }
   .sn.on { background: rgba(45, 212, 191, .12); color: var(--accent); }
   .content { min-width: 0; }
-  .topbar { padding: 12px 28px; }
-  .topbar-inner { max-width: 1720px; }
+  .topbar { padding: 12px 24px; }
+  .topbar-inner { max-width: 2400px; }
   .topbar .search-box input { padding: 11px 14px; font-size: 15px; }
-  .wrap { max-width: 1720px; padding: 20px 32px 48px; }
+  .wrap { max-width: 2400px; padding: 20px 24px 48px; }
   .tabs { top: 63px; }
   .h-name { font-size: 26px; }
   .price { font-size: 32px; }
@@ -854,7 +851,7 @@ button.nw-ev { cursor: pointer; }
 .auto-tbl td { vertical-align: top; }
 
 /* Live terminal */
-.wrap.wrap-wide { max-width: 1680px; }
+.wrap.wrap-wide { max-width: 2400px; }
 .term-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; }
 .term-ltp { font-size: 22px; }
 .term-grid { display: grid; grid-template-columns: 220px minmax(0, 1fr) 300px; gap: 12px; margin-bottom: 12px; }
