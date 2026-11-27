@@ -202,9 +202,24 @@ export function TopActions({ page, theme, onTheme }) {
   )
 }
 
+// Pages that exist for one market only: shown in place of the page when the other market is selected
+export function MarketOnly({ market, what }) {
+  return (
+    <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+      <div style={{ fontSize: 34 }}>{market === 'IN' ? '🇮🇳' : '🇺🇸'}</div>
+      <h3 style={{ margin: '8px 0 6px' }}>{what} is for the {market === 'IN' ? 'Indian' : 'US'} market</h3>
+      <div className="muted small">You're in the {market === 'IN' ? 'US' : 'IND'} view, which shows {market === 'IN' ? 'US' : 'Indian'} data only. Switch to {market === 'IN' ? '🇮🇳 IND' : '🇺🇸 US'} at the top to open it.</div>
+    </div>
+  )
+}
+
+const IN_ONLY = ['premarket', 'ipo']
+
 export function SideNav({ page, market, onMarket, theme, onTheme }) {
   const items = [['home', '', 'Search', I.search], ['premarket', 'premarket', 'Pre-market', I.sun], ['movers', 'movers', 'Market Movers', I.fire], ['news', 'news', 'News', I.news], ['terminal', 'terminal', 'Terminal', I.term], ['ipo', 'ipo', 'IPO research', I.rocket], ['heatmap', 'heatmap', 'Heatmap', I.grid], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['fiidii', 'fiidii', 'FII / DII', I.bank], ['portfolio', 'portfolio', 'My Portfolio', I.brief], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
     ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare], ['guide', 'guide', 'Beginner guide', I.book]]
+    .filter(([k]) => market !== 'US' || !IN_ONLY.includes(k))
+    .map(([k, path, label, icon]) => [k, path, market === 'US' && k === 'fiidii' ? 'Institutions' : label, icon])
   return (
     <aside className="sidenav">
       <div className="brand side" onClick={() => go('')}><img src="/icon.svg" alt="" />Equity<span>Lens</span></div>

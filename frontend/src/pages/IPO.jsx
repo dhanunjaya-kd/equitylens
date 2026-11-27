@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ago, api, go, num, ok, signed } from '../util'
+import { ago, api, getMarket, go, num, ok, signed } from '../util'
+import { MarketOnly } from '../components/ui'
 
 // IPO research (India) as a dashboard. Every number is NSE's / SEBI's own, or plain arithmetic on two of their
 // figures (labelled). A figure that fails its check is left out and the reason is shown.
@@ -257,7 +258,7 @@ function Sources({ rows }) {
 const TABS = [['open', 'Open now'], ['upcoming', 'Upcoming'], ['listed', 'Recently listed'], ['drhp', 'Filed with SEBI']]
 const BOARDS = [['all', 'All'], ['main', 'Mainboard'], ['sme', 'SME']]
 
-export default function IPO({ tab }) {
+function IPOPage({ tab }) {
   const [page, setPage] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -306,4 +307,9 @@ export default function IPO({ tab }) {
       {page && <div style={{ marginTop: 14 }}><Sources rows={page.sources} /></div>}
     </div>
   )
+}
+
+export default function IPO({ tab }) {
+  if (getMarket() === 'US') return <div><MarketOnly market="IN" what="IPO research" /></div>
+  return <IPOPage tab={tab} />
 }

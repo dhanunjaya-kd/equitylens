@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Logo, ScoreRing } from '../components/ui'
-import { MAX_LISTS, api, flag, go, isUS, signed, ticker, watchlist } from '../util'
+import { MAX_LISTS, api, flag, getMarket, go, isUS, signed, ticker, watchlist } from '../util'
 import { Tile, squarify, useWidth } from './Heatmap'
 
 const PERIODS = [['1D', '1D'], ['1W', '1W'], ['1M', '1M'], ['since', 'Since added']]
@@ -83,7 +83,11 @@ function PhoneCard({ list, it, q, r, period, lists, picking, picked, onPick }) {
 export default function Watch() {
   const d = useWatch()
   const lists = d.lists
-  const list = lists.find((l) => l.id === d.active) || lists[0]
+  const mk = getMarket()
+  const fullList = lists.find((l) => l.id === d.active) || lists[0]
+  // only this market's stocks (IND view: Indian stocks, US view: US stocks); _fi keeps each stock's place in the whole list
+  const list = { ...fullList, items: fullList.items.map((it, fi) => ({ ...it, _fi: fi })).filter((it) => (mk === 'US') === isUS(it.symbol)) }
+  const otherN = fullList.items.length - list.items.length
   const [quotes, setQuotes] = useState({}), [ranks, setRanks] = useState({}), [loading, setLoading] = useState(false)
   const [naming, setNaming] = useState(null), [nameVal, setNameVal] = useState('')     // 'new' | 'rename'
   const [confirmDel, setConfirmDel] = useState(false), [menuFor, setMenuFor] = useState(null)
@@ -111,7 +115,6 @@ export default function Watch() {
     else if (naming === 'rename') watchlist.rename(list.id, nameVal)
     setNaming(null); setNameVal('')
   }
-  const nIN = list.items.filter((i) => !isUS(i.symbol)).length, nUS = list.items.length - nIN
   const tiles = useMemo(() => (view === 'map' && list.items.length && mapW ? squarify(list.items.map((it) => ({ r: { symbol: it.symbol, name: it.name, ret: quotes[it.symbol]?.ret || {} }, v: 1 })), 0, 0, mapW, phone ? 360 : 460) : []), [view, list.items, quotes, phone, mapW])
   const togglePick = (s) => setPicked((p) => (p.includes(s) ? p.filter((x) => x !== s) : p.length < 4 ? [...p, s] : p))
 
@@ -140,7 +143,7 @@ export default function Watch() {
               <input autoFocus className="input" maxLength={40} value={nameVal} onChange={(e) => setNameVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setNaming(null) }} />
               <button className="btn small primary" onClick={saveName}>Save</button><button className="btn small" onClick={() => setNaming(null)}>Cancel</button>
             </span>
-          ) : <><b style={{ fontSize: 16 }}>{list.name}</b><span className="small muted">{list.items.length} stock{list.items.length === 1 ? '' : 's'}{list.items.length ? ` · 🇮🇳 ${nIN} · 🇺🇸 ${nUS}` : ''}{loading ? ' · loading prices…' : ''}</span></>}
+          ) : <><b style={{ fontSize: 16 }}>{list.name}</b><span className="small muted">{list.items.length} stock{list.items.length === 1 ? '' : 's'}{otherN ? ` · ${otherN} ${mk === 'US' ? '🇮🇳 Indian' : '🇺🇸 US'} stock${otherN === 1 ? '' : 's'} shown in the ${mk === 'US' ? 'IND' : 'US'} view` : ''}{loading ? ' · loading prices…' : ''}</span></>}
           <span className="wl-btns">
             <button className="btn small" onClick={() => { setNaming('rename'); setNameVal(list.name) }}>✎ Rename</button>
             {list.items.length >= 2 && (picking
@@ -160,7 +163,7 @@ export default function Watch() {
           </div>
         )}
 
-        {!list.items.length && <div className="empty" style={{ padding: 24 }}>“{list.name}” is empty. Tap ☆ on any stock page and tick this list.</div>}
+        {!list.items.length && <div className="empty" style={{ padding: 24 }}>{otherN ? `“${list.name}” has no ${mk === 'US' ? 'US' : 'Indian'} stocks. Its ${otherN} ${mk === 'US' ? 'Indian' : 'US'} stock${otherN === 1 ? ' is' : 's are'} in the ${mk === 'US' ? 'IND' : 'US'} view.` : `“${list.name}” is empty. Tap ☆ on any stock page and tick this list.`}</div>}
 
         {list.items.length > 0 && view === 'map' && (
           <div ref={mapRef} className="hm-map" style={{ height: phone ? 360 : 460, margin: 12, width: 'auto' }}>
@@ -176,8 +179,8 @@ export default function Watch() {
                 {list.items.map((it, i) => {
                   const q = quotes[it.symbol], r = ranks[it.symbol], sa = since(it, q)
                   return (
-                    <tr key={it.symbol} draggable={!picking} className={drag === i ? 'wl-drag' : ''}
-                      onDragStart={() => setDrag(i)} onDragOver={(e) => e.preventDefault()} onDrop={() => { watchlist.reorder(list.id, drag, i); setDrag(null) }} onDragEnd={() => setDrag(null)}
+                    <tr key={it.symbol} draggable={!picking} className={drag === it._fi ? 'wl-drag' : ''}
+                      onDragStart={() => setDrag(it._fi)} onDragOver={(e) => e.preventDefault()} onDrop={() => { watchlist.reorder(list.id, drag, it._fi); setDrag(null) }} onDragEnd={() => setDrag(null)}
                       onClick={() => (picking ? togglePick(it.symbol) : go(`stock/${it.symbol}`))} style={{ cursor: 'pointer' }}>
                       {picking && <td><input type="checkbox" readOnly checked={picked.includes(it.symbol)} /></td>}
                       <td><span className="row" style={{ gap: 10, alignItems: 'center' }}><span className="wl-grip" title="Drag to reorder">⋮⋮</span><Logo sym={it.symbol} name={it.name} size={30} /><span><b>{ticker(it.symbol)}</b> <span className="small muted">{flag(it.symbol)} {it.name}</span></span></span></td>

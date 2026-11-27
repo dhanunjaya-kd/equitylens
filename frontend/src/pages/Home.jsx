@@ -106,7 +106,8 @@ export default function Home() {
   const [top, setTop] = useState([])
   const mk = getMarket()
   useEffect(() => { api(`/api/rankings?sort=overall&market=${mk}`).then((d) => setTop((d.rows || []).slice(0, 5))).catch(() => {}) }, [mk])
-  const rec = recent.all(), watch = watchlist.all()
+  const inMk = (r) => (mk === 'US') === r.symbol.startsWith('US:')
+  const rec = recent.all().filter(inMk), watch = watchlist.all().filter(inMk)
   return (
     <>
     <TodayStrip mk={mk} />

@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, createChart, createTextWatermark } from 'lightweight-charts'
-import { api, num, ok, signed } from '../util'
+import { api, getMarket, num, ok, signed } from '../util'
 import { chime } from '../components/BreakingBar'
 
 // Live terminal: a screen, no orders. NSE stocks, index options, stock F&O, US stocks.
 // Every panel shows the time its source stamped. A figure that fails a check is left out with the reason.
-const LS = 'eql_term_watch'
-const DEFAULT_WATCH = ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'TCS', 'INFY', 'SBIN', 'US:AAPL', 'US:NVDA']
-const INDEX = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY']
+// IND view: Indian symbols only; US view: US symbols only (each market keeps its own watchlist)
+const DEFAULT_WATCH = {
+  IN: ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'TCS', 'INFY', 'SBIN', 'BHARTIARTL'],
+  US: ['US:SPX', 'US:NASDAQ', 'US:DOW', 'US:AAPL', 'US:NVDA', 'US:MSFT', 'US:AMZN', 'US:GOOGL', 'US:META', 'US:TSLA'],
+}
+const INDEX = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'US:SPX', 'US:NASDAQ', 'US:DOW', 'US:RUSSELL', 'US:VIX']
+const US_NAMES = { 'US:SPX': 'S&P 500', 'US:NASDAQ': 'Nasdaq Composite', 'US:DOW': 'Dow Jones', 'US:RUSSELL': 'Russell 2000', 'US:VIX': 'CBOE VIX' }
 const loadJ = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d } catch { return d } }
 const saveJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* ignore */ } }
 const isUSs = (s) => s.startsWith('US:')
 const isIdx = (s) => INDEX.includes(s)
 const ist = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+const usOpen = () => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })); const m = d.getHours() * 60 + d.getMinutes(); return d.getDay() > 0 && d.getDay() < 6 && m >= 570 && m < 960 }
 const nseOpen = () => { const d = ist(); const m = d.getHours() * 60 + d.getMinutes(); return d.getDay() > 0 && d.getDay() < 6 && m >= 555 && m <= 930 }
 const tone = (v) => (!ok(v) ? 'var(--muted)' : v > 0 ? 'var(--good)' : v < 0 ? 'var(--bad)' : 'var(--muted)')
 const px = (v, cur = '₹') => (ok(v) ? `${cur}${num(v, 2)}` : '—')
@@ -318,7 +323,7 @@ function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded, setEx
   const last = d?.bars?.length ? { ...d.bars[d.bars.length - 1], prev: d.bars.length > 1 ? d.bars[d.bars.length - 2].c : d.prev } : null
   const L = leg || last
   const ch = L && ok(L.prev) ? L.c - L.prev : null
-  const exch = isUSs(sym) ? 'US' : isIdx(sym) ? 'NSE index' : 'NSE'
+  const exch = isUSs(sym) ? (isIdx(sym) ? 'US index' : 'US') : isIdx(sym) ? 'NSE index' : 'NSE'
   const f2 = (v) => (ok(v) ? num(v, 2) : '—')
   const active = IND.filter(([k]) => ind[k] && !['vol'].includes(k))
   return (
@@ -366,7 +371,7 @@ function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded, setEx
             </div>
           )}
           <div className="tv-legend">
-            <div className="t1"><b>{name || sym.replace('US:', '')}</b> · {FRAME_LABEL[frame]} · {exch}</div>
+            <div className="t1"><b>{US_NAMES[sym] || name || sym.replace('US:', '')}</b> · {FRAME_LABEL[frame]} · {exch}</div>
             {L && <div className="t2">O<span style={{ color: tone(L.c - L.o) }}>{f2(L.o)}</span> H<span style={{ color: tone(L.c - L.o) }}>{f2(L.h)}</span> L<span style={{ color: tone(L.c - L.o) }}>{f2(L.l)}</span> C<span style={{ color: tone(L.c - L.o) }}>{f2(L.c)}</span>
               {ok(ch) && <span style={{ color: tone(ch) }}> {signed(ch, 2)} ({signed((ch / L.prev) * 100, 2, '%')})</span>}
               {L.v > 0 && ind.vol && <span className="muted"> · Vol {big(L.v)}</span>}</div>}
@@ -522,8 +527,18 @@ function Alerts({ sym, head, alerts, setAlerts }) {
 
 // ---------------------------------------------------------------- page
 export default function Terminal() {
-  const [watch, setWatch] = useState(() => loadJ(LS, DEFAULT_WATCH))
-  const [sym, setSym] = useState(() => loadJ(LS, DEFAULT_WATCH)[0] || 'NIFTY')
+  const mk = getMarket() === 'US' ? 'US' : 'IN'
+  const LS = `eql_term_watch_${mk}`
+  const startList = () => {
+    const own = loadJ(LS, null)
+    if (own) return own
+    const old = loadJ('eql_term_watch', null)                 // the single list from before: split by market
+    const mine = (old || []).filter((s) => (mk === 'US') === isUSs(s))
+    return mine.length ? mine : DEFAULT_WATCH[mk]
+  }
+  const [watch, setWatch] = useState(startList)
+  const [sym, setSym] = useState(() => startList()[0])
+  const [addErr, setAddErr] = useState('')
   const [frame, setFrameRaw] = useState(() => loadJ('eql_term_frame2', '5m'))
   const setFrame = (f) => { setFrameRaw(f); saveJ('eql_term_frame2', f) }
   const [tab, setTab] = useState('chain')
@@ -535,7 +550,7 @@ export default function Terminal() {
   const [alerts, setAlertsRaw] = useState(() => loadJ('eql_term_alerts', []))
   const setAlerts = (a) => { setAlertsRaw(a); saveJ('eql_term_alerts', a) }
   const nse = !isUSs(sym) && !isIdx(sym)
-  const live = isUSs(sym) ? true : nseOpen()
+  const live = mk === 'US' ? usOpen() : nseOpen()
   useEffect(() => { saveJ(LS, watch) }, [watch])
   useEffect(() => { setNseq(null); setYq(null) }, [sym])
   usePoll(() => {
@@ -562,7 +577,14 @@ export default function Terminal() {
   }, [wq, head?.ltp]) // eslint-disable-line react-hooks/exhaustive-deps
   const hasChain = isIdx(sym) || !!head?.fno
   const cur = isUSs(sym) ? '$' : isIdx(sym) ? '' : '₹'
-  const addSym = () => { const s = add.trim().toUpperCase(); if (s && !watch.includes(s)) setWatch([...watch, s]); if (s) setSym(s); setAdd('') }
+  const addSym = () => {
+    let s = add.trim().toUpperCase().replace(/\s+/g, '')
+    if (!s) return
+    if (mk === 'US') { if (!s.startsWith('US:')) s = `US:${s}` } else if (s.startsWith('US:')) { setAddErr('US symbols belong to the US view: switch to 🇺🇸 US at the top.'); return }
+    setAddErr('')
+    if (!watch.includes(s)) setWatch([...watch, s])
+    setSym(s); setAdd('')
+  }
   const tabs = [['chain', hasChain ? 'Option chain & futures' : null], ['depth', nse ? 'Market depth' : null], ['alerts', `Alerts${alerts.filter((a) => !a.hit).length ? ` · ${alerts.filter((a) => !a.hit).length}` : ''}`]].filter(([, l]) => l)
   const t = tabs.some(([k]) => k === tab) ? tab : tabs[0][0]
   const bottomRef = useRef()
@@ -572,9 +594,9 @@ export default function Terminal() {
       <div className="term-top">
         <div className="row" style={{ gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
           <h2 style={{ margin: 0 }}>{sym.replace('US:', '')}</h2>
-          <span className="muted small">{head?.name || ''}</span>
+          <span className="muted small">{US_NAMES[sym] || head?.name || ''}</span>
           {head && ok(head.ltp) && <><b className="term-ltp">{cur}{num(head.ltp, 2)}</b><b style={{ color: tone(head.change) }}>{signed(head.change, 2)} ({signed(head.pchange, 2, '%')})</b></>}
-          <span className={`ipo-cd ${live ? 'warm' : ''}`}>{isUSs(sym) ? 'US market' : nseOpen() ? '🟢 NSE open · live every 3 s' : 'NSE closed · last prices'}</span>
+          <span className={`ipo-cd ${live ? 'warm' : ''}`}>{mk === 'US' ? (live ? '🟢 US market open' : 'US market closed · last prices') : live ? '🟢 NSE open · live every 3 s' : 'NSE closed · last prices'}</span>
           {head?.time && <span className="small muted">as of {head.time}<span className="src-note"> ({head.src})</span></span>}
         </div>
       </div>
@@ -582,14 +604,15 @@ export default function Terminal() {
       <div className="term-grid">
         <div className="card term-watch">
           <div className="row" style={{ gap: 6, marginBottom: 8 }}>
-            <input value={add} onChange={(e) => setAdd(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addSym()} placeholder="Add symbol" style={{ flex: 1, minWidth: 0, padding: '7px 9px' }} />
+            <input value={add} onChange={(e) => setAdd(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addSym()} placeholder={mk === 'US' ? 'Add: MSFT, AMD…' : 'Add: TCS, NIFTY…'} style={{ flex: 1, minWidth: 0, padding: '7px 9px' }} />
             <button className="btn small" onClick={addSym}>+</button>
           </div>
+          {addErr && <div className="small" style={{ color: 'var(--warn)', marginBottom: 6 }}>{addErr}</div>}
           {watch.map((w) => {
             const x = wq[w]
             return (
               <div key={w} className={`term-w ${w === sym ? 'on' : ''}`} onClick={() => setSym(w)}>
-                <span className="s">{w.replace('US:', '')}{isUSs(w) && <small> US</small>}{isIdx(w) && <small> IDX</small>}</span>
+                <span className="s">{w.replace('US:', '')}{isIdx(w) && <small> IDX</small>}</span>
                 <span className="p">{x?.price ? num(x.price, 2) : '—'}<small style={{ color: tone(x?.pchange) }}>{ok(x?.pchange) ? signed(x.pchange, 2, '%') : ''}</small></span>
                 <button className="x" title="Remove" onClick={(e) => { e.stopPropagation(); setWatch(watch.filter((z) => z !== w)) }}>×</button>
               </div>

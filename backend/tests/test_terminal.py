@@ -72,6 +72,7 @@ def test_yahoo_candles_and_vwap():
     tp1, tp2 = (101 + 99 + 100.5) / 3, (102 + 100 + 101.5) / 3
     assert y["vwap"] == [round(tp1, 2), round((tp1 * 10 + tp2 * 30) / 40, 2)]
     assert T.yahoo_symbol("reliance") == "RELIANCE.NS" and T.yahoo_symbol("US:AAPL") == "AAPL" and T.yahoo_symbol("NIFTY") == "^NSEI"
+    assert T.yahoo_symbol("US:SPX") == "^GSPC" and T.yahoo_symbol("US:NASDAQ") == "^IXIC" and T.yahoo_symbol("US:MSFT") == "MSFT"
 
 
 def test_real_nse_option_chain_v3():

@@ -387,10 +387,13 @@ def fno(symbol: str, expiry: Optional[str] = None) -> dict:
 
 
 # ------------------------------------------------------------------ candles and US / index quotes (Yahoo)
+US_INDICES = {"SPX": "^GSPC", "NASDAQ": "^IXIC", "DOW": "^DJI", "RUSSELL": "^RUT", "VIX": "^VIX"}
+
+
 def yahoo_symbol(sym: str) -> str:
     s = clean(sym)
     if s.startswith("US:"):
-        return s[3:]
+        return US_INDICES.get(s[3:], s[3:])
     if s in INDICES:
         return INDICES[s][0]
     if s.startswith("^") or s.endswith(".NS") or s.endswith(".BO"):

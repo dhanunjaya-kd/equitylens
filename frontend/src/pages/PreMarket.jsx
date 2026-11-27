@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, ago, go, num, signed } from '../util'
-import { Badge, Loading } from '../components/ui'
+import { api, ago, getMarket, go, num, signed } from '../util'
+import { Badge, Loading, MarketOnly } from '../components/ui'
 import { Md, useAISettings } from './AI'
 
 // Pre-market (India): overnight board, the NIFTY opening call and its real track record.
@@ -300,7 +300,7 @@ function Track({ d, onRun, running }) {
   )
 }
 
-export default function PreMarket() {
+function PreMarketPage() {
   const [d, setD] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false), [running, setRunning] = useState(false)
   const load = async (refresh) => {
     setBusy(true); setErr(null)
@@ -345,4 +345,9 @@ export default function PreMarket() {
       )}
     </div>
   )
+}
+
+export default function PreMarket() {
+  if (getMarket() === 'US') return <div><MarketOnly market="IN" what="Pre-market" /></div>
+  return <PreMarketPage />
 }
