@@ -31,7 +31,7 @@ DATA_KEYS = {"watchlist", "recent", "screens", "chart_over", "chart_panes", "not
 MAX_VALUE_BYTES = 512 * 1024
 # owner-only: anything that shows the owner's private data or controls the computer
 OWNER_ONLY = ("/api/brokers", "/api/broker/", "/api/portfolio", "/api/ai/portfolio", "/api/logs", "/api/network",
-              "/api/scan/start", "/api/premarket/backtest", "/api/jobs/", "/api/alerts")
+              "/api/scan/start", "/api/premarket/backtest", "/api/jobs/", "/api/alerts", "/api/automation")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _lock = threading.Lock()
 _current: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("eql_user", default=None)

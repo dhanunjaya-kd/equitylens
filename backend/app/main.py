@@ -42,6 +42,8 @@ def _background_jobs():
     news.start_background()           # filings, central banks and publishers' feeds every 10 minutes
     from . import jobs
     jobs.start_background()           # data checks run by themselves after each month end, outside market hours
+    from . import automation
+    automation.start_background()     # nightly Top Picks scan, IPO lists every 15 minutes
 
 
 @app.middleware("http")
@@ -412,6 +414,27 @@ def premarket_backtest():
 @app.post("/api/ai/premarket")
 def ai_premarket(market: str = "IN", refresh: bool = False):
     return _ai(ai.premarket_brief, premarket.build(market), refresh)
+
+
+@app.get("/api/automation")
+def automation_get():
+    from . import automation
+    return automation.status()
+
+
+@app.post("/api/automation/{task}")
+def automation_set(task: str, on: bool = True):
+    from . import automation
+    try:
+        return automation.set_enabled(task, on)
+    except KeyError:
+        raise HTTPException(404, "No such task")
+
+
+@app.get("/api/today")
+def today_get(market: str = "IN", symbols: str = ""):
+    from . import today
+    return today.get(market.upper(), symbols)
 
 
 @app.get("/api/jobs/auto")

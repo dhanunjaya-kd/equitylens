@@ -1,6 +1,81 @@
 import { useEffect, useState } from 'react'
 import { Logo, SearchBox, ScoreRing } from '../components/ui'
-import { api, flag, getMarket, go, pct, recent, ticker, watchlist } from '../util'
+import { api, flag, getMarket, go, pct, recent, ticker, watchlist, signed, num, ok } from '../util'
+
+// 'Today' strip: the day's key facts from data the app already keeps; refreshes itself (every minute in market hours).
+const istNow = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+const marketOpen = () => { const d = istNow(); const m = d.getHours() * 60 + d.getMinutes(); return d.getDay() > 0 && d.getDay() < 6 && m >= 555 && m <= 930 }
+const crore = (v) => (ok(v) ? `${v < 0 ? '−' : '+'}₹${num(Math.abs(v))} Cr` : '—')
+const tone = (v) => (!ok(v) ? 'var(--muted)' : v > 0 ? 'var(--good)' : v < 0 ? 'var(--bad)' : 'var(--muted)')
+
+function TodayTile({ icon, k, children, onClick }) {
+  return <div className={`today-tile ${onClick ? 'link' : ''}`} onClick={onClick}><div className="k">{icon} {k}</div><div className="b">{children}</div></div>
+}
+
+function TodayStrip({ mk }) {
+  const [d, setD] = useState(null)
+  const [moves, setMoves] = useState(null)
+  const [at, setAt] = useState(null)
+  const syms = watchlist.all().map((w) => w.symbol).filter((s) => (mk === 'US' ? s.startsWith('US:') : !s.startsWith('US:')))
+  const load = () => {
+    api(`/api/today?market=${mk}&symbols=${encodeURIComponent(syms.join(','))}`).then((x) => { setD(x); setAt(new Date()) }).catch(() => {})
+    if (syms.length) api(`/api/watch/quotes?symbols=${encodeURIComponent(syms.slice(0, 40).join(','))}`).then((x) => setMoves(x.rows.filter((r) => ok(r.ret?.['1D'])))).catch(() => {})
+  }
+  useEffect(() => {
+    load()
+    const t = setInterval(load, marketOpen() ? 60000 : 600000)
+    return () => clearInterval(t)
+  }, [mk]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!d) return null
+  const up = (moves || []).slice().sort((a, b) => b.ret['1D'] - a.ret['1D'])
+  const pm = d.premarket, fd = d.fiidii, ip = d.ipo, rs = d.results
+  return (
+    <div className="today">
+      <div className="row between" style={{ marginBottom: 6 }}>
+        <b>📅 Today</b>
+        <span className="small muted">{marketOpen() ? '🟢 market open · updates every minute' : 'updates every 10 minutes'}{at ? ` · ${at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+      </div>
+      <div className="today-grid">
+        {mk !== 'US' && (
+          <TodayTile icon="🌅" k="NIFTY opening call" onClick={() => go('premarket')}>
+            {pm ? <b style={{ color: pm.call === 'up' ? 'var(--good)' : pm.call === 'down' ? 'var(--bad)' : 'var(--muted)' }}>{pm.label}</b> : <span className="muted">No call frozen for today yet</span>}
+            {pm?.built && <div className="small muted">made {pm.built}</div>}
+          </TodayTile>
+        )}
+        {mk !== 'US' && fd && (
+          <TodayTile icon="🏦" k={`FII / DII · ${new Date(fd.date + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`} onClick={() => go('fiidii')}>
+            <div>FII <b style={{ color: tone(fd.fii) }}>{crore(fd.fii)}</b></div><div>DII <b style={{ color: tone(fd.dii) }}>{crore(fd.dii)}</b></div>
+          </TodayTile>
+        )}
+        {mk !== 'US' && ip && (
+          <TodayTile icon="🚀" k="IPOs" onClick={() => go('ipo')}>
+            <div><b>{ip.open}</b> open ({ip.open_main} mainboard)</div>
+            {ip.closing_today.length > 0 ? <div className="small" style={{ color: 'var(--warn)' }}>Closing today: {ip.closing_today.map((x) => `${x.symbol}${ok(x.times) ? ` ${num(x.times, 2)}x` : ''}`).join(', ')}</div>
+              : ip.opening_next[0] ? <div className="small muted">Next: {ip.opening_next[0].symbol} opens {new Date(ip.opening_next[0].start + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div> : null}
+          </TodayTile>
+        )}
+        {mk !== 'US' && rs && (
+          <TodayTile icon="📊" k="Results today" onClick={() => go('calendar')}>
+            <div><b>{rs.count}</b> {rs.count === 1 ? 'company' : 'companies'}</div>
+            {rs.mine.length > 0 ? <div className="small" style={{ color: 'var(--accent)' }}>★ yours: {rs.mine.join(', ')}</div>
+              : rs.top.length > 0 ? <div className="small muted">{rs.top.slice(0, 3).map((x) => x.symbol).join(', ')}</div> : null}
+          </TodayTile>
+        )}
+        {up.length > 0 && (
+          <TodayTile icon="⭐" k="Watchlist today" onClick={() => go('watch')}>
+            {[up[0], up.length > 1 ? up[up.length - 1] : null].filter(Boolean).map((r) => (
+              <div key={r.symbol} className="row between"><span>{ticker(r.symbol)}</span><b style={{ color: tone(r.ret['1D']) }}>{signed(r.ret['1D'], 1, '%')}</b></div>
+            ))}
+            <div className="small muted">{up.filter((r) => r.ret['1D'] > 0).length} up · {up.filter((r) => r.ret['1D'] < 0).length} down</div>
+          </TodayTile>
+        )}
+        <TodayTile icon="🔴" k="Breaking" onClick={() => go('news')}>
+          {d.breaking?.length ? d.breaking.slice(0, 2).map((b, i) => <div key={i} className="small today-news">{b.title}</div>) : <span className="muted small">Nothing market-wide right now</span>}
+        </TodayTile>
+      </div>
+    </div>
+  )
+}
 
 export default function Home() {
   const [top, setTop] = useState([])
@@ -8,6 +83,8 @@ export default function Home() {
   useEffect(() => { api(`/api/rankings?sort=overall&market=${mk}`).then((d) => setTop((d.rows || []).slice(0, 5))).catch(() => {}) }, [mk])
   const rec = recent.all(), watch = watchlist.all()
   return (
+    <>
+    <TodayStrip mk={mk} />
     <div className="home-grid">
       <div>
       <div style={{ padding: '18px 2px 6px' }}>
@@ -84,5 +161,6 @@ export default function Home() {
       </div>
       </div>
     </div>
+    </>
   )
 }

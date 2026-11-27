@@ -157,6 +157,10 @@ def auto_tick(now=None) -> Optional[str]:
     for n in JOBS:
         if not s["enabled"][n] or s["last_try"].get(n, "") >= today:
             continue
+        if n == "entry":
+            from . import service
+            if service.SCAN["running"]:          # both use screener.in: wait for the Top Picks scan to finish
+                continue
         d, _ = due(n, now)
         if d:
             s["last_try"][n] = today

@@ -1,6 +1,7 @@
 import { marked } from 'marked'
 import { AccountsCard, LogsCard, PhoneCard } from '../components/Access'
 import DataChecks from '../components/DataChecks'
+import Automation from '../components/Automation'
 import TelegramCard from '../components/TelegramCard'
 import { BreakingSoundCard } from '../components/BreakingBar'
 import { useEffect, useRef, useState } from 'react'
@@ -282,7 +283,7 @@ export function Settings() {
       </div>
       <AccountsCard />
       <BreakingSoundCard />
-      {(!me() || me().role === 'owner') && <><TelegramCard /><DataChecks /><PhoneCard /><LogsCard /></>}
+      {(!me() || me().role === 'owner') && <><Automation /><TelegramCard /><DataChecks /><PhoneCard /><LogsCard /></>}
     </>
   )
 }
