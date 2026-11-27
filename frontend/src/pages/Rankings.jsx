@@ -40,7 +40,14 @@ export default function Rankings() {
   }, [scan?.running])
 
   const [scanList, setScanList] = useState('N500')
-  const start = async (limit, which) => setScan(await api(`/api/scan/start?market=${mk}${limit ? `&limit=${limit}` : ''}${which ? `&universe=${which}` : ''}`, { method: 'POST' }))
+  const start = async (limit, which, cap) => setScan(await api(`/api/scan/start?market=${mk}${limit ? `&limit=${limit}` : ''}${which ? `&universe=${which}` : ''}${cap ? `&min_cap=${cap}` : ''}`, { method: 'POST' }))
+  // 🇺🇸 scan lists: S&P 500 · Nasdaq-100 · every listed stock above a market-cap floor (counts from Nasdaq's list)
+  const [usList, setUsList] = useState('SP500')
+  const [usInfo, setUsInfo] = useState(null)
+  useEffect(() => { if (mk === 'US') api('/api/us/universe').then(setUsInfo).catch(() => {}) }, [mk])
+  const usOpts = [['SP500', null, 'S&P 500 (~500)'], ['NDX', null, `Nasdaq-100 (${usInfo?.ndx || '~100'})`],
+    ...[[10000, '$10 B'], [2000, '$2 B'], [300, '$300 M'], [50, '$50 M']].map(([c, l]) => [`ALL:${c}`, c, `All US above ${l}${usInfo?.above?.[c] !== undefined ? ` (${usInfo.above[c].toLocaleString()})` : ''}`])]
+  const usMins = (k) => { const n = k === 'SP500' ? 500 : k === 'NDX' ? 100 : usInfo?.above?.[k.split(':')[1]]; return n ? `~${Math.max(5, Math.round(n * 8 / 60))} min` : '' }
   const SCAN_TIME = { N50: '~3 min', N100: '~6 min', N500: '30–60 min', ALL: '2–3 hours' }
   const stop = async () => setScan(await api('/api/scan/stop', { method: 'POST' }))
   const [fno] = useFno()
@@ -58,7 +65,12 @@ export default function Rankings() {
           {scan?.running
             ? <button className="btn small" onClick={stop}>Stop scan</button>
             : mk === 'US'
-              ? <div className="row"><button className="btn small" onClick={() => start(30)}>Quick scan (30)</button><button className="btn primary small" onClick={() => start()}>Scan S&P 500</button></div>
+              ? <div className="row wrapflex" style={{ gap: 6 }}>
+                  <select value={usList} onChange={(e) => setUsList(e.target.value)} style={{ width: 'auto' }}>
+                    {usOpts.map(([k, , l]) => <option key={k} value={k}>Scan {l}{usMins(k) ? ` · ${usMins(k)}` : ''}</option>)}
+                  </select>
+                  <button className="btn primary small" onClick={() => { const o = usOpts.find((x) => x[0] === usList); start(null, usList.split(':')[0], o[1]) }}>Start scan</button>
+                </div>
               : <div className="row wrapflex" style={{ gap: 6 }}>
                   <select value={scanList} onChange={(e) => setScanList(e.target.value)} style={{ width: 'auto' }}>
                     {UNIVERSES.map(([k, l]) => <option key={k} value={k}>Scan {l} ({SCAN_TIME[k]})</option>)}
@@ -71,7 +83,7 @@ export default function Rankings() {
           <>
             <div className="small" style={{ marginTop: 10 }}>Scanning {scan.current || '…'} — {scan.done}/{scan.total}{scan.failed ? ` · ${scan.failed} failed` : ''}</div>
             <div className="progress"><div style={{ width: `${scan.total ? (scan.done / scan.total) * 100 : 0}%` }} /></div>
-            <div className="small muted" style={{ marginTop: 6 }}>A full scan takes 40–60 min (paced to stay polite to the data source). You can keep using the app.</div>
+            <div className="small muted" style={{ marginTop: 6 }}>{scan.source ? `${scan.source} · ` : ''}Paced to stay polite to the data source (about 8 seconds a company, as measured on your laptop); already-scanned companies are reused. You can keep using the app.</div>
           </>
         )}
         {!scan?.running && scan?.finished_at && <div className="small muted" style={{ marginTop: 8 }}>Last scan finished {ago(scan.finished_at)} · {scan.done} companies<span className="src-note"> · {scan.source}</span></div>}

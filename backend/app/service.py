@@ -50,8 +50,38 @@ def _fetch_extras(company: dict, view: str, full: bool) -> dict:
     return extras
 
 
-def fetch_payload_us(sym: str, full: bool = True) -> dict:
+def us_fx(cur: str) -> Optional[dict]:
+    """US$ per 1 unit of `cur`, latest daily close of Yahoo's <CUR>USD=X (cached 12 h). None when unavailable."""
     from . import technicals
+    key = f"FX::{cur}USD"
+    hit = store.get_company(key)
+    if hit and time.time() - hit[0] < 12 * 3600:
+        return hit[1]
+    try:
+        bars = technicals._yahoo(f"{cur}USD=X", "1mo")
+        b = bars[-1] if bars else None
+        if b and b["c"] and b["c"] > 0:
+            out = {"rate": b["c"], "date": b["t"], "source": f"Yahoo {cur}USD=X"}
+            store.put_company(key, out)
+            return out
+    except Exception:  # noqa: BLE001
+        pass
+    return hit[1] if hit else None
+
+
+def _save_us_raw(ticker: str, facts: dict, subs: dict) -> None:
+    import json as _json
+    try:
+        d = config.DATA_DIR / "us_raw"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"sec_facts_{ticker}.json").write_text(_json.dumps(facts), encoding="utf-8")
+        (d / f"sec_subs_{ticker}.json").write_text(_json.dumps(subs), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def fetch_payload_us(sym: str, full: bool = True) -> dict:
+    from . import ipo, technicals, usuniverse
     info, facts, subs = us.fetch_raw(sym)
     try:
         bars, _, _ = technicals.get_bars(sym)
@@ -61,7 +91,21 @@ def fetch_payload_us(sym: str, full: bool = True) -> dict:
     yr = bars[-252:]
     hi52 = max(b["h"] for b in yr) if yr else None
     lo52 = min(b["l"] for b in yr) if yr else None
-    company = us.build_company(sym, price, hi52, lo52, info, facts, subs)
+    F = us.Facts(facts)
+    fx = us_fx(F.cur) if F.cur != "USD" else None
+    try:
+        usuniverse.listed()                       # Nasdaq's list (cached 4 h): market cap, sector, country
+    except Exception:  # noqa: BLE001
+        pass
+    nq = usuniverse.info(info["ticker"])
+    form = F.annual_form()
+    if form in ("20-F", "40-F") or F.cur != "USD":
+        _save_us_raw(info["ticker"], facts, subs)
+    if not F.annual_flow(us.REVENUE):
+        _save_us_raw(info["ticker"], facts, subs)
+        prof = us.profile(info, facts, subs, bars, ipo.us_ipo_for(f"US:{info['ticker']}"), nq, fx)
+        raise us.USNoFinancials(f"No annual financials in SEC filings for {info['ticker']} yet.", prof)
+    company = us.build_company(sym, price, hi52, lo52, info, facts, subs, fx=fx, nasdaq_cap=(nq or {}).get("market_cap"))
     pe = us.pe_history(bars[-2600:], company.pop("annual_eps_points", []))
     weekly = bars[-2600::5]
     extras = {"errors": [] if bars else ["Price history unavailable"], "full": True,
@@ -277,11 +321,27 @@ SCAN = {"market": "IN", "running": False, "total": 0, "done": 0, "failed": 0, "c
 _scan_lock = threading.Lock()
 
 
-def _scan_worker(limit: Optional[int], market: str = "IN", which: str = "N500", symbols: Optional[list] = None) -> None:
+def us_scan_list(which: str, min_cap: float = 0) -> tuple[list[dict], str]:
+    """🇺🇸 SP500 (Wikipedia list) · NDX (Nasdaq-100, from Nasdaq) · ALL (every listed US stock with a Nasdaq-stated
+    market cap of at least min_cap $ million, biggest first)."""
+    from . import usuniverse
+    if which == "NDX":
+        rows = usuniverse.nasdaq100()
+        return [{"symbol": r["symbol"], "name": r["name"], "industry": ""} for r in rows], "Nasdaq-100 (Nasdaq)"
+    if which == "ALL":
+        rows = [r for r in usuniverse.listed()["rows"] if (r.get("market_cap") or 0) >= max(min_cap, 1)]
+        rows.sort(key=lambda r: -r["market_cap"])
+        lab = f"All US stocks with market cap ≥ ${min_cap / 1000:g} B (Nasdaq)" if min_cap >= 1000 else f"All US stocks with market cap ≥ ${min_cap:g} M (Nasdaq)"
+        return [{"symbol": r["symbol"], "name": r["name"], "industry": r.get("sector") if r.get("sector") != "Other" else ""} for r in rows], lab
+    return us.sp500_universe(download=True)
+
+
+def _scan_worker(limit: Optional[int], market: str = "IN", which: str = "N500", symbols: Optional[list] = None,
+                 min_cap: float = 0) -> None:
     if symbols:
         rows, src = [{"symbol": s, "name": "", "industry": ""} for s in symbols], "your portfolio"
     elif market == "US":
-        rows, src = us.sp500_universe(download=True)
+        rows, src = us_scan_list(which, min_cap)
     elif which == "N500":
         rows, src = universe.load(download=True)
     else:
@@ -326,15 +386,15 @@ def _no_score_add(sym: str) -> None:
 
 
 def start_scan(limit: Optional[int] = None, block: bool = False, market: str = "IN", which: str = "N500",
-               symbols: Optional[list] = None) -> dict:
+               symbols: Optional[list] = None, min_cap: float = 0) -> dict:
     with _scan_lock:
         if SCAN["running"]:
             return scan_status()
         SCAN.update(running=True, stop=False, universe=which)
     if block:
-        _scan_worker(limit, market, which, symbols)
+        _scan_worker(limit, market, which, symbols, min_cap)
     else:
-        threading.Thread(target=_scan_worker, args=(limit, market, which, symbols), daemon=True).start()
+        threading.Thread(target=_scan_worker, args=(limit, market, which, symbols, min_cap), daemon=True).start()
     return scan_status()
 
 

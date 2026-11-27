@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { UNIVERSES, api, cur, getFno, getMarket, getUniv, go, logoUrl, ok, scoreColor, setFnoLS, setUnivLS, me } from '../util'
+import { UNIVERSES, US_UNIVERSES, getUsUniv, setUsUnivLS, api, cur, getFno, getMarket, getUniv, go, logoUrl, ok, scoreColor, setFnoLS, setUnivLS, me } from '../util'
 
 export function ScoreRing({ value, size = 84, label }) {
   const r = 34, c = 2 * Math.PI * r
@@ -159,6 +159,16 @@ export function useUniv() {
   return [v, (x) => setUnivLS(x)]
 }
 // NIFTY 50 · NIFTY 100 · NIFTY 500 · All NSE (India only)
+export function useUsUniv() {
+  const [v, setV] = useState(getUsUniv())
+  useEffect(() => { const on = () => setV(getUsUniv()); window.addEventListener('eql-us-univ', on); return () => window.removeEventListener('eql-us-univ', on) }, [])
+  return [v, (x) => { setUsUnivLS(x); setV(x) }]
+}
+export function UsUniverseChips() {
+  const [u, setU] = useUsUniv()
+  if (getMarket() !== 'US') return null
+  return <div className="univ">{US_UNIVERSES.map(([k, l]) => <button key={k} className={u === k ? 'on' : ''} onClick={() => setU(k)}>{l}</button>)}</div>
+}
 export function UniverseChips({ counts }) {
   const [u, setU] = useUniv()
   if (getMarket() !== 'IN') return null

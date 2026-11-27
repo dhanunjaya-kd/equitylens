@@ -1,4 +1,8 @@
-"""Market movers for 🇮🇳 NIFTY 500 and 🇺🇸 S&P 500 over 1D / 1W / 1M / 3M / 1Y.
+"""Market movers for 🇮🇳 NIFTY 500 and 🇺🇸 S&P 500 + Nasdaq-100 over 1D / 1W / 1M / 3M / 1Y.
+
+🇺🇸 "All US" (every NYSE / Nasdaq / NYSE American stock, ~6-7k) adds Nasdaq's own daily snapshot for the
+stocks outside S&P 500 / Nasdaq-100: last sale, day change, volume and market cap only (no daily history),
+so for them only 1D moves exist; 52-week, average and pressure fields stay empty (None), never guessed.
 
 One background refresh pulls ~2 years of daily bars for every stock in the
 universe (Yahoo Finance, paced), then computes per stock and per timeframe:
@@ -19,7 +23,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from . import config, store, technicals, universe, us
+from . import config, store, technicals, universe, us, usuniverse
 
 TF = {"1D": 1, "1W": 5, "1M": 21, "3M": 63, "1Y": 252}
 TTL = 6 * 3600
@@ -42,7 +46,17 @@ def _universe(market: str, which: str = "N500") -> list[dict]:
                         "name": "Test Corp US" if market == "US" else "Test Industries Ltd", "industry": sectors[0]})
         return rows
     if market == "US":
-        return us.sp500_universe(download=True)[0]
+        sp = [dict(r, idx=["SP500"]) for r in us.sp500_universe(download=True)[0]]
+        have = {r["symbol"]: r for r in sp}
+        ndx = usuniverse.nasdaq100()
+        snap = usuniverse.by_symbol() if ndx else {}
+        for x in ndx:
+            if x["symbol"] in have:
+                have[x["symbol"]]["idx"].append("NDX")
+            else:
+                sec = (snap.get(x["symbol"]) or {}).get("sector") or "Other"
+                sp.append({"symbol": x["symbol"], "name": x["name"], "industry": sec, "idx": ["NDX"]})
+        return sp
     return universe.index_list(which) if which == "ALL" else universe.load(download=True)[0]
 
 
@@ -162,6 +176,8 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
             def one(u):
                 try:
                     r = compute_row(u["symbol"], u.get("name", ""), u.get("industry", ""), _bars(u["symbol"]), market)
+                    if r and u.get("idx"):
+                        r["idx"] = u["idx"]
                     if r:
                         rows.append(r)
                     else:
@@ -177,7 +193,7 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
                 list(ex.map(one, uni))
             if rows:
                 store.put_company(_key(market), {"rows": rows, "updated": time.time(), "count": len(rows),
-                                                 "universe": which if market == "IN" else "SP500"})
+                                                 "universe": which if market == "IN" else "SP500+NDX"})
         finally:
             STATE[market]["running"] = False
 
@@ -199,25 +215,31 @@ def _mood(rows: list[dict], tf: str) -> dict:
         return {}
     adv = sum(1 for x in rs if x > 0)
     dec = sum(1 for x in rs if x < 0)
-    a200 = sum(1 for r in rows if r["above200"]) / len(rows) * 100
-    a50 = sum(1 for r in rows if r["above50"]) / len(rows) * 100
-    nh = sum(1 for r in rows if r["new_high"])
-    nl = sum(1 for r in rows if r["new_low"])
-    near_hi = sum(1 for r in rows if (r["from_hi"] or -99) >= -5)
-    near_lo = sum(1 for r in rows if (r["from_lo"] or 99) <= 5)
+    hist = [r for r in rows if r.get("above200") is not None]      # stocks with daily history (not snapshot-only)
+    a200 = sum(1 for r in hist if r["above200"]) / len(hist) * 100 if hist else None
+    a50 = sum(1 for r in hist if r["above50"]) / len(hist) * 100 if hist else None
+    nh = sum(1 for r in hist if r["new_high"])
+    nl = sum(1 for r in hist if r["new_low"])
+    near_hi = sum(1 for r in hist if (r["from_hi"] or -99) >= -5)
+    near_lo = sum(1 for r in hist if (r["from_lo"] or 99) <= 5)
     med = statistics.median(rs)
     spread = {"1D": 2, "1W": 4, "1M": 8, "3M": 15, "1Y": 30}[tf]
-    parts = [adv / max(adv + dec, 1) * 100, a200, a50,
-             (near_hi / max(near_hi + near_lo, 1)) * 100, max(0, min(100, 50 + med / spread * 50))]
+    parts = [adv / max(adv + dec, 1) * 100, max(0, min(100, 50 + med / spread * 50))]
+    if hist:
+        parts += [a200, a50, (near_hi / max(near_hi + near_lo, 1)) * 100]
     score = round(sum(parts) / len(parts))
     label = ("Extreme fear" if score < 25 else "Fear" if score < 45 else "Neutral" if score <= 55
              else "Greed" if score <= 75 else "Extreme greed")
     tone = {"Extreme fear": "bad", "Fear": "warn", "Neutral": "neutral", "Greed": "ok", "Extreme greed": "good"}[label]
-    read = (f"{adv} stocks rose and {dec} fell over {tf}. {a200:.0f}% trade above their 200-day average "
-            f"({'a healthy long-term trend' if a200 >= 60 else 'a weak long-term trend' if a200 < 40 else 'a mixed trend'}). "
-            f"{nh} hit a fresh 52-week high today and {nl} a fresh low.")
+    read = f"{adv} stocks rose and {dec} fell over {tf}."
+    if hist:
+        of = f" (of the {len(hist)} with daily history)" if len(hist) < len(rows) else ""
+        read += (f" {a200:.0f}%{of} trade above their 200-day average "
+                 f"({'a healthy long-term trend' if a200 >= 60 else 'a weak long-term trend' if a200 < 40 else 'a mixed trend'}). "
+                 f"{nh} hit a fresh 52-week high today and {nl} a fresh low.")
     return {"score": score, "label": label, "tone": tone, "advances": adv, "declines": dec, "unchanged": len(rs) - adv - dec,
-            "above200": round(a200), "above50": round(a50), "new_highs": nh, "new_lows": nl, "median": round(med, 2), "read": read}
+            "above200": round(a200) if a200 is not None else None, "above50": round(a50) if a50 is not None else None,
+            "new_highs": nh, "new_lows": nl, "median": round(med, 2), "read": read, "with_history": len(hist), "count": len(rows)}
 
 
 def _sectors(rows: list[dict], tf: str) -> list[dict]:
@@ -237,6 +259,19 @@ def _sectors(rows: list[dict], tf: str) -> list[dict]:
     return out
 
 
+def snapshot_row(x: dict) -> dict:
+    """A Nasdaq-snapshot stock (no daily history): only what Nasdaq states."""
+    pct = x.get("chg_pct")
+    val = round(x["price"] * x["volume"] / 1e6, 2) if x.get("price") and x.get("volume") else None
+    return {"symbol": x["symbol"], "name": x["name"], "sector": x.get("sector") or "Other", "market": "US",
+            "price": x.get("price"), "open": None, "high": None, "low": None,
+            "ret": {tf: (pct if tf == "1D" else None) for tf in TF}, "pressure": {}, "turnover": {"1D": val},
+            "vol_change": {}, "hi52": None, "lo52": None, "from_hi": None, "from_lo": None, "new_high": None, "new_low": None,
+            "vol": x.get("volume"), "rvol": None, "above50": None, "above200": None, "closed_high": False, "closed_low": False,
+            "spark": [], "spark_t": [], "date": None, "snapshot": True, "idx": [], "exchange": x.get("exchange"),
+            "mcap_nasdaq": x.get("market_cap")}
+
+
 def get(market: str, tf: str = "1D", which: str = "") -> dict:
     market = market.upper()
     tf = tf if tf in TF else "1D"
@@ -245,7 +280,8 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
     now = time.time()
     us_mkt = market == "US"
     stale = (not hit) or (now - hit[0] > TTL) or technicals._last_close_after(hit[0], now, us_mkt) \
-        or ((not us_mkt) and technicals._market_open(now) and now - hit[0] > OPEN_TTL)
+        or ((not us_mkt) and technicals._market_open(now) and now - hit[0] > OPEN_TTL)\
+        or (us_mkt and data is not None and data.get("universe") != "SP500+NDX")   # saved before Nasdaq-100 joined
     if stale and not STATE[market]["running"]:
         refresh(market)
     rows = data["rows"] if data else []
@@ -259,6 +295,22 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
             r["sector"] = smap.get(r["symbol"]) or (r["sector"] if r["sector"] not in ("", "Other") else sectors.UNKNOWN)
         if which in ("N50", "N100", "N500"):
             rows = [r for r in rows if which in r["idx"]]
+    snap_info = None
+    if market == "US":
+        for r in rows:
+            r.setdefault("idx", ["SP500"])               # rows saved before Nasdaq-100 was added came from the S&P 500 list
+        which = which if which in ("SP500", "NDX", "ALL") else "SP500"
+        lst = usuniverse.listed() if which == "ALL" else {"rows": usuniverse_rows_cached()}
+        caps = {x["symbol"]: x.get("market_cap") for x in lst["rows"]}
+        for r in rows:
+            r["mcap_nasdaq"] = caps.get(r["symbol"])
+        if which in ("SP500", "NDX"):
+            rows = [r for r in rows if which in r["idx"]]
+        else:
+            have = {r["symbol"] for r in rows}
+            rows = rows + [snapshot_row(x) for x in lst["rows"] if x["symbol"] not in have]
+            snap_info = {"updated": lst.get("updated"), "sources": lst.get("sources", []), "snapshot": sum(1 for r in rows if r.get("snapshot"))}
+        loaded = which
     ranks = {r["symbol"]: r for r in store.all_rankings() if r.get("market", "IN") == market}
     dl = store.get_company("DELIVERY::IN") if market == "IN" else None
     dmap = {x["symbol"]: x for x in (dl[1]["rows"] if dl else [])}
@@ -281,4 +333,9 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
     return {"market": market, "tf": tf, "rows": rows, "updated": data["updated"] if data else None,
             "session": session, "live": live,
             "mood": _mood(rows, tf) if rows else None, "sectors": _sectors(rows, tf) if rows else [],
-            "status": status(market), "scanned": len(ranks), "universe": loaded, "count": len(rows)}
+            "status": status(market), "scanned": len(ranks), "universe": loaded, "count": len(rows), "snapshot": snap_info}
+
+
+def usuniverse_rows_cached() -> list[dict]:
+    hit = store.get_company("USUNIV::listed")
+    return hit[1]["rows"] if hit else []

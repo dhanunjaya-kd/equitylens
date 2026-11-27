@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Badge, FnoBadge, FnoToggle, Logo, UniverseChips, useFno, useUniv } from '../components/ui'
+import { Badge, FnoBadge, FnoToggle, Logo, UniverseChips, UsUniverseChips, useFno, useUniv, useUsUniv } from '../components/ui'
 import { ago, api, cr, getMarket, go, isDesktop, num, ok, pct, rs, signed, ticker, watchlist } from '../util'
 import { Md } from './AI'
 
@@ -78,8 +78,9 @@ export default function Movers() {
   const poll = useRef()
 
   const [univ] = useUniv()
-  const load = () => api(`/api/movers?market=${mk}&tf=${tf}${mk === 'IN' ? `&universe=${univ}` : ''}`).then(setD).catch(() => setD({ rows: [], status: {} }))
-  useEffect(() => { load(); setAi(null) }, [tf, mk, univ])
+  const [uu] = useUsUniv()
+  const load = () => api(`/api/movers?market=${mk}&tf=${tf}&universe=${mk === 'IN' ? univ : uu}`).then(setD).catch(() => setD({ rows: [], status: {} }))
+  useEffect(() => { load(); setAi(null) }, [tf, mk, univ, uu])
   useEffect(() => {
     clearInterval(poll.current)
     if (d?.status?.running) poll.current = setInterval(load, 4000)
@@ -93,7 +94,7 @@ export default function Movers() {
     return rows.filter((x) => (!sector || x.sector === sector)
       && (f.minPrice === '' || x.price >= +f.minPrice) && (f.maxPrice === '' || x.price <= +f.maxPrice)
       && (f.minTurn === '' || (x.turnover?.[tf] || 0) >= +f.minTurn)
-      && (f.minCap === '' || (x.fund?.market_cap || 0) >= +f.minCap)
+      && (f.minCap === '' || (x.fund?.market_cap || x.mcap_nasdaq || 0) >= +f.minCap)
       && (f.minScore === '' || (x.fund?.overall || 0) >= +f.minScore)
       && (!f.watch || watchSet.has(x.symbol)) && (!f.above200 || x.above200) && (!fno || x.fno))
   }, [d, sector, f, tf, fno])
@@ -122,11 +123,18 @@ export default function Movers() {
     <div className="movers">
       <div className="card">
         <div className="row between wrapflex">
-          <div><h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Market Movers <button className="btn small" style={{ marginLeft: 8, verticalAlign: 'middle' }} onClick={() => go('heatmap')}>🗺️ Heatmap</button><button className="btn small" style={{ marginLeft: 6, verticalAlign: 'middle' }} onClick={() => go('news')}>📰 News</button>{mk !== 'US' && <button className="btn small" style={{ marginLeft: 6, verticalAlign: 'middle' }} onClick={() => go('ipo')}>🚀 IPOs</button>}<button className="btn small" style={{ marginLeft: 6, verticalAlign: 'middle' }} onClick={() => go('terminal')}>📈 Terminal</button></h3>
-            <div className="small muted">{mk === 'US' ? 'S&P 500' : (univ === 'ALL' && d?.universe === 'ALL' ? 'All NSE stocks' : univ === 'ALL' ? 'NIFTY 500' : univ.replace('N', 'NIFTY '))} · {d?.rows?.length || 0} stocks · {d?.session ? <>{d.live ? <b style={{ color: 'var(--good)' }}>● Live session </b> : 'Session '}{new Date(d.session + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} · </> : null}{d?.updated ? `updated ${ago(d.updated)}` : 'loading…'}</div></div>
+          <div><h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Market Movers <button className="btn small" style={{ marginLeft: 8, verticalAlign: 'middle' }} onClick={() => go('heatmap')}>🗺️ Heatmap</button><button className="btn small" style={{ marginLeft: 6, verticalAlign: 'middle' }} onClick={() => go('news')}>📰 News</button><button className="btn small" style={{ marginLeft: 6, verticalAlign: 'middle' }} onClick={() => go('ipo')}>🚀 IPOs</button><button className="btn small" style={{ marginLeft: 6, verticalAlign: 'middle' }} onClick={() => go('terminal')}>📈 Terminal</button></h3>
+            <div className="small muted">{mk === 'US' ? ({ SP500: 'S&P 500', NDX: 'Nasdaq-100', ALL: 'All US stocks' }[d?.universe] || 'S&P 500') : (univ === 'ALL' && d?.universe === 'ALL' ? 'All NSE stocks' : univ === 'ALL' ? 'NIFTY 500' : univ.replace('N', 'NIFTY '))} · {d?.rows?.length || 0} stocks · {d?.session ? <>{d.live ? <b style={{ color: 'var(--good)' }}>● Live session </b> : 'Session '}{new Date(d.session + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} · </> : null}{d?.updated ? `updated ${ago(d.updated)}` : 'loading…'}</div></div>
           <button className="btn small" disabled={st.running} onClick={async () => { await api(`/api/movers/refresh?market=${mk}`, { method: 'POST' }); load() }}>{st.running ? 'Refreshing…' : '↻ Refresh'}</button>
         </div>
         {mk === 'IN' && <div style={{ marginTop: 10 }}><UniverseChips /></div>}
+        {mk === 'US' && <div style={{ marginTop: 10 }}><UsUniverseChips /></div>}
+        {mk === 'US' && d?.snapshot && (
+          <div className="univ-note small">
+            {num(d.count, 0)} stocks: {num(d.count - d.snapshot.snapshot, 0)} with daily history (S&P 500, Nasdaq-100) and {num(d.snapshot.snapshot, 0)} from Nasdaq's daily snapshot{d.snapshot.updated ? ` (${ago(d.snapshot.updated)})` : ''}. The snapshot has the day's move, volume and market cap only, so for those stocks{tf === '1D' ? ' 52-week, volume-shock and buyer/seller lists stay empty' : ` there is no ${tf} move`}.
+            {(d.snapshot.sources || []).filter((x) => !x.ok).map((x) => <div key={x.exchange} style={{ color: 'var(--bad)' }}>{x.exchange}: could not load ({x.error})</div>)}
+          </div>
+        )}
         {mk === 'IN' && univ === 'ALL' && d && d.universe !== 'ALL' && !st.running && (
           <div className="univ-note small">
             Prices are loaded for the NIFTY 500 only. <b>Load every NSE stock</b> (~2,000 companies, runs in the background for about 10–15 minutes; after that it refreshes on its own).

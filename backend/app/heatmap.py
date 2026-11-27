@@ -33,6 +33,8 @@ def slim(r: dict, tf: str, shares: Optional[dict] = None) -> dict:
     Units as everywhere in the app: Rs crore (India), $ million (US)."""
     f = r.get("fund") or {}
     mcap, src = f.get("market_cap"), ("scan" if f.get("market_cap") else None)
+    if not mcap and r.get("mcap_nasdaq"):
+        mcap, src = r["mcap_nasdaq"], "nasdaq"
     n = (shares or {}).get(r["symbol"])
     if not mcap and n and r.get("price"):
         us_stock = str(r["symbol"]).startswith("US:")
@@ -41,7 +43,8 @@ def slim(r: dict, tf: str, shares: Optional[dict] = None) -> dict:
     return {"symbol": r["symbol"], "name": r["name"], "sector": r["sector"], "price": r["price"], "date": r.get("date"),
             "ret": r["ret"], "from_hi": r.get("from_hi"), "above50": r.get("above50"), "above200": r.get("above200"),
             "rvol": r.get("rvol"), "value": (r.get("turnover") or {}).get(tf), "mcap": mcap, "mcap_src": src,
-            "score": f.get("overall"), "verdict": f.get("verdict"), "tone": f.get("tone"), "fno": r.get("fno")}
+            "score": f.get("overall"), "verdict": f.get("verdict"), "tone": f.get("tone"), "fno": r.get("fno"),
+            "snapshot": r.get("snapshot", False)}
 
 
 def get(market: str, tf: str = "1D", which: str = "") -> dict:
@@ -54,7 +57,7 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
         sh = nse_sectors.shares()
     else:
         from . import usshares
-        sh = usshares.by_ticker([r["symbol"] for r in d["rows"]])
+        sh = usshares.by_ticker([r["symbol"] for r in d["rows"] if not r.get("mcap_nasdaq")])
         us_fetch = usshares.status()
     rows = [slim(r, tf, sh) for r in d["rows"]]
     by: dict[str, list] = {}

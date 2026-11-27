@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ago, api, cr, getMarket, go, rs, signed } from '../util'
-import { Logo } from '../components/ui'
+import { Logo, useUsUniv } from '../components/ui'
 
 const TFS = ['1D', '1W', '1M', '3M', '1Y']
 const SCALE = { '1D': 3, '1W': 6, '1M': 10, '3M': 20, '1Y': 40 }       // colour is full at ±this %
@@ -109,7 +109,7 @@ function Details({ r, tf, phone, onClose, pos }) {
         {TFS.map((k) => <div key={k} style={k === tf ? { color: 'var(--accent)' } : undefined}><div className="muted">{k}</div><b style={{ color: (r.ret?.[k] ?? 0) >= 0 ? 'var(--good)' : 'var(--bad)' }}>{signed(r.ret?.[k], 1, '%')}</b></div>)}
       </div>
       <div className="small" style={{ marginTop: 8, lineHeight: 1.5 }}>
-        Market cap {r.mcap ? <>{cr(r.mcap)}{r.mcap_src === 'nse_shares' ? <span className="muted"> (NSE issued shares × last close)</span> : r.mcap_src === 'sec_shares' ? <span className="muted"> (shares from its SEC filing × last close)</span> : null}</> : <span className="muted">not known yet</span>}
+        Market cap {r.mcap ? <>{cr(r.mcap)}{r.mcap_src === 'nse_shares' ? <span className="muted"> (NSE issued shares × last close)</span> : r.mcap_src === 'sec_shares' ? <span className="muted"> (shares from its SEC filing × last close)</span> : r.mcap_src === 'nasdaq' ? <span className="muted"> (as stated by Nasdaq)</span> : null}</> : <span className="muted">not known yet</span>}
         {r.from_hi !== null && r.from_hi !== undefined && <> · {Math.abs(r.from_hi).toFixed(1)}% below its 52-week high</>}
         {r.above200 !== null && r.above200 !== undefined && <> · {r.above200 ? 'above' : 'below'} its 200-day</>}
         {r.score !== null && r.score !== undefined && <> · EquityLens score {Math.round(r.score)}</>}
@@ -319,12 +319,14 @@ export default function Heatmap({ sector }) {
   const [size, setSize] = useState(SIZES.some((x) => x[0] === saved.size) ? saved.size : 'mcap')
   const [univ, setUniv] = useState(saved.univ === 'ALL' ? 'ALL' : 'N500')
   const [more, setMore] = useState(false)
+  const [uu, setUu] = useUsUniv()
+  const US_CH = [['SP500', 'S&P 500'], ['NDX', 'Nasdaq-100'], ['ALL', 'All US']]
   useEffect(() => { try { localStorage.setItem('eql_heatmap', JSON.stringify({ tf, size, univ })) } catch { /* private mode */ } }, [tf, size, univ])
   const [d, setD] = useState(null)
   const [ref, width] = useWidth()
   const poll = useRef(null)
-  const load = () => api(`/api/heatmap?market=${mk}&tf=${tf}${mk === 'IN' ? `&universe=${univ}` : ''}`).then(setD).catch(() => setD({ rows: [], sectors: [], status: {} }))
-  useEffect(() => { load() }, [mk, tf, univ]) // eslint-disable-line react-hooks/exhaustive-deps
+  const load = () => api(`/api/heatmap?market=${mk}&tf=${tf}&universe=${mk === 'IN' ? univ : uu}`).then(setD).catch(() => setD({ rows: [], sectors: [], status: {} }))
+  useEffect(() => { load() }, [mk, tf, univ, uu]) // eslint-disable-line react-hooks/exhaustive-deps
   const filling = !!d?.sector_fill?.running || !!d?.us_shares?.running
   useEffect(() => {
     clearInterval(poll.current)
@@ -335,7 +337,7 @@ export default function Heatmap({ sector }) {
   const phone = width > 0 && width < PHONE
   const st = d?.status || {}
   const noMcapAll = d && d.rows.length > 0 && d.no_mcap === d.rows.length
-  const list = mk === 'US' ? 'S&P 500' : univ === 'ALL' && d?.universe === 'ALL' ? 'All NSE stocks' : 'NIFTY 500'
+  const list = mk === 'US' ? ({ SP500: 'S&P 500', NDX: 'Nasdaq-100', ALL: 'All US stocks' }[d?.universe] || 'S&P 500') : univ === 'ALL' && d?.universe === 'ALL' ? 'All NSE stocks' : 'NIFTY 500'
   return (
     <div className="page" ref={ref}>
       <div className="card" style={{ marginBottom: 12 }}>
@@ -355,6 +357,7 @@ export default function Heatmap({ sector }) {
             {more && (
               <div className="hm-controls">
                 {mk === 'IN' && <Chips list={[['N500', 'NIFTY 500'], ['ALL', 'All NSE']]} value={univ} onPick={setUniv} label="Stocks" />}
+                {mk === 'US' && <Chips list={US_CH} value={uu} onPick={setUu} label="Stocks" />}
                 <Chips list={SIZES} value={size} onPick={setSize} label="Box size" />
               </div>
             )}
@@ -362,6 +365,7 @@ export default function Heatmap({ sector }) {
         ) : (
           <div className="hm-controls">
             {mk === 'IN' && <Chips list={[['N500', 'NIFTY 500'], ['ALL', 'All NSE']]} value={univ} onPick={setUniv} label="Stocks" />}
+            {mk === 'US' && <Chips list={US_CH} value={uu} onPick={setUu} label="Stocks" />}
             <Chips list={TFS.map((k) => [k, k])} value={tf} onPick={setTf} label="Period" />
             <Chips list={SIZES} value={size} onPick={setSize} label="Box size" />
           </div>
@@ -369,6 +373,7 @@ export default function Heatmap({ sector }) {
         {mk === 'IN' && univ === 'ALL' && d && d.universe !== 'ALL' && !st.running && (
           <div className="small" style={{ marginTop: 8 }}>Prices are loaded for the NIFTY 500 only. <button className="btn small primary" onClick={async () => { await api('/api/movers/refresh?market=IN&universe=ALL', { method: 'POST' }); load() }}>Load all NSE stocks</button> <span className="muted">(about 10–15 min in the background)</span></div>
         )}
+        {mk === 'US' && uu === 'ALL' && tf !== '1D' && <div className="small muted" style={{ marginTop: 8 }}>Stocks outside the S&P 500 and Nasdaq-100 come from Nasdaq's daily snapshot, which has only the 1D move: switch to 1D to see them.</div>}
         {st.running && <><div className="small" style={{ marginTop: 8 }}>Loading prices {st.done}/{st.total}…</div><div className="progress"><div style={{ width: `${st.total ? (st.done / st.total) * 100 : 0}%` }} /></div></>}
         {d?.us_shares?.running && <div className="small" style={{ marginTop: 8 }}>Getting shares outstanding from SEC filings for every company (one time, about a minute) so boxes can be sized by market cap…</div>}
         {d?.us_shares && !d.us_shares.running && d.us_shares.error && d.no_mcap > d.rows.length / 2 && <div className="small" style={{ marginTop: 8, color: 'var(--warn)' }}>Could not get shares from SEC ({d.us_shares.error}). Use <b>Box size → Traded value</b> meanwhile.</div>}

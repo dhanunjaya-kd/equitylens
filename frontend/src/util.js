@@ -243,6 +243,11 @@ export const UNIVERSES = [['N50', 'NIFTY 50'], ['N100', 'NIFTY 100'], ['N500', '
 export const getUniv = () => readLS('eql_univ', 'N500')
 export const setUnivLS = (v) => { try { localStorage.setItem('eql_univ', v) } catch { /* ignore */ } ; window.dispatchEvent(new Event('eql-univ')) }
 export const inUniv = (row, u) => u === 'ALL' || !row.idx || row.idx.includes(u)
+// 🇺🇸 stock lists: S&P 500 and Nasdaq-100 have daily history; All US adds Nasdaq's daily snapshot (1D only)
+export const US_UNIVERSES = [['SP500', 'S&P 500'], ['NDX', 'Nasdaq-100'], ['ALL', 'All US']]
+export const getUsUniv = () => { const v = readLS('eql_us_univ', 'SP500'); return US_UNIVERSES.some((x) => x[0] === v) ? v : 'SP500' }
+export const setUsUnivLS = (v) => { try { localStorage.setItem('eql_us_univ', v) } catch { /* private mode */ } window.dispatchEvent(new Event('eql-us-univ')) }
+export const usUnivLabel = (u) => (US_UNIVERSES.find((x) => x[0] === u) || [u, u])[1]
 export const univLabel = (u) => (UNIVERSES.find((x) => x[0] === u) || [u, u])[1]
 
 // ---- data sources: hidden everywhere by default; Settings -> Data sources shows them (at the end of each page / section)

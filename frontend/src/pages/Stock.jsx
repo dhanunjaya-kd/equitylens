@@ -53,13 +53,14 @@ export default function Stock({ symbol, tab }) {
     setBusy(true); setErr(null)
     try {
       const r = await api(`/api/stock/${encodeURIComponent(symbol)}${refresh ? '?refresh=1' : ''}`)
-      setCurrency(r.currency); setD(r); recent.add(r.symbol, r.company.name)
+      if (r.profile) { setCurrency({ code: 'USD', symbol: '$', unit: 'M' }); setD(r); recent.add(r.symbol, r.profile.name) } else { setCurrency(r.currency); setD(r); recent.add(r.symbol, r.company.name) }
     } catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
   useEffect(() => { load() }, [symbol])
 
   if (err && !d) return <div className="card empty"><div style={{ fontSize: 30 }}>⚠️</div><p>{err}</p><button className="btn" onClick={() => load()}>Try again</button></div>
   if (!d) return <Loading text={`Researching ${symbol}… (first load takes a few seconds)`} />
+  if (d.profile) return <NewListing p={d.profile} money={money} tab={tab} />
 
   const { company: c, analysis: a } = d
   const m = a.metrics
@@ -541,6 +542,89 @@ function Price({ d }) {
         )}
         <div className="small muted">Price above its 200-day average usually means a long-term uptrend.</div>
       </div>
+    </>
+  )
+}
+
+
+// ---------------------------------------------------------------- 🇺🇸 company without annual SEC figures yet
+const KIND = { new_listing: ['🆕', 'New listing'], spac: ['🧩', 'SPAC (blank-check company)'], fund: ['🏦', 'Fund or trust'], no_financials: ['📄', 'No tagged financials on SEC'] }
+const usd = (v) => (ok(v) ? (Math.abs(v) >= 1000 ? `$${num(v / 1000, 2)} B` : `$${num(v, v < 10 ? 2 : 0)} M`) : '—')
+const dt = (s) => (s ? new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
+
+function NewListing({ p, money, tab }) {
+  const [k, label] = KIND[p.kind] || KIND.no_financials
+  const t = ['chart', 'money', 'documents'].includes(tab) ? tab : 'overview'
+  const setTab = (x) => go(`stock/${p.symbol}/${x}`)
+  const mv = p.listing_move
+  const ipoPx = p.ipo?.final_price
+  const sinceIpo = ok(ipoPx) && ok(p.price) ? (p.price / ipoPx - 1) * 100 : null
+  return (
+    <>
+      <div className="card">
+        <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
+          <Logo sym={p.symbol} name={p.name} size={46} />
+          <div className="grow">
+            <h2 className="h-name">{p.name}</h2>
+            <div className="small muted" style={{ margin: '4px 0 8px' }}>{flag(p.symbol)} {ticker(p.symbol)}{p.exchange ? ` · ${p.exchange}` : ''}{p.industry ? ` · ${p.industry}` : ''}{p.country ? ` · ${p.country}` : ''}</div>
+            <Badge tone="warn">{k} {label}</Badge>
+          </div>
+          <WatchPicker symbol={p.symbol} name={p.name} />
+        </div>
+        <div className="small" style={{ marginTop: 10 }}>{p.why}</div>
+      </div>
+      <div className="tabs">
+        {[['overview', 'Overview'], ['chart', 'Chart'], ['money', '🧭 Insiders'], ['documents', 'Filings']].map(([x, l]) => <button key={x} className={`tab ${t === x ? 'on' : ''}`} onClick={() => setTab(x)}>{l}</button>)}
+      </div>
+      {t === 'overview' && (
+        <>
+          <div className="grid4">
+            <Tile k="Last price" v={ok(p.price) ? `$${num(p.price, 2)}` : '—'} s={p.price_date ? `close ${dt(p.price_date)}` : 'no prices yet'} />
+            <Tile k="Market cap" v={usd(p.market_cap)} s={ok(p.market_cap) ? 'as stated by Nasdaq' : 'not on Nasdaq\'s list yet'} />
+            <Tile k="IPO price" v={ok(ipoPx) ? `$${num(ipoPx, 2)}` : '—'} s={p.ipo ? `priced ${dt(p.ipo.priced)}` : 'not on the IPO calendar we keep (last 4 months)'} />
+            <Tile k="Since IPO" v={ok(sinceIpo) ? signed(sinceIpo, 1, '%') : '—'} s={ok(sinceIpo) ? 'last price vs IPO price' : null} />
+          </div>
+          {p.ipo && (
+            <div className="card">
+              <h3>🚀 The IPO</h3>
+              <div className="grid4">
+                <Tile k="Deal size" v={usd(p.ipo.value_m)} s={ok(p.ipo.shares) ? `${num(p.ipo.shares / 1e6, 1)} M shares × $${num(ipoPx, 2)}` : null} />
+                <Tile k="Day-1 open" v={mv ? signed(mv.open_vs_issue, 1, '%') : '—'} s={mv ? dt(mv.first_day) : 'first trading day not found'} />
+                <Tile k="Day-1 close" v={mv ? signed(mv.close_vs_issue, 1, '%') : '—'} s="vs IPO price" />
+                <Tile k="Range since" v={mv ? `${signed(mv.low_vs_issue, 0, '%')} to ${signed(mv.high_vs_issue, 0, '%')}` : '—'} s="low / high vs IPO price" />
+              </div>
+              <div className="small muted">From Nasdaq's IPO calendar and daily prices.</div>
+            </div>
+          )}
+          {p.quarters?.columns?.length > 0 && (
+            <div className="card">
+              <h3>Quarterly results so far <span className="small muted">($ M)</span></h3>
+              <DataTable table={p.quarters} />
+            </div>
+          )}
+          {p.balance && (
+            <div className="card">
+              <h3>Latest balance sheet <span className="small muted">({dt(p.balance.date)})</span></h3>
+              <div className="grid4"><Tile k="Total assets" v={usd(p.balance.assets)} /><Tile k="Shareholders' equity" v={usd(p.balance.equity)} /></div>
+            </div>
+          )}
+          {p.reporting?.fx && <div className="small muted">Reports in {p.reporting.currency}; converted at 1 {p.reporting.currency} = ${num(p.reporting.fx.rate, 6)} ({p.reporting.fx.source}, {p.reporting.fx.date}).</div>}
+          <div className="card small">
+            <b>What is not here, and why:</b> scores, fair value, 3·5·10-year outlook, forensics and valuation need full-year figures
+            from a 10-K / 20-F. {p.kind === 'new_listing' ? 'They appear on this page by themselves once SEC has the first annual report (quarterly figures show above as soon as a 10-Q is filed).' : p.kind === 'spac' ? 'A SPAC has none until it merges with an operating company.' : 'SEC has none for this company.'}
+          </div>
+        </>
+      )}
+      {t === 'chart' && <StockChart symbol={p.symbol} />}
+      {t === 'money' && <StockMoney data={money} />}
+      {t === 'documents' && (
+        <div className="card">
+          {p.prospectus.length > 0 && <><h3>Prospectus</h3>{p.prospectus.map((f) => <div key={f.url} className="row between mv"><a href={f.url} target="_blank" rel="noreferrer">{f.form}</a><span className="small muted">filed {dt(f.filed)}</span></div>)}</>}
+          <h3 style={{ marginTop: 12 }}>Reports and announcements</h3>
+          {p.reports.length ? p.reports.map((f) => <div key={f.url} className="row between mv"><a href={f.url} target="_blank" rel="noreferrer">{f.form}{f.period ? ` · period ${f.period}` : ''}</a><span className="small muted">filed {dt(f.filed)}</span></div>) : <div className="small muted">None yet.</div>}
+          <div className="small muted" style={{ marginTop: 8 }}>SEC EDGAR · CIK {p.cik}{p.first_filing ? ` · first filing ${dt(p.first_filing)}` : ''}</div>
+        </div>
+      )}
     </>
   )
 }

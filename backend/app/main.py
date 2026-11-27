@@ -322,6 +322,8 @@ def stock(symbol: str, refresh: bool = False):
         return rep
     except scraper.NotFound:
         raise HTTPException(404, f"'{symbol}' not found. Search by company name and pick from the list.")
+    except us.USNoFinancials as e:            # fresh IPO, SPAC, fund...: a profile page instead of an error
+        return {"symbol": e.profile["symbol"], "profile": e.profile, "market": "US"}
     except us.USFetchError as e:
         raise HTTPException(404 if ("isn't a US-listed" in str(e) or "Not found" in str(e)) else 502, str(e))
     except scraper.FetchError as e:
@@ -969,9 +971,26 @@ def rankings(sort: str = "overall", verdict: Optional[str] = None, min_mcap: flo
 
 
 @app.post("/api/scan/start")
-def scan_start(limit: Optional[int] = None, market: str = "IN", universe: str = "N500"):
+def scan_start(limit: Optional[int] = None, market: str = "IN", universe: str = "N500", min_cap: float = 0):
+    if market.upper() == "US":
+        which = universe.upper() if universe.upper() in ("SP500", "NDX", "ALL") else "SP500"
+        return service.start_scan(limit, market="US", which=which, min_cap=max(0.0, min_cap))
     which = universe.upper() if universe.upper() in universe_mod.LABELS else "N500"
     return service.start_scan(limit, market=market.upper(), which=which)
+
+
+@app.get("/api/us/universe")
+def us_universe(refresh: bool = False):
+    """Every listed US stock (Nasdaq screener): how many there are, how many above each market-cap floor."""
+    from . import usuniverse
+    got = usuniverse.listed(refresh)
+    rows = got["rows"]
+    floors = [50, 300, 2000, 10000, 200000]
+    return {"count": len(rows), "updated": got.get("updated"), "sources": got.get("sources", []),
+            "with_cap": sum(1 for r in rows if r.get("market_cap")),
+            "above": {str(f): sum(1 for r in rows if (r.get("market_cap") or 0) >= f) for f in floors},
+            "ndx": len(usuniverse.nasdaq100()),
+            "by_exchange": {e: sum(1 for r in rows if r["exchange"] == e) for e in ("Nasdaq", "NYSE", "NYSE American")}}
 
 
 @app.get("/api/universe")

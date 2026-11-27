@@ -666,6 +666,17 @@ def _us_bars(symbol: str) -> list[dict]:
     return bars
 
 
+def us_ipo_for(symbol: str) -> Optional[dict]:
+    """The Nasdaq IPO-calendar row (priced) for one ticker, from the months the IPO page saved."""
+    today = calendars.us_eastern_now().date()
+    for mon in reversed(_us_months(today)):
+        hit = store.get_company(f"IPO::US::{mon}")
+        for x in ((hit[1].get("items") or {}).get("priced") or []) if hit else []:
+            if x.get("symbol") and f"US:{x['symbol']}" == symbol:
+                return x
+    return None
+
+
 def us_listing_move(bars: list[dict], priced: str, price: float):
     """Like listing_move, but a price series that starts well before the pricing date is not a first listing."""
     if bars and (date.fromisoformat(priced) - date.fromisoformat(bars[0]["t"])).days > 3:

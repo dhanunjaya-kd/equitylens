@@ -87,7 +87,7 @@ def tick(now: Optional[datetime] = None, ts: Optional[float] = None) -> list[str
                 s["last"][task] = now.date().isoformat()
                 s["last"][task + "_started"] = ts
                 _save(s)
-                service.start_scan(market=market, which="N500")
+                service.start_scan(market=market, which="N500" if market == "IN" else "SP500")
                 started.append(task)
                 break                                   # one scan at a time
     return started
