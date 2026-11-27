@@ -1,9 +1,10 @@
 """IPO research (offline):  python tests/test_ipo.py
 
-The rows below are written in the shapes the readers accept. Once the app has saved NSE's and SEBI's real
-answers on a live run (data/ipo_raw/), those saved copies become fixtures here, as for every other source.
+fixtures/ipo/ holds NSE's and SEBI's real answers saved by the app on 27 Nov 2026 (open, upcoming and past issues,
+one SME issue's details, SEBI's draft offer documents page).
 """
 from datetime import date
+import json
 import os
 import sys
 import tempfile
@@ -15,93 +16,112 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app import ipo, store  # noqa: E402
 
 store.init()
+FX = Path(__file__).parent / "fixtures" / "ipo"
+J = lambda name: json.loads((FX / name).read_text(encoding="utf-8"))   # noqa: E731
+NO_PRICES = lambda sym: (_ for _ in ()).throw(RuntimeError("offline"))   # noqa: E731
 
 
 def test_price_band():
     assert ipo.price_band("Rs.95 to Rs.100") == (95.0, 100.0)
     assert ipo.price_band("Rs 1,050 - 1,108") == (1050.0, 1108.0)
-    assert ipo.price_band("₹ 250 per equity share") == (250.0, 250.0)
-    assert ipo.price_band(312) == (312.0, 312.0)
+    assert ipo.price_band("Rs. 130 to Rs. 142 per equity share") == (130.0, 142.0)
+    assert ipo.price_band("   136") == (136.0, 136.0)
     assert ipo.price_band("100 to 90") == (None, None)            # backwards range: not trusted
-    assert ipo.price_band("TBA") == (None, None)
-    assert ipo.price_band(None) == (None, None)
+    assert ipo.price_band("TBA") == (None, None) and ipo.price_band(None) == (None, None)
 
 
 def test_times_check():
     assert ipo.check_times(1000, 2500, 2.5) == (2.5, "NSE figure, agrees with bids ÷ shares offered")
-    assert ipo.check_times(1000, 2500, None)[0] == 2.5                # worked out from NSE's two figures
-    t, how = ipo.check_times(1000, 2500, 9.0)                        # disagreement -> left out, with the reason
+    assert ipo.check_times(1000, 2500, None)[0] == 2.5
+    t, how = ipo.check_times(1000, 2500, 9.0)
     assert t is None and "left out" in how and "2.50x" in how
-    assert ipo.check_times(None, None, 3.0)[0] is None                # nothing to check it against -> not shown
-    assert ipo.check_times(None, None, None) == (None, "not published yet")
+    assert ipo.check_times(0, 282000, 0.0) == (None, "NSE does not publish the shares reserved for this category")
+    assert ipo.check_times(None, None, 3.0)[0] is None
 
 
-def test_issue_row_any_field_names():
-    a = ipo.issue({"symbol": "abc", "companyName": "ABC Limited", "series": "EQ", "issueStartDate": "24-Nov-2026",
-                   "issueEndDate": "26-Nov-2026", "issuePrice": "Rs.95 to Rs.100", "issueSize": "12500000",
-                   "noOfSharesOffered": "1,00,000", "noOfsharesBid": "350000", "noOfTime": "3.50"})
-    assert a["symbol"] == "ABC" and a["start"] == "2026-11-24" and a["end"] == "2026-11-26"
-    assert (a["band_low"], a["band_high"], a["final_price"]) == (95.0, 100.0, None)
-    assert a["times"] == 3.5 and a["size_text"] == "12500000" and not a["sme"]
-    b = ipo.issue({"Symbol": "XYZ", "company": "XYZ &amp; Sons Ltd", "Series": "SM", "issue_price": None, "priceRange": "120"})
-    assert b["company"] == "XYZ & Sons Ltd" and b["sme"] and b["final_price"] == 120.0 and b["times"] is None
-    assert ipo.issue({"symbol": "NONAME"}) is None                    # no company name -> row dropped
-    c = ipo.issue({"companyName": "Small Co", "securityType": "SME IPO"})
-    assert c["sme"] and c["symbol"] is None
+def test_real_open_issues():
+    rows = [ipo.issue(r) for r in ipo.rows_of(J("nse_current.json"))]
+    by = {x["symbol"]: x for x in rows}
+    s = by["SHREESIDHI"]
+    assert s["sme"] and (s["band_low"], s["band_high"]) == (130.0, 142.0) and s["times"] == 1.24
+    assert s["size_cr"] == 93.66                                   # 65,96,000 shares (= shares offered) × ₹142
+    f = by["FOODLINK"]                                              # mainboard, NSE writes 1.0474048E7
+    assert not f["sme"] and f["times"] == 0.87 and f["size_cr"] == 200.05
+    a = by["AIRPRO"]                                                # fixed price, no bids yet
+    assert a["sme"] and a["final_price"] == 99.0 and a["times"] is None and a["times_check"] == "not published yet"
+    rep = ipo.field_report(ipo.rows_of(J("nse_current.json")), ipo.SOURCES["current"][3])
+    assert rep["missing"] == []
 
 
-def test_rows_and_field_report():
-    assert len(ipo.rows_of({"data": [{"a": 1}, "x"]})) == 1 and ipo.rows_of("x") == []
-    rows = [{"symbol": "A", "companyName": "A Ltd"}, {"symbol": "B", "companyName": "B Ltd", "issueStartDate": "1-Dec-2026"}]
-    rep = ipo.field_report(rows, ["symbol", "company", "start", "price"])
-    assert rep["found"] == ["symbol", "company", "start"] and rep["missing"] == ["price"]
-    assert ipo.field_report([], ["symbol"])["missing"] == []          # an empty list is not a format change
+def test_real_upcoming_and_past():
+    up = {x["symbol"]: x for x in (ipo.issue(r) for r in J("nse_upcoming.json"))}
+    assert not up["MATANGI"]["sme"] and up["AJPACK"]["sme"] and up["MONOMARK"]["start"] == "2026-12-02"
+    assert up["MATANGI"]["size_cr"] is None                         # no shares-offered figure to confirm the unit
+    past_rows = J("nse_past.json")
+    past = [x for x in (ipo.issue(r) for r in past_rows) if x]
+    assert len(past) < len(past_rows)                               # bonds, InvITs and REITs dropped
+    m = next(x for x in past if x["symbol"] == "MAHACOAL")
+    assert (m["band_low"], m["band_high"], m["final_price"], m["listing"]) == (129.0, 136.0, 136.0, "2026-11-27")
+    r = next(x for x in past if x["symbol"] == "RUNWALENTR")       # NSE's 'issue price' outside its own range
+    assert r["final_price"] is None and "outside" in r["final_note"]
+    listed = ipo.recently_listed(past, date(2026, 11, 27), prices=NO_PRICES)
+    syms = {x["symbol"] for x in listed}
+    assert "MAHACOAL" in syms and "11MGEL29" not in syms           # 2019 issue re-listed in 2026: not an IPO listing
+    assert all(x["perf"] is None for x in listed)
+    assert next(x for x in listed if x["symbol"] == "MAHACOAL")["perf_note"] == "daily prices not available for this symbol"
 
 
-def test_categories_and_facts():
-    js = {"dataList": [
-        {"srNo": "1", "category": "Qualified Institutional Buyers(QIBs)", "noOfShareOffered": "200000", "noOfSharesBid": "5000000", "noOfTotalMeant": "25.00"},
-        {"srNo": "2", "category": "Retail Individual Investors(RIIs)", "noOfShareOffered": "350000", "noOfSharesBid": "700000", "noOfTotalMeant": "9.99"},
-        {"srNo": "3", "category": "Total", "noOfShareOffered": "550000", "noOfSharesBid": "5700000", "noOfTotalMeant": "10.36"}],
-        "updateTime": "26-Nov-2026 17:00:00"}
-    rows = ipo.categories(js)
-    assert rows[0]["times"] == 25.0
-    assert rows[1]["times"] is None and "left out" in rows[1]["check"]    # 700000/350000 = 2.00x, not 9.99x
-    assert rows[2]["total"] and rows[2]["times"] == 10.36
-    pairs, docs = ipo.facts({"issueInfo": {"dataList": [{"title": "Lot Size", "value": "150"},
-                                                         {"title": "Lot Size", "value": "150"},
-                                                         {"title": "RHP", "value": "https://x.nseindia.com/abc_RHP.pdf"}]},
-                             "other": {"fileName": "https://x.nseindia.com/abc_anchor.pdf"}})
-    assert pairs == [{"k": "Lot Size", "v": "150"}]
-    assert {d["url"] for d in docs} == {"https://x.nseindia.com/abc_RHP.pdf", "https://x.nseindia.com/abc_anchor.pdf"}
+def test_real_issue_detail():
+    d = ipo.parse_detail(J("nse_detail_SHREESIDHI.json"))
+    assert (d["band_low"], d["band_high"], d["lot"], d["lot_value"]) == (130.0, 142.0, 1000.0, 142000)
+    assert d["issue_shares"] == 6596000 and d["size_cr"] == 93.66
+    c = d["composition"]
+    assert c["ok"] and c["fresh_pct"] == 100.0 and c["market_maker"] == 330000 and c["ofs"] is None
+    assert d["times"] == 1.24 and d["total_bids"] == 8198000 and d["applications"] == 2730
+    cats = d["categories"]
+    assert cats["adds_up"]                                          # 2.82 L + 29 L + 50.16 L = 81.98 L
+    main = [r for r in cats["rows"] if r["level"] == 0 and not r["total"]]
+    assert [r["sr"] for r in main] == ["1", "2", "3"] and main[2]["applications"] == 2508
+    assert all(r["times"] is None for r in cats["rows"])            # NSE reserves 0 shares per category for this SME issue
+    assert not any(r["category"] == "Category" for r in cats["rows"])   # header row skipped
+    dm = d["demand"]
+    assert dm["ok"] and dm["top_price"] == 142 and dm["at_top"] == 80.6 and len(dm["levels"]) == 8
+    assert {x["title"] for x in d["docs"]} >= {"Red Herring Prospectus", "Ratios / Basis of Issue Price"}
+    keys = {f["k"] for f in d["facts"]}
+    assert "Lot Size" in keys and "Book Running Lead Managers" in keys and None not in keys
 
 
-def test_sebi_drhp_table():
-    page = """<table><tr><th>Date</th><th>Title</th></tr>
-    <tr><td>Nov 25, 2026</td><td><a href="https://www.sebi.gov.in/filings/public-issues/nov-2026/abc-limited_1.html" title="x">ABC Limited - DRHP</a></td></tr>
-    <tr><td>Nov 24, 2026</td><td><a href="/filings/public-issues/nov-2026/xyz_2.html">XYZ Foods Limited - SME Draft Red Herring Prospectus</a></td></tr>
-    <tr><td>not a date</td><td><a href="/q">Junk</a></td></tr></table>"""
-    rows = ipo.parse_sebi_drhp(page)
-    assert [r["company"] for r in rows] == ["ABC Limited", "XYZ Foods Limited"]
-    assert rows[1]["url"].startswith("https://www.sebi.gov.in/") and rows[1]["sme"] and not rows[0]["sme"]
+def test_checks_reject_bad_numbers():
+    c = ipo.composition("fresh issue of 10,00,000 Equity Shares and an offer for sale of 5,00,000 Equity Shares", 15_00_000)
+    assert c["ok"] and c["fresh_pct"] == 66.7 and c["ofs"] == 500000
+    bad = ipo.composition("fresh issue of 10,00,000 Equity Shares and an offer for sale of 5,00,000 Equity Shares", 20_00_000)
+    assert not bad["ok"] and "does not match" in bad["note"]
+    g = {"graphData": [{"type": "100", "value": "1"}, {"type": "105", "value": "1"}], "TOTAL_BIDS": "500000"}
+    assert ipo.demand(g)["ok"] is False                             # 2 lakh at prices vs 5 lakh total
+    cats = ipo.categories([], [{"srNo": "1", "category": "QIB", "noOfshareBid": "100"},
+                               {"srNo": "2", "category": "Retail", "noOfshareBid": "100"},
+                               {"srNo": None, "category": "Total", "noOfshareBid": "300"}])
+    assert not cats["adds_up"] and "300" in cats["check"]
+
+
+def test_real_sebi_drhp():
+    rows = ipo.parse_sebi_drhp((FX / "sebi_drhp.html").read_text(encoding="utf-8"))
+    assert len(rows) == 25
+    first = rows[0]
+    assert first["company"] == "NLC India Renewables Limited" and first["kind"] == "DRHP" and first["date"] == "2026-11-25"
+    assert first["abridged"].endswith("Prospectus_p.pdf") and " " not in first["abridged"]
+    assert rows[2]["company"] == "Chartered Speed Limited" and rows[2]["kind"] == "Addendum"
 
 
 def test_listing_move_measured_only():
-    bars = [{"t": "2026-11-10", "o": 120.0, "c": 130.0}, {"t": "2026-11-11", "o": 131.0, "c": 125.0}]
+    bars = [{"t": "2026-11-10", "o": 120.0, "h": 135.0, "l": 118.0, "c": 130.0}, {"t": "2026-11-11", "o": 131.0, "h": 132.0, "l": 110.0, "c": 125.0}]
     m = ipo.listing_move(bars, "2026-11-10", 100.0)
-    assert (m["open_vs_issue"], m["close_vs_issue"], m["now_vs_issue"], m["sessions"]) == (20.0, 30.0, 25.0, 2)
-    assert ipo.listing_move(bars, "2026-11-01", 100.0) is None          # first bar 9 days after listing: not this listing
-    assert ipo.listing_move([], "2026-11-10", 100.0) is None
-
-
-def test_recently_listed_needs_final_price():
-    past = [{"symbol": "AAA", "listing": "2026-11-20", "final_price": None},
-            {"symbol": None, "listing": "2026-11-19", "final_price": 50.0},
-            {"symbol": "OLD", "listing": "2025-01-01", "final_price": 10.0}]
-    out = ipo.recently_listed(past, today=date(2026, 11, 27))
-    assert [x["symbol"] for x in out] == ["AAA", None]                  # OLD is outside the 120-day window
-    assert "price range" in out[0]["perf_note"] and out[1]["perf_note"] == "no NSE symbol"
-    assert all(x["perf"] is None for x in out)
+    assert (m["open_vs_issue"], m["close_vs_issue"], m["now_vs_issue"], m["high_vs_issue"], m["low_vs_issue"], m["sessions"]) == (20.0, 30.0, 25.0, 35.0, 10.0, 2)
+    assert ipo.listing_move(bars, "2026-11-01", 100.0) is None     # first bar 9 days after listing: not this listing
+    st = ipo.listed_stats([{"sme": False, "perf": m}, {"sme": False, "perf": dict(m, close_vs_issue=-5.0, now_vs_issue=-1.0)},
+                           {"sme": True, "perf": None}])
+    assert st["main"] == {"n": 2, "above_listing": 1, "median_listing": 12.5, "above_now": 1, "median_now": 12.0}
+    assert st["sme"] == {"n": 0}
 
 
 def test_demo_page_is_empty_not_invented():

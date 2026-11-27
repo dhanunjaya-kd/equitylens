@@ -370,18 +370,20 @@ Sidebar → **FII / DII** (on a phone: Smart Money → 🏦 FII / DII, or tap th
 
 ### 🚀 IPO research — India (phase 1)
 
-Sidebar → **IPO research** (on the phone: Market Movers → 🚀 IPOs).
+Sidebar → **IPO research** (on the phone: Market Movers → 🚀 IPOs). A dashboard: open for bidding, closing today, opening within 7 days, recent listings and new SEBI drafts at the top; Mainboard / SME switch on every tab.
 
 | Tab | What it shows | Source |
 |---|---|---|
-| Open now | Price band, dates, days left, subscription so far; tap an issue for bids by investor category, NSE's issue facts and documents | NSE |
-| Upcoming | Issues NSE has announced but not opened | NSE |
-| Recently listed | Listing-day open and close and the latest close against the final issue price (last 120 days) | NSE + daily prices |
-| Filed with SEBI | Companies that filed a draft offer document (DRHP) — filing is not approval | SEBI |
+| Open now | Price band, issue size in ₹ Cr, closing countdown, subscription so far. Tap an issue for its dashboard (below) | NSE |
+| Upcoming | Issues NSE has announced but not opened, with the same dashboard | NSE |
+| Recently listed | Day-1 open and close, price now, lowest and highest since listing — all against the final issue price — plus how many closed day 1 above the issue price and the median move (last 120 days) | NSE + daily prices |
+| Filed with SEBI | Latest draft offer documents and addenda, with the SEBI page and abridged prospectus | SEBI |
 
-What is never guessed: subscription *times* is shown only when it agrees with NSE's bids ÷ shares offered (or is worked out from those two figures); a row that disagrees is left out with the reason. NSE's issue size is shown in NSE's own words because its unit is not always stated. A listing move is measured only when NSE gives one final issue price and the first price bar falls on the listing date. Mainboard and SME issues are kept apart (SME is marked).
+**Issue dashboard:** price band and issue type · minimum investment (1 lot × upper price) · issue size (shares × upper price) · fresh issue vs offer for sale · times subscribed and shares bid · applications · subscription by investor category (shares bid, share of all bids, times, applications, with sub-categories) · bids at each price (e.g. 80.6% of bids at the upper price) · key facts (lead managers, registrar, lot, face value, timings) · documents (RHP, basis of issue price).
 
-**Source check:** every source's latest raw answer is saved in `backend/data/ipo_raw/`, and the page lists each source with the fields it should carry and any it did not. If NSE or SEBI changes a format, the page says so instead of showing a wrong number.
+**Checks before anything is shown** (a figure that fails is left out, with the reason): times = bids ÷ shares offered and must agree with NSE's figure · the main categories must add up to NSE's total bids · bids at each price must add up to the total · fresh + OFS must add up to the issue size · ₹ issue size only when NSE's figure is confirmed to be a share count · NSE's past "issue price" is used only when it lies inside its own price range · a row that listed more than 30 days after the issue closed (bonds, migrations) is not counted as an IPO listing.
+
+**Source check:** every source's latest raw answer is saved in `backend/data/ipo_raw/`; the *Data sources* bar at the bottom shows each source and any field it stopped carrying.
 
 Coming next: the IPO report from the offer document (RHP) — financials, where the money goes, valuation against listed peers, red flags with page numbers — then the tested past-IPO record, after-listing lock-ins and US IPOs.
 
@@ -729,7 +731,7 @@ cd backend
 python run_tests.py
 ```
 
-209 offline tests run against saved copies of each source's real format, so they pass without internet (the IPO readers' tests use rows in the expected shapes until the first live run saves NSE's and SEBI's real answers). The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+209 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -751,7 +753,7 @@ python run_tests.py
 | `test_news.py` | Breaking needs a serious event and two sources (or a central bank, or a 2% index move), world events show in both India and US, Telegram alerts sent once and only for new items, RSS and Atom feeds read with times, only market news kept (tips, lifestyle dropped), routine filings dropped, order amounts in crore, SEC 8-K items, unambiguous stock tags (also "Take-Two" and "Coca-Cola" written with or without a hyphen), the same story shown once with all sources |
 | `test_fiidii.py` | Reading NSE's FII/DII figures, participant open interest (Indian comma grouping, TOTAL row skipped) and CFTC report columns, every contract has two sides, test starts only after the figures are public, extremes use only earlier readings, events kept apart, verdicts need 10 cases, NSDL daily rows and sector reports read and checked (bought − sold = net, sectors add up to the total), SEBI mutual fund days and yearly rows, holding change per stock from the shareholding table |
 | `test_entry.py` | Every entry rule gives the verdict it promises, uses only past prices, and the backtest runs end to end with the pass test |
-| `test_ipo.py` | Price bands, subscription times kept only when it agrees with bids ÷ shares offered, any NSE field naming, missing-field report, category bids, NSE issue facts and documents, SEBI DRHP table, listing moves measured only on the listing date, demo shows nothing invented |
+| `test_ipo.py` | NSE's real open / upcoming / past answers and one SME issue's details, SEBI's real DRHP page: SME vs mainboard, issue size in ₹ only when confirmed as shares, times only when it equals bids ÷ shares offered, categories and bids-by-price add up to NSE's total, fresh + OFS adds up, NSE's 'issue price' outside its own range rejected, bonds and old issues re-listed later dropped, listing moves on the listing date only |
 | `test_api.py` | Every endpoint, including error paths |
 
 ---
