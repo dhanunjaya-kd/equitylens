@@ -609,6 +609,13 @@ def news_get(market: str = "IN"):
     return news.get(market)
 
 
+@app.get("/api/news/view")
+def news_view(market: str = "IN", view: str = "fno"):
+    """Measured extras for one News view: F&O stocks (move since the news vs NIFTY) or commodities (today's moves)."""
+    from . import news
+    return news.fno_view(market) if view == "fno" else news.commodity_view(market)
+
+
 @app.get("/api/news/breaking")
 def news_breaking(market: str = "IN"):
     from . import news

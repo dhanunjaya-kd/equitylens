@@ -219,6 +219,46 @@ def test_telegram_alerts_once_and_only_new():
     assert "token" not in alerts.public() and alerts.public()["token_hint"] == ""            # short demo token: no hint shown
 
 
+def test_commodity_words():
+    c = news.commodity_of
+    assert c("Oil prices climb as OPEC+ extends output cuts") == "crude"
+    assert c("Brent slips below $70 a barrel") == "crude"
+    assert c("Palm oil prices hit two-month high") == "agri"                                # palm oil is not crude
+    assert c("Gold rallies as dollar eases") == "gold" and c("India wins gold medal in shooting") is None
+    assert c("Silver futures jump 3% on MCX") == "silver" and c("A silver lining for exporters") is None
+    assert c("Copper hits record on China stimulus") == "metals"
+    assert c("LNG imports rise; natural gas prices firm") == "gas"
+    assert c("Oil India shares rise after board meet") is None                              # a company name, not crude news
+    assert c("Sensex, Nifty end higher as banks gain") is None
+    keep = lambda t: news._keep({"title": t, "summary": "", "symbols": []}, False)
+    assert keep("Copper hits record on China stimulus") == "global"                         # kept although no other rule matches
+
+
+def test_move_since_news_vs_nifty():
+    t0 = 1_800_000_000                                                                      # bars start every 300 s
+    bars = [{"t": t0 + i * 300, "c": c} for i, c in enumerate([100, 100, 101, 102, 103])]
+    idx = [{"t": t0 + i * 300, "c": c} for i, c in enumerate([200, 200, 200, 201, 201])]
+    r = news.reaction(bars, idx, t0 + 600)                                                  # news after bar 2 closed: base 100
+    assert r["state"] == "ok" and r["stock"] == 3.0 and r["index"] == 0.5 and r["rel"] == 2.5 and r["tone"] == "positive"
+    flat = [{"t": t0 + i * 300, "c": c} for i, c in enumerate([200, 200, 202, 205, 206])]
+    assert news.reaction(bars, flat, t0 + 600)["tone"] == "inline"                         # moved with the market: no call
+    down = [{"t": t0 + i * 300, "c": c} for i, c in enumerate([100, 100, 99, 98, 98])]
+    assert news.reaction(down, idx, t0 + 600)["tone"] == "negative"
+    assert news.reaction(bars, idx, t0 + 5 * 300)["state"] == "waiting"                    # nothing traded since the news
+    assert news.reaction(bars, idx, t0 - 10)["state"] == "old"                              # older than the price window
+    assert news.reaction(bars, [], t0 + 600)["tone"] is None                                 # no NIFTY prices: no call at all
+
+
+def test_views_in_payload():
+    d = news.get("IN")
+    keys = [v["key"] for v in d["views"]]
+    assert keys == ["commodities", "fno"]
+    assert next(v for v in d["views"] if v["key"] == "commodities")["n"] >= 2              # the demo crude stories
+    assert all("fno" in i and "commodity" in i for i in d["items"])
+    assert [v["key"] for v in news.get("US")["views"]] == ["commodities"]                 # no F&O view for the US
+    assert news.fno_view("US")["reactions"] == {}
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

@@ -17,7 +17,11 @@ What is kept (so the page is not filled with noise)
 What is measured, never guessed
   * each tagged stock's real price move today (the app's own daily prices)
   * for an order win with an amount in the filing: the amount as % of the company's market value
-There is no "bullish / bearish" label: nothing would back it.
+There is no "bullish / bearish" label read from a headline: nothing would back it. What the page does colour:
+  * F&O stocks view: the stock's real move since the item came out, against NIFTY 50 over the same minutes
+    (5-minute prices). Positive / negative only when the stock is 0.5 point or more ahead of / behind NIFTY.
+  * Commodities view: the commodity's real move today (its benchmark future); for crude only, the India reading
+    the Pre-market page already uses (dearer crude hurts India). Linked F&O stocks show their real move today.
 """
 from __future__ import annotations
 
@@ -51,6 +55,8 @@ FEEDS = [
     ("hindu_mkts", "The Hindu · Markets", "https://www.thehindu.com/business/markets/feeder/default.rss", "IN", "news", True),
     ("bl_mkts", "BusinessLine · Markets", "https://www.thehindubusinessline.com/markets/feeder/default.rss", "IN", "news", True),
     ("bs_mkts", "Business Standard · Markets", "https://www.business-standard.com/rss/markets-106.rss", "IN", "news", True),
+    ("et_comm", "Economic Times · Commodities", "https://economictimes.indiatimes.com/markets/commodities/rssfeeds/1808152121.cms", "IN", "news", True),
+    ("bl_comm", "BusinessLine · Commodities", "https://www.thehindubusinessline.com/markets/commodities/feeder/default.rss", "IN", "news", True),
     ("mc_latest", "Moneycontrol · Latest", "https://www.moneycontrol.com/rss/latestnews.xml", "IN", "news", False),
     ("rbi", "Reserve Bank of India", "https://rbi.org.in/pressreleases_rss.xml", "IN", "official", False),
     ("cnbc_top", "CNBC · Top news", "https://www.cnbc.com/id/100003114/device/rss/rss.html", "US", "news", False),
@@ -121,6 +127,38 @@ def classify(text: str) -> Optional[str]:
     for cat, rx in RULES:
         if rx.search(text or ""):
             return cat
+    return None
+
+
+# ---------------------------------------------------------------- commodities: a view over the same items, not a category
+# (key, label, words, benchmark future on Yahoo, its name, India direction, neutral band %, why, F&O stocks tied to it)
+# India direction and band only where the Pre-market page already uses one (crude: -1, 0.75); 0 = no India call.
+COMMODITIES = [
+    ("crude", "Crude oil", R(r"crude", r"brent", r"wti\b", r"opec", r"(?<!palm )(?<!edible )(?<!cooking )oil (?:prices?|output|supply|demand|"
+                              r"imports?|futures|rall|market|marketing)", r"barrels?\b"),
+     "BZ=F", "Brent crude", -1, 0.75, "Dearer crude hurts India's import bill, oil marketers, paints and airlines",
+     ["ONGC", "OIL", "BPCL", "HINDPETRO", "IOC", "ASIANPAINT", "INDIGO"]),
+    ("gas", "Natural gas", R(r"natural gas", r"lng\b", r"cng\b", r"gas prices?", r"henry hub"),
+     "NG=F", "Natural gas (US)", 0, None, None, ["GAIL", "IGL", "MGL", "PETRONET", "GUJGASLTD"]),
+    ("gold", "Gold", R(r"gold(?! medal| standard)\b", r"bullion", r"precious metals?"),
+     "GC=F", "Gold", 0, None, None, ["MUTHOOTFIN", "MANAPPURAM", "TITAN", "KALYANKJIL"]),
+    ("silver", "Silver", R(r"silver(?! jubilee| lining| screen)\b"), "SI=F", "Silver", 0, None, None, ["HINDZINC", "VEDL"]),
+    ("metals", "Base metals", R(r"copper", r"alumin", r"zinc\b", r"nickel", r"iron ore", r"lme\b", r"base metals?", r"metal prices?",
+                                r"steel (?:prices?|output|production|demand|imports?|exports?)", r"coal (?:prices?|output|production|imports?|demand|supply)"),
+     "HG=F", "Copper", 0, None, None,
+     ["HINDALCO", "NATIONALUM", "VEDL", "HINDCOPPER", "HINDZINC", "TATASTEEL", "JSWSTEEL", "SAIL", "JINDALSTEL", "NMDC", "COALINDIA"]),
+    ("agri", "Agri", R(r"wheat", r"rice (?:prices?|exports?|imports?|output|procurement)", r"sugar\b", r"cotton", r"soy(?:bean|a)\b", r"palm oil",
+                       r"edible oils?", r"coffee", r"cocoa", r"cardamom", r"turmeric", r"jeera", r"pulses", r"kharif", r"rabi\b"),
+     None, None, 0, None, None, ["BALRAMCHIN", "MARICO", "TATACONSUM"]),
+]
+COMM_LABEL = {c[0]: c[1] for c in COMMODITIES}
+
+
+def commodity_of(text: str) -> Optional[str]:
+    """The commodity an item is about (first match in the order above), or None."""
+    for c in COMMODITIES:
+        if c[2].search(text or ""):
+            return c[0]
     return None
 
 
@@ -483,6 +521,8 @@ def _keep(it: dict, markets_only: bool) -> Optional[str]:
         return cat
     if markets_only and cat:
         return cat
+    if commodity_of(f"{it['title']} {it.get('summary', '')[:240]}"):
+        return cat or "global"
     return None
 
 
@@ -657,19 +697,39 @@ def _prices(market: str) -> dict:
     return {r["symbol"]: {"d1": (r.get("ret") or {}).get("1D"), "name": r.get("name"), "mcap": r.get("mcap")} for r in rows}
 
 
+def _fno() -> set:
+    """NSE stocks with futures and options (NSE's market-lots file, kept by enrich)."""
+    try:
+        from . import enrich
+        return set(enrich.fno())
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _items(market: str) -> list[dict]:
+    """The saved items for a market, tagged again with today's rules (a fixed rule fixes old items too), one per story."""
+    items = [dict(v) for v in _saved().values() if v["market"] in (market, "GLOBAL")]
+    tg = tagger(market)
+    for it in items:
+        if it["kind"] == "news":
+            it["symbols"] = tg(f"{it['title']} {it.get('summary', '')[:240]}")[:6]
+    items = cluster(items)
+    for it in items:
+        it["commodity"] = commodity_of(f"{it['title']} {it.get('subject', '')} {it.get('summary', '')[:240]}")
+    items.sort(key=lambda x: x["time"], reverse=True)
+    return items
+
+
 def get(market: str) -> dict:
     market = market.upper()
     if not config.DEMO:
         maybe_refresh()
     elif not _saved():
         demo_fill()
-    items = [dict(v) for v in _saved().values() if v["market"] in (market, "GLOBAL")]
-    tg = tagger(market)
-    for it in items:                       # news is tagged again with today's rules, so a fixed rule fixes old items too
-        if it["kind"] == "news":
-            it["symbols"] = tg(f"{it['title']} {it.get('summary', '')[:240]}")[:6]
-    items = cluster(items)
-    items.sort(key=lambda x: x["time"], reverse=True)
+    items = _items(market)
+    fno = _fno() if market == "IN" else set()
+    for it in items:
+        it["fno"] = [s for s in it["symbols"] if s in fno]
     px = _prices(market)
     for it in items:
         it["tags"] = [{"symbol": s, "d1": (px.get(s) or {}).get("d1"), "name": (px.get(s) or {}).get("name")} for s in it["symbols"]
@@ -704,7 +764,140 @@ def get(market: str) -> dict:
             "mentioned": [{"symbol": s, "n": n, "d1": (px.get(s) or {}).get("d1"), "name": (px.get(s) or {}).get("name")} for s, n in mentioned],
             "movers": sorted(movers.values(), key=lambda x: -abs(x["d1"]))[:8],
             "cats": [{"key": c, "label": CAT_LABEL[c], "n": sum(1 for i in items if i["category"] == c)} for c in CATS],
+            "views": [{"key": "commodities", "label": "Commodities", "n": sum(1 for i in items if i["commodity"])}]
+            + ([{"key": "fno", "label": "F&O stocks", "n": sum(1 for i in items if i["fno"])}] if market == "IN" else []),
+            "commodities": [{"key": c[0], "label": c[1], "n": sum(1 for i in items if i["commodity"] == c[0])} for c in COMMODITIES],
             "feeds": feeds, "refreshed": STATE["last"] or None, "running": STATE["running"]}
+
+
+# ---------------------------------------------------------------- measured views (asked for only when that chip is open)
+REACT_BAND = 0.5          # points ahead of / behind NIFTY 50 before a move is called positive / negative (fixed, not tuned)
+BAR_S = 300               # 5-minute bars
+_memo_d: dict = {}
+_memo_lock = threading.Lock()
+
+
+def _memo(key: str, ttl: float, fn):
+    with _memo_lock:
+        hit = _memo_d.get(key)
+        if hit and time.time() - hit[0] < ttl:
+            return hit[1]
+    val = fn()
+    with _memo_lock:
+        _memo_d[key] = (time.time(), val)
+    return val
+
+
+def _pct(a: float, b: float) -> float:
+    return round((b / a - 1) * 100, 2)
+
+
+def move_since(bars: list[dict], t_news: float) -> Optional[dict]:
+    """Price move from the last 5-minute close before the news to the latest close.
+    None when the news is older than the bars; {"waiting": True} when nothing has traded since the news."""
+    if not bars or t_news < bars[0]["t"]:
+        return None
+    before = [b for b in bars if b["t"] + BAR_S <= t_news]
+    after = [b for b in bars if b["t"] + BAR_S > t_news]
+    if not before:
+        return None
+    if not after:
+        return {"waiting": True}
+    base, last = before[-1], bars[-1]
+    return {"pct": _pct(base["c"], last["c"]), "from": base["t"] + BAR_S, "to": last["t"] + BAR_S, "base": base["c"], "last": last["c"]}
+
+
+def reaction(bars: list[dict], idx_bars: list[dict], t_news: float) -> dict:
+    """The stock's move since the news against NIFTY 50 over the same minutes."""
+    st = move_since(bars, t_news)
+    if st is None:
+        return {"state": "old"}
+    if st.get("waiting"):
+        return {"state": "waiting"}
+    ix = move_since(idx_bars, t_news)
+    out = {"state": "ok", "stock": st["pct"], "since": st["from"], "to": st["to"]}
+    if not ix or ix.get("waiting"):
+        return dict(out, index=None, rel=None, tone=None)
+    rel = round(st["pct"] - ix["pct"], 2)
+    tone = "positive" if rel >= REACT_BAND else "negative" if rel <= -REACT_BAND else "inline"
+    return dict(out, index=ix["pct"], rel=rel, tone=tone)
+
+
+def _bars5(sym: str) -> list[dict]:
+    from . import terminal
+    ys = terminal.yahoo_symbol(sym)
+    return terminal._cached(f"k::{ys}::5m", terminal.TTL["candles"], lambda: terminal._yahoo(ys, "5m", "5d"))["bars"]
+
+
+def fno_view(market: str = "IN") -> dict:
+    """{item id: reaction of each F&O stock it names}. India only: the F&O list is NSE's."""
+    market = market.upper()
+    if market != "IN":
+        return {"reactions": {}, "band": REACT_BAND}
+    return _memo("view::fno", 120, _fno_view)
+
+
+def _fno_view() -> dict:
+    from concurrent.futures import ThreadPoolExecutor
+    fno = _fno()
+    items = [i for i in _items("IN") if any(s in fno for s in i["symbols"])]
+    want = {}
+    for it in items:
+        for s in [x for x in it["symbols"] if x in fno][:3]:
+            want.setdefault(s, None)
+    err = None
+    try:
+        idx = _bars5("^NSEI")
+    except Exception as e:  # noqa: BLE001
+        idx, err = [], f"NIFTY 50 prices unavailable ({e.__class__.__name__})"
+
+    def one(s):
+        try:
+            return s, _bars5(s)
+        except Exception:  # noqa: BLE001 - one stock failing never stops the others
+            return s, None
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        bars = dict(ex.map(one, list(want)))
+    out = {}
+    for it in items:
+        t = datetime.fromisoformat(it["time"]).timestamp()
+        rows = []
+        for s in [x for x in it["symbols"] if x in fno][:3]:
+            b = bars.get(s)
+            rows.append(dict(reaction(b, idx, t), symbol=s) if b else {"symbol": s, "state": "noprice"})
+        out[it["id"]] = {"rows": rows, "tone": next((r.get("tone") for r in rows if r.get("state") == "ok"), None)}
+    return {"reactions": out, "band": REACT_BAND, "index": "NIFTY 50", "error": err, "at": time.time(),
+            "source": "Yahoo Finance 5-minute prices (may lag a little)"}
+
+
+def commodity_view(market: str = "IN") -> dict:
+    market = market.upper()
+    return _memo(f"view::comm::{market}", 300, lambda: _commodity_view(market))
+
+
+def _commodity_view(market: str) -> dict:
+    from concurrent.futures import ThreadPoolExecutor
+    from . import premarket
+    px = _prices(market) if market == "IN" else {}
+    fno = _fno() if market == "IN" else set()
+
+    def one(c):
+        key, label, _rx, fut, fut_name, direction, band, why, stocks = c
+        mv = None
+        if fut:
+            try:
+                q = premarket.quote_one(fut)
+                mv = {"name": fut_name, "price": q["price"], "change_pct": q["change_pct"], "time": q.get("time")}
+            except Exception as e:  # noqa: BLE001
+                mv = {"name": fut_name, "price": None, "change_pct": None, "error": e.__class__.__name__}
+        india = None
+        if market == "IN" and direction and mv and mv.get("change_pct") is not None:
+            india = {"impact": premarket.impact(direction, mv["change_pct"], band), "why": why, "band": band}
+        linked = [{"symbol": s, "name": (px.get(s) or {}).get("name"), "d1": (px.get(s) or {}).get("d1")} for s in stocks if s in fno]
+        return {"key": key, "label": label, "move": mv, "india": india, "stocks": linked}
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        groups = list(ex.map(one, COMMODITIES))
+    return {"groups": groups, "at": time.time(), "source": "Benchmark futures from Yahoo Finance (may lag a little); stock moves from the app's daily prices"}
 
 
 # ---------------------------------------------------------------- demo (offline screenshots and tests only)
