@@ -52,7 +52,7 @@ function USView({ d }) {
       </div>
       <Tested title={`asset managers' net (${m.name})`} test={m.tests.asset_mgr} horizons={[['20', '20 sessions (about 4 weeks)']]} lag=" (the trading day after the Friday release)" lowLabel="Asset managers least long (bottom 10%)" highLabel="Asset managers most long (top 10%)" />
       <Tested title={`leveraged funds' net (${m.name})`} test={m.tests.lev_funds} horizons={[['20', '20 sessions (about 4 weeks)']]} lag=" (the trading day after the Friday release)" lowLabel="Leveraged funds most short (bottom 10%)" highLabel="Leveraged funds least short / long (top 10%)" />
-      <p className="disclaimer">Source: CFTC Commitments of Traders, Traders in Financial Futures (futures only), released each Friday for the previous Tuesday. Index: Yahoo Finance daily closes; the test starts at the close of the first trading day after the Friday release. {d.not_included}{d.error ? ` Last problem: ${d.error}` : ''}</p>
+      <p className="disclaimer src-note">Source: CFTC Commitments of Traders, Traders in Financial Futures (futures only), released each Friday for the previous Tuesday. Index: Yahoo Finance daily closes; the test starts at the close of the first trading day after the Friday release. {d.not_included}{d.error ? ` Last problem: ${d.error}` : ''}</p>
     </>
   )
 }

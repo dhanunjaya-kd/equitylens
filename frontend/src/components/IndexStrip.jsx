@@ -51,7 +51,7 @@ export default function IndexStrip({ market }) {
           )
         })}
       </div>
-      <div className="ix-foot small muted"><span className={`ix-dot ${live ? 'on' : ''}`} />{live ? 'Live · updates every minute' : 'Closed · last close'} · Yahoo, may be delayed · tap a card for ranges</div>
+      <div className="ix-foot small muted"><span className={`ix-dot ${live ? 'on' : ''}`} />{live ? 'Live · updates every minute' : 'Closed · last close'}<span className="src-note"> · Yahoo</span> · may be delayed · tap a card for ranges</div>
     </div>
   )
 }

@@ -119,7 +119,7 @@ export default function Watch() {
     <div className="wl">
       <div className="row" style={{ alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
         <h2 style={{ margin: 0 }}>⭐ Watchlists</h2>
-        <span className="small muted">{lists.length} of {MAX_LISTS} lists · prices: last close, Yahoo, may be delayed</span>
+        <span className="small muted">{lists.length} of {MAX_LISTS} lists · prices: last close<span className="src-note">, Yahoo</span>, may be delayed</span>
       </div>
 
       <div className="wl-tabs">
@@ -206,7 +206,7 @@ export default function Watch() {
           </div>
         )}
       </div>
-      <p className="disclaimer">“Since added” uses the price saved when you added the stock to this list (stocks added before this update show —). Prices are daily closes from Yahoo Finance and may be delayed. Calendar and Smart Money use the stocks from all your lists.</p>
+      <p className="disclaimer">“Since added” uses the price saved when you added the stock to this list (stocks added before this update show —). Prices are daily closes<span className="src-note"> from Yahoo Finance</span> and may be delayed. Calendar and Smart Money use the stocks from all your lists.</p>
     </div>
   )
 }

@@ -40,6 +40,21 @@ def _ipos(today: str) -> Optional[dict]:
                              for x in sorted(ups, key=lambda x: x.get("start") or "9") if x.get("start") and x["start"] > today][:3]}
 
 
+def _breadth(market: str) -> Optional[dict]:
+    """Advances / declines today across the market list the app keeps (Market Movers data)."""
+    from . import movers
+    hit = store.get_company(movers._key(market))
+    rows = (hit[1].get("rows") if hit else None) or []
+    if not rows:
+        return None
+    m = movers._mood(rows, "1D")
+    if not m:
+        return None
+    return {"advances": m["advances"], "declines": m["declines"], "unchanged": m["unchanged"], "above200": m["above200"],
+            "new_highs": m["new_highs"], "new_lows": m["new_lows"], "label": m["label"], "tone": m["tone"],
+            "session": max((r.get("date") or "" for r in rows), default="") or None, "count": len(rows)}
+
+
 def _results(today, mine: set) -> Optional[dict]:
     got = calendars.earnings("IN", today, 1)
     rows = [r for r in got["rows"] if r.get("type") == "Results"]
@@ -53,7 +68,7 @@ def get(market: str = "IN", symbols: str = "") -> dict:
     day = now.date()
     mine = {s.strip().upper() for s in (symbols or "").split(",") if s.strip()}
     out = {"market": market, "now": now.isoformat(timespec="minutes"), "errors": {}}
-    parts = {"breaking": lambda: news.breaking_now(market)[:2]}
+    parts = {"breaking": lambda: news.breaking_now(market)[:2], "breadth": lambda: _breadth(market)}
     if market == "IN":
         parts.update(premarket=lambda: _premarket(day.isoformat()), fiidii=_fiidii,
                      ipo=lambda: _ipos(day.isoformat()), results=lambda: _results(day, mine))

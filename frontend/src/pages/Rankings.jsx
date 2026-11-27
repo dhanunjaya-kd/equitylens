@@ -74,7 +74,7 @@ export default function Rankings() {
             <div className="small muted" style={{ marginTop: 6 }}>A full scan takes 40–60 min (paced to stay polite to the data source). You can keep using the app.</div>
           </>
         )}
-        {!scan?.running && scan?.finished_at && <div className="small muted" style={{ marginTop: 8 }}>Last scan finished {ago(scan.finished_at)} · {scan.done} companies · {scan.source}</div>}
+        {!scan?.running && scan?.finished_at && <div className="small muted" style={{ marginTop: 8 }}>Last scan finished {ago(scan.finished_at)} · {scan.done} companies<span className="src-note"> · {scan.source}</span></div>}
       </div>
 
       <div className="card">

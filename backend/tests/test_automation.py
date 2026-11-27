@@ -63,6 +63,12 @@ def test_today_uses_saved_data_and_never_invents():
     ip = today._ipos("2026-11-27")
     assert ip["open"] == 2 and ip["open_main"] == 1 and [x["symbol"] for x in ip["closing_today"]] == ["AAA"]
     assert ip["opening_next"] == []
+    from app import movers
+    rows = [{"symbol": f"S{i}", "date": "2026-11-27", "ret": {"1D": (i % 3) - 1.0}, "above200": i % 2 == 0, "above50": True,
+             "new_high": i == 0, "new_low": False, "from_hi": -10, "from_lo": 20} for i in range(9)]
+    store.put_company(movers._key("IN"), {"rows": rows})
+    b = today._breadth("IN")
+    assert (b["advances"], b["declines"], b["unchanged"], b["above200"], b["new_highs"], b["count"]) == (3, 3, 3, 56, 1, 9)
     page = today.get("US")
     assert "premarket" not in page and "breaking" in page
 

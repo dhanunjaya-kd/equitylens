@@ -243,3 +243,9 @@ export const getUniv = () => readLS('eql_univ', 'N500')
 export const setUnivLS = (v) => { try { localStorage.setItem('eql_univ', v) } catch { /* ignore */ } ; window.dispatchEvent(new Event('eql-univ')) }
 export const inUniv = (row, u) => u === 'ALL' || !row.idx || row.idx.includes(u)
 export const univLabel = (u) => (UNIVERSES.find((x) => x[0] === u) || [u, u])[1]
+
+// ---- data sources: hidden everywhere by default; Settings -> Data sources shows them (at the end of each page / section)
+export const sourcesShown = () => readLS('eql_sources', 'off') === 'on'
+export const applySources = (on = sourcesShown()) => { if (typeof document !== 'undefined') document.documentElement.dataset.src = on ? 'on' : 'off' }
+export const setSourcesShown = (on) => { try { localStorage.setItem('eql_sources', on ? 'on' : 'off') } catch { /* ignore */ } applySources(on) }
+applySources()

@@ -142,7 +142,50 @@ def clean(sym: str) -> str:
 
 
 # ------------------------------------------------------------------ NSE stock: quote + depth
+def _band(txt) -> tuple:
+    m = re.match(r"\s*([\d.]+)\s*-\s*([\d.]+)", str(txt or ""))
+    return (float(m.group(1)), float(m.group(2))) if m else (None, None)
+
+
+def parse_quote_next(js: dict) -> dict:
+    """NSE's current quote answer (NextApi GetQuoteApi getSymbolData): equityResponse[0]."""
+    e = (js.get("equityResponse") or [{}])[0]
+    md, ob, pi, si, ti = (e.get(k) or {} for k in ("metaData", "orderBook", "priceInfo", "secInfo", "tradeInfo"))
+    ltp = num(ob.get("lastPrice")) or num(ti.get("lastPrice"))
+    prev, chg, pchg = num(md.get("previousClose")), num(md.get("change")), num(md.get("pChange"))
+    check = None
+    if ltp is not None and prev and chg is not None and abs((ltp - prev) - chg) > max(0.06, abs(chg) * 0.01):
+        check = f"NSE's change ({chg:g}) does not equal price − previous close ({ltp - prev:.2f}); worked out instead"
+        chg, pchg = round(ltp - prev, 2), round((ltp / prev - 1) * 100, 2)
+    lo, hi = _band(pi.get("priceBand"))
+    return {"symbol": md.get("symbol"), "name": md.get("companyName"), "industry": si.get("basicIndustry"), "series": md.get("series"),
+            "ltp": ltp, "prev": prev, "change": chg, "pchange": pchg, "change_check": check,
+            "open": num(md.get("open")), "high": num(md.get("dayHigh")), "low": num(md.get("dayLow")), "vwap": num(md.get("averagePrice")),
+            "upper_circuit": hi, "lower_circuit": lo, "band": pi.get("ppriceBand"),
+            "wk_high": num(pi.get("yearHigh")), "wk_low": num(pi.get("yearLow")),
+            "pe": num(si.get("pdSymbolPe")), "sector_pe": num(si.get("pdSectorPe")), "index": si.get("index"),
+            "volatility": num(pi.get("cmAnnualVolatility")), "time": e.get("lastUpdateTime")}
+
+
+def parse_trade_next(js: dict) -> dict:
+    e = (js.get("equityResponse") or [{}])[0]
+    ob, ti = e.get("orderBook") or {}, e.get("tradeInfo") or {}
+    bids = [{"price": num(ob.get(f"buyPrice{i}")), "qty": num(ob.get(f"buyQuantity{i}"))} for i in range(1, 6) if num(ob.get(f"buyPrice{i}"))]
+    asks = [{"price": num(ob.get(f"sellPrice{i}")), "qty": num(ob.get(f"sellQuantity{i}"))} for i in range(1, 6) if num(ob.get(f"sellPrice{i}"))]
+    out = parse_trade({"marketDeptOrderBook": {"bid": [{"price": b["price"], "quantity": b["qty"]} for b in bids],
+                                               "ask": [{"price": a["price"], "quantity": a["qty"]} for a in asks],
+                                               "totalBuyQuantity": ob.get("totalBuyQuantity"), "totalSellQuantity": ob.get("totalSellQuantity")}})
+    val, mcap = num(ti.get("totalTradedValue")), num(ti.get("totalMarketCap"))
+    out.update(volume=num(ti.get("totalTradedVolume")), value_cr=round(val / 1e7, 2) if val is not None else None,
+               mcap_cr=round(mcap / 1e7) if mcap else None, impact_cost=num(ti.get("impactCost")),
+               delivery_pct=num(ti.get("deliveryToTradedQuantity")), delivery_qty=num(ti.get("deliveryquantity")),
+               delivery_date=ti.get("secwisedelposdate"))
+    return out
+
+
 def parse_quote(js: dict) -> dict:
+    if js.get("equityResponse"):
+        return parse_quote_next(js)
     pi = js.get("priceInfo") or {}
     info = js.get("info") or {}
     md = js.get("metadata") or {}
@@ -167,6 +210,8 @@ def parse_quote(js: dict) -> dict:
 
 
 def parse_trade(js: dict) -> dict:
+    if js.get("equityResponse"):
+        return parse_trade_next(js)
     ob = js.get("marketDeptOrderBook") or {}
     ti = ob.get("tradeInfo") or {}
     dp = js.get("securityWiseDP") or {}
@@ -189,34 +234,48 @@ def parse_trade(js: dict) -> dict:
     }
 
 
+NEXT_QUOTE = "/api/NextApi/apiClient/GetQuoteApi"
+
+
+def _fno_set() -> set:
+    try:
+        from . import enrich
+        return set(enrich.fno())
+    except Exception:  # noqa: BLE001
+        return set()
+
+
 def stock(symbol: str) -> dict:
+    """Quote and market depth from ONE request to NSE's current quote address (the old quote-equity address
+    is refused by NSE since Nov 2026 and is only tried if the current one fails)."""
     sym = clean(symbol)
     ref = f"{NSE}/get-quotes/equity?symbol={quote(sym)}"
     out = {"symbol": sym, "sources": []}
     try:
-        out["quote"] = _cached(f"q::{sym}", TTL["quote"], lambda: parse_quote(_nse(
-            "/api/quote-equity", {"symbol": sym}, "nse_quote.json", ref,
-            fallbacks=(("/api/NextApi/apiClient/GetQuoteApi", {"functionName": "getSymbolData", "marketType": "N", "series": "EQ", "symbol": sym},
-                        "nse_quote_next.json"),))))
-        out["sources"].append({"name": "NSE quote", "ok": True})
+        js = _cached(f"qn::{sym}", TTL["quote"], lambda: _nse(
+            NEXT_QUOTE, {"functionName": "getSymbolData", "marketType": "N", "series": "EQ", "symbol": sym}, "nse_quote_next.json", ref,
+            fallbacks=(("/api/quote-equity", {"symbol": sym}, "nse_quote.json"),)))
+        out["quote"] = dict(parse_quote(js), fno=sym in _fno_set())
+        out["trade"] = parse_trade(js) if js.get("equityResponse") else None
+        out["sources"].append({"name": "NSE quote and order book", "ok": True})
     except Exception as e:  # noqa: BLE001
-        out["quote"] = None
-        out["sources"].append({"name": "NSE quote", "ok": False, "error": str(e)[:160]})
-    try:
-        out["trade"] = _cached(f"t::{sym}", TTL["trade"], lambda: parse_trade(
-            _nse("/api/quote-equity", {"symbol": sym, "section": "trade_info"}, "nse_trade.json", ref,
-                 fallbacks=(("/api/NextApi/apiClient/GetQuoteApi", {"functionName": "getSymbolData", "marketType": "N", "series": "EQ",
-                             "symbol": sym}, "nse_trade_next.json"),))))
-        out["sources"].append({"name": "NSE depth and trade info", "ok": True})
-    except Exception as e:  # noqa: BLE001
-        out["trade"] = None
-        out["sources"].append({"name": "NSE depth and trade info", "ok": False, "error": str(e)[:160]})
+        out["quote"] = out["trade"] = None
+        out["sources"].append({"name": "NSE quote and order book", "ok": False, "error": str(e)[:160]})
     out["fetched"] = time.time()
     return out
 
 
 # ------------------------------------------------------------------ F&O: futures and option chain
 def parse_deriv(js: dict) -> dict:
+    if isinstance(js.get("data"), list) and js["data"] and "instrumentType" in js["data"][0]:      # NSE's current answer
+        rows = js["data"]
+        spot = num(rows[0].get("underlyingValue"))
+        futs = [{"expiry": r.get("expiryDate"), "ltp": num(r.get("lastPrice")), "change": num(r.get("change")), "pchange": num(r.get("pchange")),
+                 "oi": num(r.get("openInterest")), "oi_change": num(r.get("changeinOpenInterest")), "volume": num(r.get("totalTradedVolume")),
+                 "basis": round(num(r.get("lastPrice")) - spot, 2) if num(r.get("lastPrice")) is not None and spot else None}
+                for r in rows if str(r.get("instrumentType", "")).upper().startswith("FUT")]
+        futs.sort(key=lambda f: calendars._nse_date(f["expiry"] or "") or datetime.max.date())
+        return {"spot": spot, "time": js.get("timestamp"), "futures": futs}
     spot = num(js.get("underlyingValue"))
     futs = []
     for s in js.get("stocks") or []:
@@ -317,9 +376,8 @@ def fno(symbol: str, expiry: Optional[str] = None) -> dict:
     try:
         ref = f"{NSE}/get-quotes/derivatives?symbol={quote(sym)}"
         out["deriv"] = _cached(f"d::{sym}", TTL["deriv"], lambda: parse_deriv(_nse(
-            "/api/quote-derivative", {"symbol": sym}, "nse_deriv.json", ref,
-            fallbacks=(("/api/NextApi/apiClient/GetQuoteApi", {"functionName": "getSymbolDerivativesData", "symbol": sym},
-                        "nse_deriv_next.json"),))))
+            NEXT_QUOTE, {"functionName": "getSymbolDerivativesData", "symbol": sym}, "nse_deriv_next.json", ref,
+            fallbacks=(("/api/quote-derivative", {"symbol": sym}, "nse_deriv.json"),))))
         out["sources"].append({"name": "NSE futures", "ok": True})
     except Exception as e:  # noqa: BLE001
         out["deriv"] = None

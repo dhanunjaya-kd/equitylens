@@ -86,8 +86,15 @@ function TodayStrip({ mk }) {
             <Sub>{up.filter((r) => r.ret['1D'] > 0).length} up · {up.filter((r) => r.ret['1D'] < 0).length} down</Sub>
           </TodayTile>
         )}
+        {d.breadth && (
+          <TodayTile icon="📈" tint={d.breadth.advances >= d.breadth.declines ? 'green' : 'red'} k="Market breadth" onClick={() => go('movers')}>
+            <Big><span style={{ color: 'var(--good)' }}>{d.breadth.advances}</span><small> up · </small><span style={{ color: 'var(--bad)' }}>{d.breadth.declines}</span><small> down</small></Big>
+            <div className="fbar" style={{ background: 'rgba(239,68,68,.45)' }}><i style={{ width: `${(d.breadth.advances / Math.max(1, d.breadth.advances + d.breadth.declines)) * 100}%`, background: 'var(--good)' }} /></div>
+            <Sub>{d.breadth.above200}% above 200-day average · {d.breadth.new_highs} new 52-week highs</Sub>
+          </TodayTile>
+        )}
         <TodayTile icon="⚠️" tint="red" k="Breaking" onClick={() => go('news')} cls="news">
-          {d.breaking?.length ? <><div className="headline">{d.breaking[0].title}</div>{d.breaking[0].sources?.[0]?.name && <Sub>{d.breaking[0].sources.map((x) => x.name).slice(0, 2).join(' · ')}</Sub>}</>
+          {d.breaking?.length ? <><div className="headline">{d.breaking[0].title}</div>{d.breaking[0].sources?.[0]?.name && <div className="src-note"><Sub>{d.breaking[0].sources.map((x) => x.name).slice(0, 2).join(' · ')}</Sub></div>}</>
             : <Sub>Nothing market-wide right now</Sub>}
         </TodayTile>
       </div>
@@ -109,7 +116,7 @@ export default function Home() {
         <h1 style={{ margin: '0 0 6px', fontSize: 24 }}>{mk === 'US' ? '🇺🇸 Research any US stock' : '🇮🇳 Research any Indian stock'}</h1>
         <div className="muted" style={{ marginBottom: 14 }}>
           {mk === 'US'
-            ? 'NYSE & Nasdaq companies from official SEC filings: 10+ years of financials, forensics, valuation, chart outlook and a 3 / 5 / 10-year view.'
+            ? 'NYSE & Nasdaq companies: 10+ years of financials, forensics, valuation, chart outlook and a 3 / 5 / 10-year view.'
             : 'NSE & BSE companies: 10+ years of financials, forensics, valuation, chart outlook and a 3 / 5 / 10-year view.'}
         </div>
         <SearchBox autoFocus />

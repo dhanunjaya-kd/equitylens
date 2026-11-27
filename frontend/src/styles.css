@@ -785,8 +785,8 @@ a.nw-title:hover { color: var(--accent); }
 .today-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: 15px; }
 .today-head .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: 1px; }
 .today-head .dot.on { background: var(--good); box-shadow: 0 0 0 3px rgba(34, 197, 94, .18); }
-.today-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(5, minmax(0, 1fr)); gap: 10px; }
-.today-grid.us { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.today-grid.us { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .today-tile { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; min-width: 0; transition: border-color .15s, transform .15s; }
 .today-tile.link { cursor: pointer; }
 .today-tile.link:hover { border-color: var(--accent); transform: translateY(-1px); }
@@ -807,7 +807,6 @@ a.nw-title:hover { color: var(--accent); }
 .today-tile .mv { font-size: 13.5px; padding: 1px 0; }
 .today-tile.news { border-left: 3px solid var(--bad); }
 .today-tile .headline { font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-@media (max-width: 1400px) { .today-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .today-grid, .today-grid.us { grid-template-columns: repeat(2, minmax(0, 1fr)); } .today-tile.hero { grid-column: 1 / -1; } .today-tile .big { font-size: 19px; } }
 .auto-tbl td { vertical-align: top; }
 
@@ -868,3 +867,46 @@ a.nw-title:hover { color: var(--accent); }
 .tv-legend .t2 span { margin: 0 6px 0 2px; }
 .term-center .term-src { padding: 6px 10px; border-top: 1px solid var(--line); }
 @media (max-width: 760px) { .tv-chart { height: 380px; } .tv-legend .t2 { font-size: 11px; } }
+
+/* Terminal v2: full-width chart, drawing tools, indicators menu, countdown label */
+.term-grid { grid-template-columns: 210px minmax(0, 1fr); }
+.term.expanded .term-grid { grid-template-columns: minmax(0, 1fr); }
+.term.expanded .term-watch { display: none; }
+.tv-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 8px 12px; margin-bottom: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.tv-stats div { display: flex; flex-direction: column; min-width: 70px; }
+.tv-stats span { font-size: 11px; color: var(--muted); }
+.tv-stats b { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tv-ic { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+.tv-btn { display: inline-flex; align-items: center; gap: 5px; }
+.tv-btn:disabled { opacity: .35; }
+.tv-menu-wrap { position: relative; }
+.tv-menu { position: absolute; top: 34px; left: 0; z-index: 30; width: 250px; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3); padding: 6px 0; }
+.tv-menu label { display: flex; align-items: center; gap: 9px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+.tv-menu label:hover { background: var(--card2); }
+.tv-menu label i { width: 12px; height: 3px; border-radius: 2px; flex: none; }
+.tv-menu input { width: auto; padding: 0; margin: 0; }
+.tv-body { display: flex; }
+.tv-tools { display: flex; flex-direction: column; gap: 2px; padding: 6px 4px; border-right: 1px solid var(--line); }
+.tv-tools button { width: 34px; height: 34px; border-radius: 7px; border: 0; background: none; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.tv-tools button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tv-tools button:hover { background: var(--card2); color: var(--text); }
+.tv-tools button.on { background: rgba(41, 98, 255, .15); color: #2962ff; }
+.tv-tools button:disabled { opacity: .3; }
+.tv-tsep { height: 1px; background: var(--line); margin: 4px 4px; }
+.tv-wrap { position: relative; flex: 1; min-width: 0; }
+.tv-chart { height: 600px; }
+.tv-chart.big { height: calc(100vh - 210px); min-height: 520px; }
+.tv-draw { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 3; }
+.tv-last { position: absolute; right: 0; z-index: 4; color: #fff; font-size: 12px; line-height: 1.25; text-align: center; padding: 2px 0; pointer-events: none;
+  font-variant-numeric: tabular-nums; border-radius: 2px; }
+.tv-last b { display: block; font-weight: 600; }
+.tv-last span { display: block; font-size: 11px; opacity: .95; }
+.tv-legend .t3 { font-size: 11.5px; } .tv-legend .t3 span { margin-right: 10px; }
+.tv-legend .t4 { margin-top: 4px; font-size: 12px; color: #2962ff; }
+.term-depth-wrap { max-width: 560px; }
+@media (max-width: 1250px) { .term-grid { grid-template-columns: 190px minmax(0, 1fr); } }
+@media (max-width: 760px) { .term-grid { grid-template-columns: minmax(0, 1fr); } .tv-chart { height: 400px; } .tv-tools button { width: 30px; height: 30px; } .tv-stats { gap: 6px 12px; } }
+
+/* Data sources: hidden unless Settings -> Data sources is on */
+html[data-src="off"] .src-note, html[data-src="off"] .src { display: none !important; }

@@ -388,7 +388,7 @@ export default function Heatmap({ sector }) {
         ? <SectorView name={sector} d={d} tf={tf} size={size} phone={phone} width={width} />
         : phone ? <MapPhone rows={d.rows} sectors={d.sectors} tf={tf} size={size} width={width} />
           : <MapWeb rows={d.rows} sectors={d.sectors} tf={tf} size={size} width={width} />)}
-      <p className="disclaimer">Box size = {SIZES.find((x) => x[0] === size)[1].toLowerCase()} · colour = % change over {tf} (full colour at ±{SCALE[tf]}%) · grey = no price. Prices: Yahoo Finance via Market Movers; sectors: NSE's own classification; market cap: the EquityLens scan, or the shares from NSE (India) or the company's SEC filing (US) × last close; score: the EquityLens scan; logos: the company's own logo, or its initials when none is found.</p>
+      <p className="disclaimer">Box size = {SIZES.find((x) => x[0] === size)[1].toLowerCase()} · colour = % change over {tf} (full colour at ±{SCALE[tf]}%) · grey = no price.<span className="src-note"> Prices: Yahoo Finance via Market Movers; sectors: NSE's own classification; market cap: the EquityLens scan, or the shares from NSE (India) or the company's SEC filing (US) × last close; score: the EquityLens scan; logos: the company's own logo, or its initials when none is found.</span></p>
     </div>
   )
 }

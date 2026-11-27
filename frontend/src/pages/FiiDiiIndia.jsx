@@ -73,7 +73,7 @@ function Flows({ d }) {
         </div>
         {rows.length > 0
           ? <><Chart rows={rows} bars={[{ key: 'net', color: C_FII, label: 'FPI net' }]} line={{ key: 'nifty', color: C_IDX }} lineLabel="NIFTY 50" barFmt={sgnCr} />
-            <Legend items={[[C_FII, 'FPI net (NSDL)'], [C_IDX, 'NIFTY 50 close', true]]} /></>
+            <Legend items={[[C_FII, 'FPI net (confirmed)'], [C_IDX, 'NIFTY 50 close', true]]} /></>
           : <Unavailable>{F.errors.nsdl || F.errors.nsdl_archive || 'NSDL figures are being downloaded.'}</Unavailable>}
         {F.errors.nsdl_archive && rows.length > 0 && <div className="small" style={{ color: 'var(--warn)', marginTop: 6 }}>{F.errors.nsdl_archive}</div>}
       </div>
@@ -212,7 +212,7 @@ function Records({ r, first }) {
   ]
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>FPI records and streaks <span className="small muted">· NSDL, stock exchanges</span></h3>
+      <h3 style={{ marginTop: 0 }}>FPI records and streaks <span className="small muted src-note">· NSDL, stock exchanges</span></h3>
       <div className="fd-recs">{items.map(([k, v, c]) => <div key={k} className="pmap-kv"><span className="muted">{k}</span><b style={{ color: c, textAlign: 'right' }}>{v}</b></div>)}</div>
     </div>
   )
@@ -433,7 +433,7 @@ export default function India({ d, tab }) {
       {t === 'sectors' && <Sectors d={d} />}
       {t === 'stocks' && <Stocks />}
       <Sources d={d} />
-      <p className="disclaimer">Sources: NSE provisional FII/FPI and DII figures (₹ crore, published after about 6 pm, subject to custodian confirmation); NSDL confirmed daily FPI figures and fortnightly sector reports; SEBI mutual fund trading figures; NSE participant-wise open interest files; company shareholding filings (via the EquityLens scan); NIFTY 50 closes from Yahoo Finance. Figures that fail a check (bought − sold = net, sectors add up to the total) are left out, never estimated.{d.error ? ` Last problem: ${d.error}` : ''}</p>
+      <p className="disclaimer src-note">Sources: NSE provisional FII/FPI and DII figures (₹ crore, published after about 6 pm, subject to custodian confirmation); NSDL confirmed daily FPI figures and fortnightly sector reports; SEBI mutual fund trading figures; NSE participant-wise open interest files; company shareholding filings (via the EquityLens scan); NIFTY 50 closes from Yahoo Finance. Figures that fail a check (bought − sold = net, sectors add up to the total) are left out, never estimated.{d.error ? ` Last problem: ${d.error}` : ''}</p>
     </>
   )
 }

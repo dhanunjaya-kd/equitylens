@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-227_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-229_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -54,7 +54,8 @@ It runs on your own laptop, works on your phone, and needs **no paid data and no
 
 | | Added | Where |
 |:-:|---|---|
-| 📈 | **Live terminal** (a screen, no orders): watchlist, intraday candles with VWAP, NSE quote, circuit band, 5-level market depth and delivery %, option chain by expiry with OI bars, PCR and max pain, futures with basis, price alerts; NSE stocks, NIFTY / BANKNIFTY / FINNIFTY / MIDCPNIFTY, stock F&O and US stocks | Sidebar → Terminal |
+| 📈 | **Live terminal** (a screen, no orders), TradingView-style: drawing tools (trend line, ray, horizontal / vertical line, rectangle, Fib retracement, measure), indicators menu (VWAP, EMA 9/20/50/200, SMA 20/50, Bollinger, Supertrend, RSI and MACD panes), last price with countdown to the candle close, watchlist, intraday candles with VWAP, NSE quote, circuit band, 5-level market depth and delivery %, option chain by expiry with OI bars, PCR and max pain, futures with basis, price alerts; NSE stocks, NIFTY / BANKNIFTY / FINNIFTY / MIDCPNIFTY, stock F&O and US stocks | Sidebar → Terminal |
+| 📎 | **Data sources switch**: source lines are hidden everywhere by default; Settings → Data sources shows them | Settings |
 | 🔁 | **Automation**: nightly Top Picks scan, IPO lists every 15 minutes, data checks after each month end (much faster repeat runs on all CPU cores); one list of everything that runs by itself, with on/off switches | Settings → Automation |
 | 📅 | **Today strip** on Home: NIFTY opening call, FII / DII, IPOs closing today, results today (yours first), watchlist movers, breaking — updates itself every minute in market hours | Home |
 | 🚀 | **IPO research (India, phase 1)**: open, upcoming and recently listed NSE issues, checked category bids, listing moves, SEBI draft filings and a source check | Sidebar → IPO research |
@@ -734,7 +735,7 @@ cd backend
 python run_tests.py
 ```
 
-227 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+229 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|

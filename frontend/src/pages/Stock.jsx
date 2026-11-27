@@ -95,7 +95,7 @@ export default function Stock({ symbol, tab }) {
           <div><div className="small muted">P/E</div><b>{num(m.pe, 1)}</b></div>
         </div>
         <div className="row between small muted" style={{ marginTop: 10 }}>
-          <span>Data {ago(d.fetched_at)} · <a href={d.source} target="_blank" rel="noreferrer">source</a></span>
+          <span>Data {ago(d.fetched_at)}<span className="src-note"> · <a href={d.source} target="_blank" rel="noreferrer">source</a></span></span>
           <button className="btn small" disabled={busy} onClick={() => load(true)}>{busy ? 'Refreshing…' : '↻ Refresh'}</button>
         </div>
       </div>

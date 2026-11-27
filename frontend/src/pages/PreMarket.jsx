@@ -175,7 +175,7 @@ function Board({ d }) {
   return (
     <section className="card" aria-label="Overnight markets">
       <h3>Overnight markets</h3>
-      <div className="small muted" style={{ marginTop: -4, marginBottom: 10 }}>What each move means for NIFTY · free Yahoo and NSE data · read at {d.built.slice(11)} IST</div>
+      <div className="small muted" style={{ marginTop: -4, marginBottom: 10 }}>What each move means for NIFTY<span className="src-note"> · free Yahoo and NSE data</span> · read at {d.built.slice(11)} IST</div>
       {groups.map((g) => (
         <div key={g.name} style={{ marginBottom: 12 }}>
           <h4>{g.name}</h4>

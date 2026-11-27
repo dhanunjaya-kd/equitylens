@@ -193,7 +193,7 @@ export default function StockChart({ symbol }) {
               onClick={() => setPanes({ ...panes, [k]: !panes[k] })}>{panes[k] ? '✓ ' : ''}{l}</span>))}
         </div>
         <div className="small muted" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          <span>Source: {data.source}{!data.ohlc && ' — closes only, so candles, Supertrend and ADX are off'}.
+          <span><span className="src-note">Source: {data.source}.</span>{!data.ohlc && ' Closes only, so candles, Supertrend and ADX are off.'}
             {' '}Last candle <b style={{ color: 'var(--text)' }}>{fmtDay(data.stats?.date)}</b>{data.fetched_at ? ` · updated ${fmtStamp(data.fetched_at)}` : ''}.
             {data.interval === '1d' && data.expected_last && data.stats?.date < data.expected_last && <b style={{ color: 'var(--warn)' }}> {fmtDay(data.expected_last)} not published by the data source yet — retrying every 15 minutes.</b>}
             {' '}Tap a chip to show/hide.</span>

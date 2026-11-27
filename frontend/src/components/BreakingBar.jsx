@@ -90,7 +90,7 @@ export default function BreakingBar({ market }) {
     <div className="brk" onClick={open} role="button">
       <span className="brk-pill">BREAKING</span>
       <span className="brk-title">{it.title}</span>
-      <span className="brk-meta">{(it.sources || []).map((s) => s.name).slice(0, 2).join(', ')} · {t}{items.filter((i) => !hid.includes(i.id)).length > 1 ? ` · +${items.filter((i) => !hid.includes(i.id)).length - 1} more` : ''}</span>
+      <span className="brk-meta"><span className="src-note">{(it.sources || []).map((s) => s.name).slice(0, 2).join(', ')} · </span>{t}{items.filter((i) => !hid.includes(i.id)).length > 1 ? ` · +${items.filter((i) => !hid.includes(i.id)).length - 1} more` : ''}</span>
       <button className="brk-x" onClick={close} aria-label="Dismiss">✕</button>
     </div>
   )

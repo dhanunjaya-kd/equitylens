@@ -94,6 +94,28 @@ def test_four_hour_candles_from_hourly():
     assert out[1]["o"] == 14 and out[1]["v"] == 300
 
 
+def test_real_nse_quote_and_order_book():
+    import json
+    js = json.loads((Path(__file__).parent / "fixtures" / "term" / "nse_quote_next.json").read_text(encoding="utf-8"))
+    q = T.parse_quote(js)                                    # HDFCBANK, saved by the app on 27 Nov 2026 09:40
+    assert (q["symbol"], q["ltp"], q["prev"], q["change"], q["pchange"]) == ("HDFCBANK", 860.5, 862.0, -1.5, -0.17)
+    assert (q["open"], q["high"], q["low"], q["vwap"]) == (857.9, 864.7, 857.9, 861.35) and q["change_check"] is None
+    assert (q["lower_circuit"], q["upper_circuit"], q["wk_high"], q["wk_low"], q["pe"]) == (775.8, 948.2, 1017.5, 669.2, 16.61)
+    t = T.parse_trade(js)
+    assert t["depth"]["ok"] and [b["price"] for b in t["depth"]["bids"]] == [860.35, 860.3, 860.25, 860.2, 860.15]
+    assert t["depth"]["asks"][0] == {"price": 860.5, "qty": 756.0} and t["depth"]["total_sell"] == 1456374
+    assert t["value_cr"] == 445.33 and t["delivery_pct"] == 63.82 and t["volume"] == 5170099
+
+
+def test_real_nse_futures():
+    import json
+    js = json.loads((Path(__file__).parent / "fixtures" / "term" / "nse_deriv_next.json").read_text(encoding="utf-8"))
+    d = T.parse_deriv(js)                                    # BANKNIFTY, 27 Nov 2026 09:41
+    assert d["spot"] == 63833.45 and d["time"] == "27-Nov-2026 09:41:08"
+    assert [f["expiry"] for f in d["futures"]] == ["29-Dec-2026", "25-Jan-2027", "23-Feb-2027"]
+    assert d["futures"][0]["ltp"] == 63998 and d["futures"][0]["basis"] == 164.55 and d["futures"][0]["oi"] == 49331
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

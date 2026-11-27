@@ -238,7 +238,7 @@ export default function Movers() {
                 )
               })}
             </div>
-            <p className="disclaimer">Prices from Yahoo Finance, refreshed after every market close and every 15 minutes while the market is open. "Top buyers/sellers" measure volume pressure from daily data, not live order flow.</p>
+            <p className="disclaimer"><span className="src-note">Prices from Yahoo Finance. </span>Prices refresh after every market close and every 15 minutes while the market is open. "Top buyers/sellers" measure volume pressure from daily data, not live order flow.</p>
           </div>
         </div>
       )}

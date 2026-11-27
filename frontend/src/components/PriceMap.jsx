@@ -476,7 +476,7 @@ export default function PriceMap({ symbol }) {
       <details className="card small">
         <summary style={{ cursor: 'pointer' }}>How every number here is measured</summary>
         <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 8 }}>{d.rules}</pre>
-        <div className="muted">Prices: {d.price_source}{d.real_ohlc ? '' : ' (closes only: highs and lows are closes)'} · {d.bars_n} sessions from {d.bars_from} to {w.date}. <button className="btn small" onClick={() => load(true)}>↻ Re-measure</button></div>
+        <div className="muted"><span className="src-note">Prices: {d.price_source}{d.real_ohlc ? '' : ' (closes only: highs and lows are closes)'} · </span>{d.bars_n} sessions from {d.bars_from} to {w.date}. <button className="btn small" onClick={() => load(true)}>↻ Re-measure</button></div>
       </details>
       <div className="small muted">Research aid, not investment advice. Levels and odds describe this stock's past, not a promise.</div>
     </>

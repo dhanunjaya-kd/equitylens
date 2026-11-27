@@ -60,7 +60,7 @@ function CategoryTable({ cats, total }) {
         })}
       </tbody></table></div>
       <Check okk={cats.adds_up}>{cats.check}</Check>
-      {!anyTimes && <div className="small muted">NSE does not publish the shares reserved per category for this issue, so category times can't be checked and aren't shown. Share of bids is each category's bids ÷ total bids.</div>}
+      {!anyTimes && <div className="small muted">The shares reserved per category are not published for this issue, so category times can't be checked and aren't shown. Share of bids is each category's bids ÷ total bids.</div>}
     </div>
   )
 }
@@ -84,7 +84,7 @@ function DemandChart({ d }) {
       </div>
       {hidden > 0 && <div className="small muted">{hidden} price level{hidden > 1 ? 's' : ''} under 0.1% of bids not drawn.</div>}
       <Check okk>bids at every price add up to NSE's total bids</Check>
-      <div className="small muted">NSE + BSE bid book · {d.time}</div>
+      <div className="small muted"><span className="src-note">NSE + BSE bid book · </span>{d.time}</div>
     </div>
   )
 }
@@ -116,7 +116,7 @@ function IssueDashboard({ x }) {
       </div>
       <div className="ipo-grid2">
         <div className="card ipo-panel">
-          <h3>Key facts (as NSE lists them)</h3>
+          <h3>Key facts</h3>
           <div className="ipo-facts">
             {d.facts.filter((f) => !['Symbol', 'Categories', 'Sub-Categories applicable for UPI', 'Address of the Registrar', 'Contact person name number and Email id'].includes(f.k) || more)
               .map((f) => <div key={f.k}><span>{f.k}</span><b>{f.v}</b></div>)}
@@ -128,7 +128,7 @@ function IssueDashboard({ x }) {
           <h3>Documents</h3>
           {d.docs.length ? <div className="ipo-docs">{d.docs.map((doc) => <a key={doc.url} href={doc.url} target="_blank" rel="noreferrer">📄 {doc.title}<span>↗</span></a>)}</div> : <div className="small muted">NSE lists no documents for this issue.</div>}
           <div className="small muted" style={{ marginTop: 10 }}>The offer document (RHP) holds the company's financials, where the money goes and its listed peers. Reading it into this page is the next phase.</div>
-          <div className="small muted" style={{ marginTop: 10 }}>Source: <a href={d.sources[0].url} target="_blank" rel="noreferrer">NSE issue details</a>{d.updated ? ` · ${d.updated}` : ''}{d.fetched ? ` · fetched ${ago(d.fetched)}` : ''}</div>
+          <div className="small muted src-note" style={{ marginTop: 10 }}>Source: <a href={d.sources[0].url} target="_blank" rel="noreferrer">NSE issue details</a>{d.updated ? ` · ${d.updated}` : ''}{d.fetched ? ` · fetched ${ago(d.fetched)}` : ''}</div>
         </div>
       </div>
     </div>
@@ -237,7 +237,7 @@ function Sources({ rows }) {
   const good = rows.filter((s) => s.ok).length
   const bad = rows.some((s) => !s.ok || s.missing?.length)
   return (
-    <div className="card ipo-src">
+    <div className="card ipo-src src-note">
       <button className="ipo-src-btn" onClick={() => setOpen(!open)}>
         <span>{bad ? '🟡' : '🟢'} Data sources: {good} of {rows.length} working</span><span className="muted small">{open ? 'hide' : 'details'}</span>
       </button>
@@ -278,7 +278,7 @@ export default function IPO({ tab }) {
   return (
     <div className="wrap ipo">
       <div className="row between wrapflex" style={{ marginBottom: 10 }}>
-        <div><h2 style={{ margin: '4px 0' }}>🚀 IPO research</h2><div className="small muted">🇮🇳 Live from NSE and SEBI · every figure checked before it is shown</div></div>
+        <div><h2 style={{ margin: '4px 0' }}>🚀 IPO research</h2><div className="small muted">🇮🇳 Live<span className="src-note"> from NSE and SEBI</span> · every figure checked before it is shown</div></div>
         <button className="btn small" disabled={busy} onClick={() => load(true)}>{busy ? 'Refreshing…' : '↻ Refresh'}</button>
       </div>
       {err && <div className="card" style={{ color: 'var(--bad)' }}>{err}</div>}

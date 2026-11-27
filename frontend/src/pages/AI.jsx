@@ -2,6 +2,7 @@ import { marked } from 'marked'
 import { AccountsCard, LogsCard, PhoneCard } from '../components/Access'
 import DataChecks from '../components/DataChecks'
 import Automation from '../components/Automation'
+import { sourcesShown, setSourcesShown } from '../util'
 import TelegramCard from '../components/TelegramCard'
 import { BreakingSoundCard } from '../components/BreakingBar'
 import { useEffect, useRef, useState } from 'react'
@@ -194,6 +195,23 @@ export function ExplainList({ symbols, title }) {
 }
 
 // ====================================================================== settings page
+function SourcesCard() {
+  const [on, setOn] = useState(sourcesShown())
+  return (
+    <div className="card">
+      <div className="row between" style={{ gap: 12 }}>
+        <div>
+          <h3 style={{ margin: 0 }}>📎 Data sources</h3>
+          <div className="small muted" style={{ marginTop: 4 }}>Show where each figure comes from (the "Source" lines and notes at the end of pages and sections). Off: they are hidden everywhere in the app on this device. The numbers and their checks are the same either way.</div>
+        </div>
+        <label className="row" style={{ gap: 8, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <input type="checkbox" checked={on} onChange={(e) => { setOn(e.target.checked); setSourcesShown(e.target.checked) }} /> {on ? 'Shown' : 'Hidden'}
+        </label>
+      </div>
+    </div>
+  )
+}
+
 export function Settings() {
   const [s, setS] = useState(null), [saved, setSaved] = useState(false), [test, setTest] = useState(null), [busy, setBusy] = useState(false)
   const [gm, setGm] = useState(null), [gmErr, setGmErr] = useState(null)
@@ -205,6 +223,7 @@ export function Settings() {
   const P = [['claude', 'Claude', 'Anthropic · best for long reports'], ['openai', 'ChatGPT', 'OpenAI'], ['gemini', 'Gemini', 'Google · has a free tier'], ['ollama', 'Ollama', 'Free · runs on your laptop'], ['demo', 'Demo', 'Offline sample answers']]
   return (
     <>
+      <SourcesCard />
       <div className="card">
         <h3>⚙️ AI settings</h3>
         <div className="grid2">
