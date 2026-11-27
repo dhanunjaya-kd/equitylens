@@ -213,7 +213,7 @@ export function MarketOnly({ market, what }) {
   )
 }
 
-const IN_ONLY = ['premarket', 'ipo']
+const IN_ONLY = ['premarket']
 
 export function SideNav({ page, market, onMarket, theme, onTheme }) {
   const items = [['home', '', 'Search', I.search], ['premarket', 'premarket', 'Pre-market', I.sun], ['movers', 'movers', 'Market Movers', I.fire], ['news', 'news', 'News', I.news], ['terminal', 'terminal', 'Terminal', I.term], ['ipo', 'ipo', 'IPO research', I.rocket], ['heatmap', 'heatmap', 'Heatmap', I.grid], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['fiidii', 'fiidii', 'FII / DII', I.bank], ['portfolio', 'portfolio', 'My Portfolio', I.brief], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],

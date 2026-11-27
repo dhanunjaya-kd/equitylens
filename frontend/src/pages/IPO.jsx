@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ago, api, getMarket, go, num, ok, signed } from '../util'
-import { MarketOnly } from '../components/ui'
 
 // IPO research (India) as a dashboard. Every number is NSE's / SEBI's own, or plain arithmetic on two of their
 // figures (labelled). A figure that fails its check is left out and the reason is shown.
@@ -309,7 +308,146 @@ function IPOPage({ tab }) {
   )
 }
 
+// ------------------------------------------------------------------ 🇺🇸 US IPOs (Nasdaq IPO calendar)
+const usd = (v, d = 2) => (ok(v) ? `$${num(v, d)}` : '—')
+const usBand = (x) => (ok(x.band_low) && ok(x.band_high) ? (x.band_low === x.band_high ? usd(x.band_low) : `${usd(x.band_low)}–${num(x.band_high, 2)}`) : '—')
+const usSize = (v) => (ok(v) ? (v >= 1000 ? `$${num(v / 1000, 2)} B` : `$${num(v, v < 10 ? 2 : 0)} M`) : '—')
+const shares = (v) => (ok(v) ? (v >= 1e6 ? `${num(v / 1e6, 2)} M` : num(v)) : '—')
+
+function UsName({ x }) {
+  return <span className="co"><Initials name={x.company} /><span className="nm"><b>{x.company}</b><small>{x.symbol || 'no ticker yet'}{x.exchange ? ` · ${x.exchange}` : ''}</small></span></span>
+}
+
+function UsUpcoming({ rows, today }) {
+  if (!rows.length) return <div className="card small muted">Nasdaq's calendar lists no IPO expected to price right now.</div>
+  return (
+    <div className="tbl-wrap"><table className="tbl ipo-tbl"><thead><tr>
+      <th style={{ textAlign: 'left' }}>Company</th><th>Expected pricing</th><th>Price range</th><th>Shares offered</th><th>Deal size</th>
+    </tr></thead><tbody>
+      {rows.map((x) => (
+        <tr key={x.deal || x.company}>
+          <td style={{ textAlign: 'left', whiteSpace: 'normal' }}><UsName x={x} /></td>
+          <td>{fmtDate(x.expected)} <Countdown d={daysTo(x.expected, today)} verb="prices" /></td>
+          <td>{usBand(x)}</td><td>{shares(x.shares)}</td><td>{usSize(x.value_m)}</td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )
+}
+
+function UsPriced({ rows, stats }) {
+  const [sort, setSort] = useState('date')
+  const sorted = useMemo(() => {
+    const r = [...rows]
+    if (sort === 'best') r.sort((a, b) => (b.perf?.close_vs_issue ?? -1e9) - (a.perf?.close_vs_issue ?? -1e9))
+    if (sort === 'worst') r.sort((a, b) => (a.perf?.close_vs_issue ?? 1e9) - (b.perf?.close_vs_issue ?? 1e9))
+    if (sort === 'now') r.sort((a, b) => (b.perf?.now_vs_issue ?? -1e9) - (a.perf?.now_vs_issue ?? -1e9))
+    if (sort === 'size') r.sort((a, b) => (b.value_m ?? -1) - (a.value_m ?? -1))
+    return r
+  }, [rows, sort])
+  const s = stats?.main || { n: 0 }
+  const raised = rows.reduce((a, x) => a + (x.value_m || 0), 0)
+  return (
+    <>
+      <div className="ipo-kpis" style={{ marginBottom: 10 }}>
+        <KPI k="Priced in last 120 days" v={rows.length} s={raised ? `${usSize(raised)} raised (deals with a checked size)` : null} />
+        <KPI k="Measured with prices" v={s.n || 0} s="first trading day found" />
+        <KPI k="Closed above IPO price on day 1" v={s.n ? `${s.above_listing} of ${s.n}` : '—'} s={s.n ? `${num((s.above_listing / s.n) * 100, 0)}%` : null} />
+        <KPI k="Median day-1 close" v={s.n ? <Pct v={s.median_listing} /> : '—'} s="vs IPO price" />
+        <KPI k="Above IPO price now" v={s.n ? `${s.above_now} of ${s.n}` : '—'} s={s.n ? `median ${signed(s.median_now, 1, '%')}` : null} />
+      </div>
+      <div className="row" style={{ gap: 6, margin: '4px 0 8px', flexWrap: 'wrap' }}>
+        {[['date', 'Latest first'], ['size', 'Biggest deals'], ['best', 'Best day 1'], ['worst', 'Worst day 1'], ['now', 'Best since IPO']].map(([k, l]) => <button key={k} className={`chip ${sort === k ? 'ipo-on' : ''}`} onClick={() => setSort(k)}>{l}</button>)}
+      </div>
+      {!rows.length ? <div className="card small muted">No IPO priced in the last 120 days on Nasdaq's calendar.</div> : (
+        <div className="tbl-wrap"><table className="tbl ipo-tbl"><thead><tr>
+          <th style={{ textAlign: 'left' }}>Company</th><th>Priced</th><th>IPO price</th><th>Deal size</th><th>Day-1 open</th><th>Day-1 close</th><th>Now</th><th>Range since</th>
+        </tr></thead><tbody>
+          {sorted.map((x) => (
+            <tr key={x.deal || `${x.symbol}-${x.priced}`} style={{ cursor: x.symbol ? 'pointer' : 'default' }} onClick={() => x.symbol && go(`stock/${x.symbol}`)}>
+              <td style={{ textAlign: 'left', whiteSpace: 'normal' }}><UsName x={x} />{x.perf_note && <div className="small muted">{x.perf_note}</div>}</td>
+              <td>{fmtDateY(x.priced)}</td>
+              <td>{ok(x.final_price) ? usd(x.final_price) : usBand(x)}</td>
+              <td>{usSize(x.value_m)}{x.value_note && <div className="small muted">{x.value_note}</div>}</td>
+              <td><Pct v={x.perf?.open_vs_issue} /></td>
+              <td><Pct v={x.perf?.close_vs_issue} /></td>
+              <td><Pct v={x.perf?.now_vs_issue} /></td>
+              <td className="small">{x.perf ? <><span style={{ color: tone(x.perf.low_vs_issue) }}>{signed(x.perf.low_vs_issue, 0, '%')}</span> to <span style={{ color: tone(x.perf.high_vs_issue) }}>{signed(x.perf.high_vs_issue, 0, '%')}</span></> : '—'}</td>
+            </tr>
+          ))}
+        </tbody></table></div>
+      )}
+      <div className="small muted" style={{ marginTop: 6 }}>Moves are against the IPO price on Nasdaq's calendar, from daily prices. Day 1 = first trading day on or after the pricing date. Tap a company for its stock report.</div>
+    </>
+  )
+}
+
+function UsFiled({ rows, withdrawn }) {
+  if (!rows.length) return <div className="card small muted">{withdrawn ? 'No withdrawn IPOs in this window.' : 'No new SEC filings in this window.'}</div>
+  return (
+    <>
+      <div className="tbl-wrap"><table className="tbl ipo-tbl"><thead><tr>
+        <th style={{ textAlign: 'left' }}>Company</th><th>Filed</th>{withdrawn && <th>Withdrawn</th>}<th>Shares</th><th>Deal size</th>
+      </tr></thead><tbody>
+        {rows.map((x) => (
+          <tr key={x.deal || x.company}>
+            <td style={{ textAlign: 'left', whiteSpace: 'normal' }}><UsName x={x} /></td>
+            <td>{fmtDateY(x.filed)}</td>{withdrawn && <td>{fmtDateY(x.withdrawn)}</td>}
+            <td>{shares(x.shares)}</td><td>{usSize(x.value_m)}</td>
+          </tr>
+        ))}
+      </tbody></table></div>
+      <div className="small muted" style={{ marginTop: 6 }}>{withdrawn ? 'Companies that pulled their IPO plans.' : 'Companies that filed an IPO registration with the SEC. Filing is not approval, and the size is the proposed amount.'}</div>
+    </>
+  )
+}
+
+const US_TABS = [['upcoming', 'Upcoming'], ['priced', 'Recently priced'], ['filed', 'Filed with SEC'], ['withdrawn', 'Withdrawn']]
+
+function UsIPOPage({ tab }) {
+  const [page, setPage] = useState(null)
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const t = US_TABS.some(([k]) => k === tab) ? tab : 'upcoming'
+  const load = (refresh) => {
+    setBusy(true)
+    api(`/api/ipo?market=US${refresh ? '&refresh=1' : ''}`).then((p) => { setPage(p); setErr('') }).catch((e) => setErr(e.message)).finally(() => setBusy(false))
+  }
+  useEffect(() => { load(false) }, [])
+  const today = page?.today
+  const wk = (page?.upcoming || []).filter((x) => { const d = daysTo(x.expected, today); return d !== null && d >= 0 && d <= 7 }).length
+  const filed30 = (page?.filed || []).filter((x) => daysTo(x.filed, today) >= -30).length
+  return (
+    <div className="wrap ipo">
+      <div className="row between wrapflex" style={{ marginBottom: 10 }}>
+        <div><h2 style={{ margin: '4px 0' }}>🚀 IPO research</h2><div className="small muted">🇺🇸 Live<span className="src-note"> from Nasdaq's IPO calendar</span> · deal sizes checked against shares × price</div></div>
+        <button className="btn small" disabled={busy} onClick={() => load(true)}>{busy ? 'Refreshing…' : '↻ Refresh'}</button>
+      </div>
+      {err && <div className="card" style={{ color: 'var(--bad)' }}>{err}</div>}
+      {page?.demo && <div className="card small muted">Demo mode: IPO data comes only from live sources, so this page is empty here.</div>}
+      {page && (
+        <div className="ipo-kpis top">
+          <KPI k="Expected to price" v={(page.upcoming || []).length} s={`${wk} within 7 days`} />
+          <KPI k="Priced in last 120 days" v={(page.priced || []).length} s={page.stats?.main?.n ? `${page.stats.main.above_listing} of ${page.stats.main.n} closed day 1 above IPO price` : null} />
+          <KPI k="New SEC filings (30 days)" v={filed30} s="companies preparing to list" />
+          <KPI k="Withdrawn" v={(page.withdrawn || []).length} s="in the last few months" />
+        </div>
+      )}
+      <div className="row between wrapflex ipo-bar-top">
+        <div className="tabs" style={{ position: 'static', padding: 0 }}>
+          {US_TABS.map(([k, label]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`ipo/${k}`)}>{label}{page ? ` · ${(page[k] || []).length}` : ''}</button>)}
+        </div>
+      </div>
+      {!page && !err && <div className="card small muted">Reading Nasdaq's IPO calendar…</div>}
+      {page && t === 'upcoming' && <UsUpcoming rows={page.upcoming || []} today={today} />}
+      {page && t === 'priced' && <UsPriced rows={page.priced || []} stats={page.stats} />}
+      {page && t === 'filed' && <UsFiled rows={page.filed || []} />}
+      {page && t === 'withdrawn' && <UsFiled rows={page.withdrawn || []} withdrawn />}
+      {page && <div style={{ marginTop: 14 }}><Sources rows={page.sources} /></div>}
+    </div>
+  )
+}
+
 export default function IPO({ tab }) {
-  if (getMarket() === 'US') return <div><MarketOnly market="IN" what="IPO research" /></div>
-  return <IPOPage tab={tab} />
+  return getMarket() === 'US' ? <UsIPOPage tab={tab} /> : <IPOPage tab={tab} />
 }

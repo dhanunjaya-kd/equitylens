@@ -591,9 +591,7 @@ def fiidii_get(market: str = "IN"):
 @app.get("/api/ipo")
 def ipo_get(market: str = "IN", refresh: bool = False):
     from . import ipo
-    if market.upper() != "IN":
-        return {"open": [], "upcoming": [], "listed": [], "drhp": [], "sources": [], "not_yet": "US IPOs come in a later phase"}
-    return ipo.india(refresh)
+    return ipo.us(refresh) if market.upper() == "US" else ipo.india(refresh)
 
 
 @app.get("/api/ipo/detail/{symbol}")

@@ -563,3 +563,169 @@ def detail(symbol: str, series: str = "EQ", refresh: bool = False) -> dict:
     except Exception as e:  # noqa: BLE001
         res, src = None, _source_row("detail", label, link, None, str(e))
     return dict(res or {}, symbol=sym, series=ser, sources=[src], ok=res is not None)
+
+
+# ================================================================== 🇺🇸 US IPOs (Nasdaq's public IPO calendar)
+# api.nasdaq.com/api/ipo/calendar?date=YYYY-MM  ->  data.priced / data.upcoming.upcomingTable / data.filed / data.withdrawn
+# One request per month (the last 4 months and the next one), cached 6 hours; the latest raw answer is saved
+# (data/ipo_raw/nasdaq_ipo_YYYY-MM.json). Checks: deal value = shares × IPO price for priced deals (within 1%),
+# otherwise the value is left out; first-day and since-listing moves only with one IPO price and a first price bar
+# within 3 days of the pricing date (US IPOs usually start trading the day after pricing).
+NASDAQ_IPO = "https://api.nasdaq.com/api/ipo/calendar"
+US_KEYS = {
+    "symbol": ("proposedTickerSymbol", "symbol", "ticker"),
+    "company": ("companyName", "company", "name"),
+    "exchange": ("proposedExchange", "exchange"),
+    "price": ("proposedSharePrice", "sharePrice", "price"),
+    "shares": ("sharesOffered", "shares"),
+    "value": ("dollarValueOfSharesOffered", "dealSize", "dollarValue"),
+    "priced": ("pricedDate",),
+    "expected": ("expectedPriceDate", "expectedDate"),
+    "filed": ("filedDate",),
+    "withdrawn": ("withdrawDate", "withdrawnDate"),
+    "deal": ("dealID", "dealId", "id"),
+}
+
+
+def _upick(row: dict, field: str):
+    low = {_norm(k): v for k, v in (row or {}).items()}
+    for k in US_KEYS[field]:
+        v = low.get(_norm(k))
+        if v not in (None, "", "-", "N/A", "NA"):
+            return v.strip() if isinstance(v, str) else v
+    return None
+
+
+def us_date(v) -> Optional[date]:
+    s = str(v or "").strip()
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m/%d/%y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
+def us_money(v) -> Optional[float]:
+    return num(re.sub(r"[$,\s]", "", str(v))) if v not in (None, "") else None
+
+
+def _section(js: dict, name: str) -> list[dict]:
+    d = (js or {}).get("data") or {}
+    sec = d.get(name) or {}
+    if name == "upcoming" and isinstance(sec, dict):
+        sec = sec.get("upcomingTable") or sec
+    rows = sec.get("rows") if isinstance(sec, dict) else sec
+    return [r for r in rows or [] if isinstance(r, dict)]
+
+
+def us_issue(row: dict, status: str) -> Optional[dict]:
+    name = _upick(row, "company")
+    if not name:
+        return None
+    sym = (_upick(row, "symbol") or "").upper() or None
+    lo, hi = price_band(_upick(row, "price"))
+    shares, value = us_money(_upick(row, "shares")), us_money(_upick(row, "value"))
+    final = lo if status == "priced" and lo is not None and lo == hi else None
+    value_note = None
+    if status == "priced" and value and shares and final:
+        if abs(shares * final - value) > 0.01 * value:
+            value, value_note = None, "left out: deal value ≠ shares × IPO price"
+    d = {k: us_date(_upick(row, k)) for k in ("priced", "expected", "filed", "withdrawn")}
+    return {"deal": str(_upick(row, "deal") or ""), "symbol": sym, "company": htmllib.unescape(str(name)).strip(),
+            "exchange": _upick(row, "exchange"), "status": status, "range_text": _upick(row, "price"),
+            "band_low": lo, "band_high": hi, "final_price": final, "shares": shares,
+            "value_m": round(value / 1e6, 2) if value else None, "value_note": value_note,
+            **{k: v.isoformat() if v else None for k, v in d.items()}}
+
+
+def parse_us_month(js: dict) -> dict:
+    out = {}
+    for sec, status in (("priced", "priced"), ("upcoming", "upcoming"), ("filed", "filed"), ("withdrawn", "withdrawn")):
+        out[status] = [x for x in (us_issue(r, status) for r in _section(js, sec)) if x]
+    return out
+
+
+def _us_months(today: date) -> list[str]:
+    out, y, m = [], today.year, today.month
+    for k in range(-4, 2):
+        mm = m + k
+        yy, mm = y + (mm - 1) // 12, (mm - 1) % 12 + 1
+        out.append(f"{yy}-{mm:02d}")
+    return out
+
+
+def _us_bars(symbol: str) -> list[dict]:
+    from . import technicals
+    key = f"IPO::USBARS::{symbol}"
+    hit = store.get_company(key)
+    if hit and time.time() - hit[0] < TTL["bars"]:
+        return hit[1]["bars"]
+    bars = technicals._yahoo(symbol, "1y")
+    store.put_company(key, {"bars": bars})
+    return bars
+
+
+def us_listing_move(bars: list[dict], priced: str, price: float):
+    """Like listing_move, but a price series that starts well before the pricing date is not a first listing."""
+    if bars and (date.fromisoformat(priced) - date.fromisoformat(bars[0]["t"])).days > 3:
+        return "traded_before"
+    return listing_move(bars, priced, price)
+
+
+def us(refresh: bool = False) -> dict:
+    if config.DEMO:
+        return {"market": "US", "upcoming": [], "priced": [], "filed": [], "withdrawn": [], "sources": [], "stats": listed_stats([]), "demo": True}
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    months, sources = _us_months(today), []
+    live = set(months[-2:])     # this month and next change often; older months are settled
+    merged = {"priced": {}, "upcoming": {}, "filed": {}, "withdrawn": {}}
+    for mon in months:
+        def fetch(mon=mon):
+            calendars._pace()
+            r = requests.get(NASDAQ_IPO, params={"date": mon}, headers=calendars._NQ_HEADERS, timeout=config.REQUEST_TIMEOUT)
+            if r.status_code != 200:
+                raise IpoError(f"Nasdaq answered {r.status_code}")
+            _save_raw(f"nasdaq_ipo_{mon}.json", r.text)
+            got = parse_us_month(r.json())
+            n = sum(len(v) for v in got.values())
+            return {"items": got, "count": n, "found": [k for k, v in got.items() if v], "missing": []}
+        try:
+            res = _cached(f"IPO::US::{mon}", TTL["upcoming"] if mon in live else TTL["past"], refresh, fetch)
+            for k, rows in res["items"].items():
+                for x in rows:
+                    merged[k][x["deal"] or f"{x['company']}|{x.get(k) or ''}"] = x
+            sources.append(_source_row(f"us-{mon}", f"Nasdaq IPO calendar · {mon}", f"{NASDAQ_IPO}?date={mon}", res, None))
+        except Exception as e:  # noqa: BLE001
+            sources.append(_source_row(f"us-{mon}", f"Nasdaq IPO calendar · {mon}", f"{NASDAQ_IPO}?date={mon}", None, str(e)))
+    t = today.isoformat()
+    upcoming = sorted([x for x in merged["upcoming"].values() if not x["priced"]], key=lambda x: x.get("expected") or "9")
+    priced_ids = {x["symbol"] for x in merged["priced"].values() if x["symbol"]}
+    upcoming = [x for x in upcoming if x["symbol"] not in priced_ids]
+    cut = (today - timedelta(days=LISTED_DAYS)).isoformat()
+    priced = sorted([x for x in merged["priced"].values() if x.get("priced") and cut <= x["priced"] <= t], key=lambda x: x["priced"], reverse=True)
+    rows = []
+    with _lock:
+        for i, x in enumerate(priced):
+            x = dict(x, listing=x["priced"], sme=False, perf=None, perf_note=None)
+            if not x["symbol"]:
+                x["perf_note"] = "no ticker"
+            elif x["final_price"] is None:
+                x["perf_note"] = "Nasdaq gives no single IPO price"
+            elif i >= LISTED_MAX:
+                x["perf_note"] = f"not looked up (older than the newest {LISTED_MAX})"
+            else:
+                try:
+                    x["perf"] = us_listing_move(_us_bars(x["symbol"]), x["priced"], x["final_price"])
+                    if x["perf"] == "traded_before":
+                        x["perf"], x["perf_note"] = None, "this ticker traded before the pricing date (uplisting or reused ticker)"
+                    elif x["perf"] is None:
+                        x["perf_note"] = "not trading yet" if x["priced"] >= t else "first price bar does not match the IPO date"
+                except Exception:  # noqa: BLE001
+                    x["perf_note"] = "daily prices not available for this ticker"
+            rows.append(x)
+    filed = sorted(merged["filed"].values(), key=lambda x: x.get("filed") or "", reverse=True)[:150]
+    withdrawn = sorted(merged["withdrawn"].values(), key=lambda x: x.get("withdrawn") or "", reverse=True)[:100]
+    return {"market": "US", "today": t, "upcoming": upcoming, "priced": rows, "filed": filed, "withdrawn": withdrawn,
+            "stats": listed_stats(rows), "sources": sources}

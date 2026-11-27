@@ -129,6 +129,47 @@ def test_demo_page_is_empty_not_invented():
     assert page["demo"] and page["open"] == [] and page["listed"] == []
 
 
+# Nasdaq IPO calendar: shape as documented by its public JSON (data.priced / upcoming.upcomingTable / filed / withdrawn).
+# Replace with a saved real answer (data/ipo_raw/nasdaq_ipo_YYYY-MM.json) once the app has fetched one.
+NQ = {"data": {
+    "priced": {"rows": [
+        {"dealID": "1-1", "proposedTickerSymbol": "ABCD", "companyName": "Abcd Therapeutics, Inc.", "proposedExchange": "NASDAQ Global",
+         "proposedSharePrice": "16.00", "sharesOffered": "10,000,000", "pricedDate": "11/20/2026", "dollarValueOfSharesOffered": "$160,000,000"},
+        {"dealID": "1-2", "proposedTickerSymbol": "BADV", "companyName": "Bad Value Corp", "proposedExchange": "NYSE",
+         "proposedSharePrice": "10.00", "sharesOffered": "1,000,000", "pricedDate": "11/18/2026", "dollarValueOfSharesOffered": "$99,000,000"}]},
+    "upcoming": {"upcomingTable": {"rows": [
+        {"dealID": "2-1", "proposedTickerSymbol": "NEWX", "companyName": "Newx Holdings", "proposedExchange": "NASDAQ Capital",
+         "proposedSharePrice": "4.00-5.00", "sharesOffered": "2,500,000", "expectedPriceDate": "12/03/2026", "dollarValueOfSharesOffered": "$12,500,000"}]}},
+    "filed": {"rows": [{"dealID": "3-1", "proposedTickerSymbol": "FILE", "companyName": "Filer &amp; Co", "filedDate": "11/25/2026",
+                        "dollarValueOfSharesOffered": "$100,000,000"}]},
+    "withdrawn": {"rows": [{"dealID": "4-1", "proposedTickerSymbol": "GONE", "companyName": "Gone Ltd", "proposedExchange": "NYSE",
+                            "sharesOffered": "3,000,000", "filedDate": "06/01/2026", "withdrawDate": "11/10/2026"}]}}}
+
+
+def test_us_calendar_parse():
+    got = ipo.parse_us_month(NQ)
+    a, b = got["priced"]
+    assert a["symbol"] == "ABCD" and a["final_price"] == 16.0 and a["value_m"] == 160.0 and a["priced"] == "2026-11-20"
+    assert b["value_m"] is None and "shares × IPO price" in b["value_note"]       # 1M × $10 ≠ $99M: left out
+    u = got["upcoming"][0]
+    assert (u["band_low"], u["band_high"], u["final_price"], u["expected"]) == (4.0, 5.0, None, "2026-12-03")
+    assert got["filed"][0]["company"] == "Filer & Co" and got["filed"][0]["filed"] == "2026-11-25"
+    assert got["withdrawn"][0]["withdrawn"] == "2026-11-10"
+    assert ipo.parse_us_month({}) == {"priced": [], "upcoming": [], "filed": [], "withdrawn": []}
+
+
+def test_us_listing_needs_fresh_series():
+    bars = [{"t": "2026-11-21", "o": 18, "h": 20, "l": 17, "c": 19}, {"t": "2026-11-24", "o": 19, "h": 19, "l": 15, "c": 16}]
+    m = ipo.us_listing_move(bars, "2026-11-20", 16.0)
+    assert m["first_day"] == "2026-11-21" and m["open_vs_issue"] == 12.5 and m["now_vs_issue"] == 0.0
+    old = [{"t": "2026-05-01", "o": 1, "h": 1, "l": 1, "c": 1}] + bars
+    assert ipo.us_listing_move(old, "2026-11-20", 16.0) == "traded_before"
+
+
+def test_us_months_window():
+    assert ipo._us_months(date(2026, 1, 15)) == ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

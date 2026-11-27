@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-229_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-232_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -389,7 +389,13 @@ Sidebar → **IPO research** (on the phone: Market Movers → 🚀 IPOs). A dash
 
 **Source check:** every source's latest raw answer is saved in `backend/data/ipo_raw/`; the *Data sources* bar at the bottom shows each source and any field it stopped carrying.
 
-Coming next: the IPO report from the offer document (RHP) — financials, where the money goes, valuation against listed peers, red flags with page numbers — then the tested past-IPO record, after-listing lock-ins and US IPOs.
+### 🚀 IPO research — US
+
+Switch to the 🇺🇸 US view and open **IPO research**. Read from Nasdaq's public IPO calendar (the last 4 months and the next one), with four tabs: **Upcoming** (expected pricing date, price range, shares, deal size) · **Recently priced** (IPO price, deal size, day-1 open and close, now, and the range since, against the IPO price) · **Filed with SEC** · **Withdrawn**.
+
+**Checks:** a priced deal's size is shown only when it equals shares × IPO price (within 1%) · day-1 moves only when there is one IPO price and the first daily price is within 3 days of the pricing date · a ticker whose prices start well before the pricing date (an uplisting or a reused ticker) is not measured. Raw answers are saved as `backend/data/ipo_raw/nasdaq_ipo_YYYY-MM.json`.
+
+Coming next: the IPO report from the offer document (RHP) — financials, where the money goes, valuation against listed peers, red flags with page numbers — then the tested past-IPO record and after-listing lock-ins.
 
 ### 📰 News — market-moving items only, India and US
 
@@ -720,7 +726,7 @@ All free and public. No logins, no paid feeds.
 | Results calendar | NSE event calendar (board meetings) | Nasdaq earnings calendar |
 | Economic calendar | Nasdaq economic calendar + RBI, MoSPI and DPIIT official schedules | Nasdaq economic calendar + Federal Reserve FOMC schedule |
 | Documents | Annual reports, concalls, announcements (company page) | 10-K, 10-Q, 8-K (SEC) |
-| IPOs | NSE current, upcoming and past issues · NSE bids by category and issue details · SEBI draft offer documents (DRHP) | — (later phase) |
+| IPOs | NSE current, upcoming and past issues · NSE bids by category and issue details · SEBI draft offer documents (DRHP) | Nasdaq IPO calendar (upcoming, priced, filed, withdrawn) · Yahoo daily prices for day-1 moves |
 | News | NSE corporate announcements · RBI press releases · publishers' RSS feeds | SEC 8-K current filings · Federal Reserve press releases · publishers' RSS feeds |
 | Logos | Financial Modeling Prep public logo images, or the company's website icon | same |
 
@@ -735,7 +741,7 @@ cd backend
 python run_tests.py
 ```
 
-229 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+232 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
@@ -807,7 +813,7 @@ equitylens/
 │   │   ├── fiidii.py         FII / DII: NSE cash figures, F&O positions, CFTC (US), tested "does it predict"
 │   │   ├── fpi.py            NSDL daily FPI flows and derivatives, sector reports, SEBI mutual funds (all checked)
 │   │   ├── instholdings.py   stocks FIIs / DIIs added or cut, from scanned shareholding
-│   │   ├── ipo.py            IPO research: NSE issues, category bids, SEBI DRHP list, listing moves, source check
+│   │   ├── ipo.py            IPO research: NSE issues, category bids, SEBI DRHP list, Nasdaq US IPO calendar, listing moves, source check
 │   │   ├── news.py           filings, central banks and publishers' feeds; tags, de-duplication, breaking
 │   │   ├── alerts.py         Telegram alerts (breaking, watchlist filings, RBI / Fed)
 │   │   ├── ai.py             Claude / OpenAI / Gemini / Ollama agents, entry research + number check
@@ -845,7 +851,7 @@ equitylens/
 | `GET /api/fiidii?market=IN\|US` · `GET /api/fiidii/stocks?quarter=` | FII / DII page data · stocks institutions added or cut |
 | `GET /api/term/stock/{symbol}` · `/api/term/fno/{symbol}?expiry=` · `/api/term/candles/{symbol}?frame=` · `/api/term/watch?symbols=` | Terminal: NSE quote + depth · option chain + futures · intraday candles · watchlist prices |
 | `GET /api/automation` · `POST /api/automation/{task}?on=` · `GET /api/today?market=&symbols=` | Everything that runs by itself, with switches (owner only) · Home 'Today' strip |
-| `GET /api/ipo?market=IN&refresh=` · `GET /api/ipo/detail/{symbol}?series=` | IPO page (lists + source check) · one issue's category bids, facts and documents |
+| `GET /api/ipo?market=IN|US&refresh=` · `GET /api/ipo/detail/{symbol}?series=` | IPO page (lists + source check) · one issue's category bids, facts and documents |
 | `GET /api/news?market=` · `GET /api/news/breaking?market=` | News page · breaking items only |
 | `GET /api/alerts` · `POST /api/alerts` · `POST /api/alerts/find-chat` · `POST /api/alerts/test` | Telegram alerts settings, find your chat, send a test (owner only) |
 | `GET /api/jobs/{levels\|entry}` · `POST /api/jobs/{levels\|entry}/start` | Run the level test or the entry backtest from the app (owner only), with progress |
