@@ -1,3 +1,4 @@
+import { Chart } from './Terminal'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, createChart, createSeriesMarkers,
@@ -22,6 +23,21 @@ const fmtDay = (d) => { if (!d) return '—'; const [y, m, dd] = d.split('-'); r
 const fmtStamp = (s) => { const [d, t] = s.split('T'); return `${fmtDay(d)}, ${t.slice(0, 5)} IST` }
 
 export default function StockChart({ symbol }) {
+  const [intraday, setIntraday] = useState(true)
+  const [frame, setFrame] = useState('5m')
+  const [expanded, setExpanded] = useState(false)
+  if (symbol.startsWith('US:')) return <ResearchChart symbol={symbol} />
+  return <>
+    <div className="row" style={{gap: 6, marginBottom: 8}}>
+      <button className={intraday ? 'btn primary' : 'btn'} onClick={() => setIntraday(true)}>Intraday pivots</button>
+      <button className={intraday ? 'btn' : 'btn primary'} onClick={() => setIntraday(false)}>Daily / Weekly research</button>
+    </div>
+    {intraday ? <Chart key={symbol} sym={symbol} frame={frame} setFrame={setFrame}
+      name={symbol} expanded={expanded} setExpanded={setExpanded} /> : <ResearchChart symbol={symbol} />}
+  </>
+}
+
+function ResearchChart({ symbol }) {
   const [interval, setInterval_] = useState('1d')
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)

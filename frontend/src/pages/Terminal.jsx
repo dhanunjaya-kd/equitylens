@@ -129,11 +129,40 @@ function drawShapes(ctx, w, h, chart, series, shapes, temp, dark) {
 
 // ---------------------------------------------------------------- chart (TradingView-style)
 const UP = '#089981', DOWN = '#f23645'
-const FRAME_LABEL = { '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h', '4h': '4h', '1D': 'D', '1W': 'W' }
-const PERIOD = { '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '4h': 14400 }
+const FRAME_LABEL = { '1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h', '4h': '4h', '1D': 'D', '1W': 'W' }
+const PERIOD = { '1m': 60, '3m': 180, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '4h': 14400 }
 const mmss = (s) => (s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`)
 
-function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded, setExpanded }) {
+function drawSessionPivots(view, data, seriesType) {
+  const pivots = data.pivots
+  const key = JSON.stringify([pivots, data.bars.at(-1)?.t])
+  if (key === view.pivotKey) return
+  view.pivotKey = key
+  for (const series of view.pivotSeries || []) view.chart.removeSeries(series)
+  view.pivotSeries = []
+  if (!pivots) return
+  const points = data.bars.map(bar => bar.t + data.offset)
+    .filter(t => new Date(t * 1000).toISOString().slice(0, 10) === pivots.session)
+  for (const [title, value] of Object.entries(pivots.levels)) {
+    const series = view.chart.addSeries(seriesType, {
+      title, color: title === 'PP' ? '#8775ca' : title.startsWith('R') ? '#d45454' : '#159681',
+      lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true,
+      pointMarkersVisible: points.length === 1, crosshairMarkerVisible: false,
+    })
+    series.setData(points.map(time => ({ time, value })))
+    view.pivotSeries.push(series)
+  }
+}
+
+function pivotCaption(data) {
+  if (!('pivots' in data)) return ''
+  const p = data.pivots
+  return p ? ' · Classic pivots for ' + p.session + ' · prior session ' + p.basis +
+    ' (H ' + p.high.toFixed(2) + ', L ' + p.low.toFixed(2) + ', C ' + p.close.toFixed(2) + ')'
+    : ' · Daily pivot data unavailable'
+}
+
+export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded, setExpanded }) {
   const box = useRef(), cv = useRef(), wrap = useRef()
   const ref = useRef(null)
   const [d, setD] = useState(null)
@@ -151,8 +180,18 @@ function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded, setEx
   const setShapes = (s) => { setShapesRaw(s); saveJ(`eql_draw_${sym}`, s) }
   useEffect(() => { setShapesRaw(loadJ(`eql_draw_${sym}`, [])); setTemp(null) }, [sym])
   const flip = (k) => { const o = { ...ind, [k]: !ind[k] }; setInd(o); saveJ('eql_term_ind', o) }
-  usePoll(() => api(`/api/term/candles/${encodeURIComponent(sym)}?frame=${frame}`).then((x) => { setD(x); setErr('') }).catch((e) => setErr(e.message)),
-    ['1D', '1W'].includes(frame) ? 300000 : 30000, [sym, frame])
+  useEffect(() => {
+    let active = true
+    const update = async () => {
+      try {
+        const next = await api(`/api/term/candles/${encodeURIComponent(sym)}?frame=${frame}`)
+        if (active) { setD(next); setErr('') }
+      } catch (error) { if (active) setErr(error.message) }
+    }
+    setD(null); setErr(''); setLeg(null); update()
+    const timer = setInterval(() => { if (!document.hidden) update() }, ['1D','1W'].includes(frame) ? 300000 : 30000)
+    return () => { active = false; clearInterval(timer) }
+  }, [sym, frame])
 
   // build the chart
   useEffect(() => {
@@ -201,12 +240,13 @@ function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded, setEx
   // data
   useEffect(() => {
     const r = ref.current
-    if (!r || !d) return
+    if (!r || !d || d.frame !== frame || d.symbol !== sym.toUpperCase()) return
     const off = d.offset || 0
     const bars = d.bars
     const T = (b) => b.t + off                                   // exchange local time on the axis
     const daily = ['1D', '1W'].includes(frame)
     r.main.setData(bars.map((b) => (line ? { time: T(b), value: b.c } : { time: T(b), open: b.o, high: b.h, low: b.l, close: b.c })))
+    drawSessionPivots(r, d, LineSeries)
     const closes = bars.map((b) => b.c)
     const put = (se, vals) => { if (se) se.setData(bars.map((b, i) => (ok(vals[i]) ? { time: T(b), value: vals[i] } : { time: T(b) }))) }
     const s = r.s
@@ -348,7 +388,7 @@ function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded, setEx
             </div>
           )}
         </div>
-        <button className="tv-btn" onClick={onAlert} title="Price alert"><svg viewBox="0 0 24 24" className="tv-ic"><path d="M6 17h12l-1.5-2V11a4.5 4.5 0 0 0-9 0v4zM10 20h4" /></svg> Alert</button>
+        <button hidden={!onAlert} className="tv-btn" onClick={onAlert} title="Price alert"><svg viewBox="0 0 24 24" className="tv-ic"><path d="M6 17h12l-1.5-2V11a4.5 4.5 0 0 0-9 0v4zM10 20h4" /></svg> Alert</button>
         <span className="grow" />
         <button className="tv-btn" title="Fit all candles" onClick={() => ref.current?.chart.timeScale().fitContent()}><svg viewBox="0 0 24 24" className="tv-ic"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg></button>
         <button className="tv-btn" title="Save a picture of the chart" onClick={shot}><svg viewBox="0 0 24 24" className="tv-ic"><rect x="3" y="7" width="18" height="13" rx="2" /><circle cx="12" cy="13.5" r="3.5" /><path d="M8 7l2-3h4l2 3" /></svg></button>
@@ -380,7 +420,7 @@ function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded, setEx
           </div>
         </div>
       </div>
-      <div className="small muted term-src src-note">{err ? <span style={{ color: 'var(--bad)' }}>{err}</span> : d ? `${d.source} · ${d.yahoo}${ind.vwap && !['1D', '1W'].includes(frame) ? ' · VWAP from these candles' : ''}` : 'Loading candles…'}</div>
+      <div className="small muted term-src src-note">{err ? <span style={{ color: 'var(--bad)' }}>{err}</span> : d ? `${d.source} · ${d.yahoo}${pivotCaption(d)}${ind.vwap && !['1D', '1W'].includes(frame) ? ' · VWAP from these candles' : ''}` : 'Loading candles…'}</div>
       {err && <div className="small" style={{ color: 'var(--bad)', padding: '0 10px 8px' }}>{err}</div>}
     </div>
   )

@@ -440,7 +440,7 @@ def _yahoo(sym: str, interval: str, rng: str) -> dict:
     return parse_yahoo(res)
 
 
-FRAMES = {"1m": ("1m", "1d"), "5m": ("5m", "5d"), "15m": ("15m", "1mo"), "30m": ("30m", "1mo"), "1h": ("60m", "3mo"),
+FRAMES = {"1m": ("1m", "1d"), "3m": ("1m", "5d"), "5m": ("5m", "5d"), "15m": ("15m", "1mo"), "30m": ("30m", "1mo"), "1h": ("60m", "3mo"),
           "4h": ("60m", "6mo"), "1D": ("1d", "2y"), "1W": ("1wk", "10y")}
 
 
@@ -461,15 +461,66 @@ def group_hours(bars: list[dict], offset: int, n: int = 4) -> list[dict]:
     return out
 
 
+def three_minutes(data: dict) -> dict:
+    """Aggregate actual 1m bars by exchange-clock bucket, preserving cumulative VWAP."""
+    bars, vwaps = [], []
+    offset = data["offset"]
+    for bar, vwap in zip(data["bars"], data["vwap"]):
+        start = (bar["t"] + offset) // 180 * 180 - offset
+        if not bars or bars[-1]["t"] != start:
+            bars.append(dict(bar, t=start))
+            vwaps.append(vwap)
+        else:
+            prev = bars[-1]
+            prev.update(h=max(prev["h"], bar["h"]), l=min(prev["l"], bar["l"]),
+                        c=bar["c"], v=prev["v"] + bar["v"])
+            vwaps[-1] = vwap
+    return dict(data, bars=bars, vwap=vwaps)
+
+
+def session_pivots(bars, daily, sessions):
+    """Classic floor pivots for the latest displayed session, from its exact prior trading date."""
+    def day(bar):
+        return datetime.fromtimestamp(bar["t"], IST).date()
+
+    if not bars:
+        return None
+    target = day(bars[-1])
+    trading_days = {day(b) for b in sessions}
+    if target not in trading_days:
+        return None
+    previous = max((d for d in trading_days if d < target), default=None)
+    base = next((b for b in reversed(daily) if day(b) == previous), None)
+    if not base or not 0 < base["l"] <= base["c"] <= base["h"] or base["h"] == base["l"]:
+        return None
+    h, l, c = base["h"], base["l"], base["c"]
+    pp, span = (h + l + c) / 3, h - l
+    return {"session": target.isoformat(), "basis": previous.isoformat(), "high": h, "low": l, "close": c,
+            "levels": {"PP": pp, "R1": 2*pp-l, "R2": pp+span, "R3": pp+2*span,
+                       "S1": 2*pp-h, "S2": pp-span, "S3": pp-2*span}}
+
+
 def candles(symbol: str, frame: str = "5m") -> dict:
     frame = frame if frame in FRAMES else "5m"
     iv, rng = FRAMES[frame]
     ys = yahoo_symbol(symbol)
     out = _cached(f"k::{ys}::{frame}", TTL["candles"], lambda: _yahoo(ys, iv, rng))
+    if frame == "3m":
+        out = three_minutes(out)
     if frame == "4h":
         out = dict(out, bars=group_hours(out["bars"], out["offset"]), vwap=[])
     elif frame in ("1D", "1W"):
         out = dict(out, vwap=[])
+    if not clean(symbol).startswith("US:") and frame not in ("1D", "1W"):
+        pivots = None
+        try:
+            def history(ticker):
+                return _cached(f"pivot-day::{ticker}", 180, lambda: _yahoo(ticker, "1d", "1mo"))["bars"]
+            sessions = history("^NSEI")
+            pivots = session_pivots(out["bars"], history(ys), sessions)
+        except (TermError, requests.RequestException, ValueError, KeyError, TypeError):
+            pass  # Keep the candle chart available if the separate daily feed fails.
+        out = dict(out, pivots=pivots)
     return dict(out, symbol=clean(symbol), yahoo=ys, frame=frame, source="Yahoo Finance chart feed (may lag a little)")
 
 
