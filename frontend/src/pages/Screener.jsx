@@ -144,6 +144,7 @@ export default function Screener() {
             )
           })}
         </div>
+        {mk !== 'US' && <fno-scanner />}
         <div className="small muted" style={{ margin: '14px 0 8px', fontWeight: 700 }}>More ready-made screens</div>
         <div className="preset-row">
           {[...saved.map((s) => ({ ...s, desc: 'Saved screen', mine: true })), ...PRESETS.filter((p) => !(mk === 'US' && p.inOnly))].map((p) => (

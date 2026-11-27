@@ -922,6 +922,27 @@ def compare(symbols: str):
     return {"items": out}
 
 
+from . import fno_scanner
+
+
+@app.get("/api/fno-scanner/status")
+def fno_scan_status():
+    return fno_scanner.status()
+
+
+@app.post("/api/fno-scanner/scan")
+def fno_scan_start():
+    return fno_scanner.status(start=True)
+
+
+@app.post("/api/fno-scanner/confirm")
+def fno_scan_confirm():
+    try:
+        return fno_scanner.confirm()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.get("/api/rankings")
 def rankings(sort: str = "overall", verdict: Optional[str] = None, min_mcap: float = 0, q: Optional[str] = None,
              market: Optional[str] = None):
