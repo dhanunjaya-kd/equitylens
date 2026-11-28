@@ -181,6 +181,11 @@ def _auto_loop() -> None:
 
 
 def start_background() -> None:
+    """The data checks are now started by Settings -> Scans (automation.py), with every other scan."""
+    return
+
+
+def _old_start_background() -> None:
     import threading
     if config.DEMO or _auto["started"]:
         return

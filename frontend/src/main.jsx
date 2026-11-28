@@ -21,6 +21,7 @@ import { applyTheme, getMarket, getTheme, go, isDesktop, isUS, marketCurrency, p
 import IndexStrip from './components/IndexStrip'
 import BreakingBar from './components/BreakingBar'
 import { Gate } from './components/Access'
+import { ScanIndicator } from './components/Automation'
 
 const Home = lazy(() => import('./pages/Home'))
 const Stock = lazy(() => import('./pages/Stock'))
@@ -81,10 +82,12 @@ function App() {
           </div>}
           {!desk && <MarketToggle market={market} onChange={changeMarket} />}
           {route.page !== 'home' || desk ? <div className="grow"><SearchBox key={market} shortcut={desk} /></div> : <div className="grow" />}
+          {!desk && <ScanIndicator />}
           {!desk && <button className="theme-btn" title="Light / dark theme" onClick={flipTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>}
           {!desk && me() && <button className="avatar-btn" title="My account" aria-label="My account" onClick={() => go('account')}>{(me().name || me().email || '?').slice(0, 1).toUpperCase()}</button>}
           {!desk && <button className="star" title="Settings" onClick={() => go('settings')}>⚙️</button>}
           {desk && <div className="small muted" style={{ whiteSpace: 'nowrap' }}>{market === 'US' ? '🇺🇸 US market · $' : '🇮🇳 Indian market · ₹'}</div>}
+          {desk && <ScanIndicator />}
           {desk && <TopActions page={route.page} theme={theme} onTheme={flipTheme} />}
         </div>
       </header>

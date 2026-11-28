@@ -77,7 +77,9 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
         from . import sectors as nse_sectors
         unknown = [r["symbol"] for r in rows if r["sector"] == UNKNOWN]
         by_size = [r["symbol"] for r in sorted(rows, key=lambda r: -(r["value"] or 0))]   # biggest names first
-        nse_sectors.start_fill(by_size)
+        from . import automation
+        if automation.allowed("classify_in"):
+            nse_sectors.start_fill(by_size)
         fill = dict(nse_sectors.status(), unknown=len(unknown))
     return {"market": d["market"], "tf": tf, "rows": rows, "sectors": sectors, "updated": d["updated"],
             "session": d["session"], "live": d["live"], "status": d["status"], "universe": d["universe"],

@@ -467,6 +467,40 @@ def automation_get():
     return automation.status()
 
 
+@app.post("/api/automation/mode")
+def automation_mode(value: str = "auto"):
+    from . import automation
+    try:
+        return automation.set_mode(value)
+    except KeyError:
+        raise HTTPException(400, "mode is auto or manual")
+
+
+@app.post("/api/automation/run-all")
+def automation_run_all():
+    from . import automation
+    return automation.run_all()
+
+
+@app.post("/api/automation/run/{task}")
+def automation_run(task: str):
+    from . import automation
+    try:
+        return automation.run_now(task)
+    except KeyError:
+        raise HTTPException(404, "No such scan")
+
+
+@app.get("/api/automation/running")
+def automation_running():
+    """Small answer for the top-bar indicator and the Home card (every signed-in user)."""
+    from . import automation
+    st = automation.status()
+    return {"overall": st["overall"], "mode": st["mode"],
+            "running": [{"id": r["id"], "name": r["name"], "progress": r["progress"], "eta_s": r["eta_s"]} for r in st["tasks"] if r["running"]],
+            "queued": [r["name"] for r in st["tasks"] if r["queued"]]}
+
+
 @app.post("/api/automation/{task}")
 def automation_set(task: str, on: bool = True):
     from . import automation

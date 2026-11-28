@@ -342,22 +342,32 @@ def snapshot_row(x: dict) -> dict:
 _NO_SCAN_TRIED: dict = {}
 
 
+def is_stale(market: str, hit=None) -> bool:
+    """Saved prices are out of date: none yet, older than the TTL, a market close since, 15 min old in market hours,
+    saved before Nasdaq-100 / scanners existed."""
+    hit = hit if hit is not None else store.get_company(_key(market))
+    data = hit[1] if hit else None
+    now = time.time()
+    us_mkt = market == "US"
+    return (not hit) or (now - hit[0] > TTL) or technicals._last_close_after(hit[0], now, us_mkt) \
+        or ((not us_mkt) and technicals._market_open(now) and now - hit[0] > OPEN_TTL) \
+        or (us_mkt and data is not None and data.get("universe") != "SP500+NDX") \
+        or (data is not None and bool(data.get("rows")) and not any("scan" in r for r in data["rows"][:20])
+            and now - _NO_SCAN_TRIED.get(market, 0) > 6 * 3600)          # saved before scanners existed: reload once
+
+
 def get(market: str, tf: str = "1D", which: str = "") -> dict:
     market = market.upper()
     tf = tf if tf in TF else "1D"
     hit = store.get_company(_key(market))
     data = hit[1] if hit else None
     now = time.time()
-    us_mkt = market == "US"
-    stale = (not hit) or (now - hit[0] > TTL) or technicals._last_close_after(hit[0], now, us_mkt) \
-        or ((not us_mkt) and technicals._market_open(now) and now - hit[0] > OPEN_TTL)\
-        or (us_mkt and data is not None and data.get("universe") != "SP500+NDX")\
-        or (data is not None and bool(data.get("rows")) and not any("scan" in r for r in data["rows"][:20])
-            and now - _NO_SCAN_TRIED.get(market, 0) > 6 * 3600)          # saved before scanners existed: reload once
-    if stale and not STATE[market]["running"]:
-        if data and data.get("rows") and not any("scan" in r for r in data["rows"][:20]):
-            _NO_SCAN_TRIED[market] = now
-        refresh(market)
+    if is_stale(market, hit) and not STATE[market]["running"]:
+        from . import automation
+        if automation.allowed(f"prices_{market.lower()}"):          # Manual mode: only "Run now" loads prices
+            if data and data.get("rows") and not any("scan" in r for r in data["rows"][:20]):
+                _NO_SCAN_TRIED[market] = now
+            refresh(market)
     rows = data["rows"] if data else []
     loaded = (data or {}).get("universe") or ("N500" if market == "IN" else "SP500")
     if market == "IN":

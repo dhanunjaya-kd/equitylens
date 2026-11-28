@@ -915,12 +915,14 @@ def _bars_2y(symbol: str) -> list[dict]:
     return bars
 
 
-def history(market: str = "IN", refresh: bool = False) -> dict:
+def history(market: str = "IN", refresh: bool = False, force: bool = False) -> dict:
+    """force: started from Settings -> Scans (Run now / the Auto loop). A page visit starts a build only in Auto mode."""
+    from . import automation
     mk = market.upper() if market.upper() in HIST_STATE else "IN"
     hit = store.get_company(f"IPO::HIST::{mk}")
     st = HIST_STATE[mk]
     stale = not hit or time.time() - hit[0] > HIST_TTL or refresh
-    if stale and not st["running"] and not config.DEMO:
+    if stale and not st["running"] and not config.DEMO and (force or automation.allowed(f"ipo_hist_{mk.lower()}")):
         st.update(running=True, done=0, total=0, started=time.time(), error=None)
         threading.Thread(target=_build_history, args=(mk,), daemon=True).start()
     part = store.get_company(f"IPO::HIST::{mk}::partial") if not hit else None

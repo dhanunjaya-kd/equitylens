@@ -16,36 +16,70 @@ at = lambda *a: datetime(*a, tzinfo=calendars.IST)   # noqa: E731
 
 def test_scan_and_ipo_schedule():
     assert automation.scan_due("IN", at(2026, 11, 27, 19, 30), None)            # Friday 19:30
-    assert not automation.scan_due("IN", at(2026, 11, 27, 19, 0), None)        # too early
-    assert not automation.scan_due("IN", at(2026, 11, 27, 21), "2026-11-27")   # once a day
-    assert not automation.scan_due("IN", at(2026, 11, 28, 20), None)           # Saturday
-    assert automation.scan_due("US", at(2026, 11, 28, 7, 5), None)             # Saturday morning after Friday's US close
-    assert not automation.scan_due("US", at(2026, 11, 30, 7, 5), None)         # Monday: no US session closed since Saturday's run
+    assert not automation.scan_due("IN", at(2026, 11, 27, 19, 0), "2026-11-26")  # before today's slot, Thursday's done
+    assert automation.scan_due("IN", at(2026, 11, 27, 19, 0), "2026-11-25")      # Thursday's missed: catch up on opening
+    assert not automation.scan_due("IN", at(2026, 11, 27, 21), "2026-11-27")    # once per slot
+    assert not automation.scan_due("IN", at(2026, 11, 28, 20), "2026-11-27")    # Saturday: Friday's slot already done
+    assert automation.scan_due("US", at(2026, 11, 28, 7, 5), "2026-11-27")      # Saturday morning after Friday's US close
+    assert not automation.scan_due("US", at(2026, 11, 30, 7, 5), "2026-11-28")  # Monday: no US close since Saturday's run
     assert automation.ipo_due(at(2026, 11, 27, 10), 0, 1000.0)
     assert not automation.ipo_due(at(2026, 11, 27, 10), 1000.0, 1000.0 + 600)  # 10 minutes later: not yet
-    assert not automation.ipo_due(at(2026, 11, 27, 20), 0, 1000.0)             # after hours
+    assert not automation.ipo_due(at(2026, 11, 27, 20), 900.0, 1000.0 + 6000)  # after hours
 
 
-def test_tick_starts_one_scan_and_waits_for_the_entry_backtest():
-    started = []
-    real = (service.start_scan, jobs.status, automation._ipo_refresh)
-    service.start_scan = lambda market="IN", which="N500", **k: started.append(market)
-    automation._ipo_refresh = lambda: None
+def _fake(due_now: set, running: set, started: list):
+    """Replace the real scans with stand-ins: which are due / running, and record starts."""
+    real = (automation._due, automation._state, automation._start)
+    automation._due = lambda job, now, ts, s: (job in due_now, "")
+    automation._state = lambda job: {"running": job in running, "done": None, "total": None, "started": None}
+    def start(job, now, ts, s):
+        started.append(job)
+        if job in automation.HEAVY:
+            running.add(job)
+    automation._start = start
+    return real
+
+
+def test_auto_runs_what_is_due_heavy_one_at_a_time():
+    store.put_company(automation.KEY, {"v": 3, "mode": "auto", "enabled": {}, "last": {}, "requested": []})
+    started, running = [], set()
+    real = _fake({"prices_in", "classify_in", "ipo", "scan_in", "prices_us"}, running, started)
     demo, config.DEMO = config.DEMO, False
     try:
-        jobs.status = lambda n: {"running": n == "entry"}
-        assert automation.tick(at(2026, 11, 27, 20), 1.0) == []                 # entry backtest running: no scan
-        jobs.status = lambda n: {"running": False}
-        assert automation.tick(at(2026, 11, 27, 20), 2.0) == ["scan_in"] and started == ["IN"]
-        assert automation.tick(at(2026, 11, 27, 21), 3.0) == []                 # done for today
-        automation.set_enabled("scan_in", False)
-        assert automation.tick(at(2026, 11, 30, 20), 4.0) == []
-        assert automation.settings()["enabled"]["scan_in"] is False
-        assert automation.tick(at(2026, 11, 30, 10), 5000.0) == ["ipo"]            # Monday morning: no US scan
-        assert automation.tick(at(2026, 12, 1, 8), 9000.0) == ["scan_us"] and started == ["IN", "US"]
+        assert automation.tick(at(2026, 11, 27, 20), 1.0) == ["prices_in", "classify_in", "ipo"]   # one heavy + the light ones
+        assert automation.tick(at(2026, 11, 27, 20, 1), 2.0) == ["classify_in", "ipo"]             # heavy queue waits
+        running.clear()
+        assert automation.tick(at(2026, 11, 27, 20, 2), 3.0)[0] == "prices_in"                     # (stand-in stays due)
+        automation.set_enabled("prices_in", False)
+        running.clear()
+        assert automation.tick(at(2026, 11, 27, 20, 3), 4.0)[0] == "classify_in" and "scan_in" in running
     finally:
-        service.start_scan, jobs.status, automation._ipo_refresh = real
+        automation._due, automation._state, automation._start = real
         config.DEMO = demo
+        automation.set_enabled("prices_in", True)
+
+
+def test_manual_runs_only_what_is_asked():
+    store.put_company(automation.KEY, {"v": 3, "mode": "manual", "enabled": {}, "last": {}, "requested": []})
+    started, running = [], set()
+    real = _fake(set(automation.IDS), running, started)
+    demo, config.DEMO = config.DEMO, False
+    try:
+        assert automation.tick(at(2026, 11, 27, 20), 1.0) == []                 # everything due, nothing asked
+        assert not automation.allowed("prices_in")                            # pages don't start loads either
+        automation.run_now("ipo_hist_in")
+        assert started == ["ipo_hist_in"]
+        automation.run_all()                                                  # all asked: light ones start, heavy ones queue
+        assert "ipo" in started and "us_list" in started and "prices_in" not in started
+        q = [r["id"] for r in automation.status()["tasks"] if r["queued"]]
+        assert "prices_in" in q and "scan_us" in q
+        running.clear()
+        automation.tick(at(2026, 11, 27, 21), 2.0)
+        assert "prices_in" in started                                         # next in the queue
+    finally:
+        automation._due, automation._state, automation._start = real
+        config.DEMO = demo
+        automation.set_mode("auto")
 
 
 def test_old_settings_turn_the_us_scan_on_once():
@@ -56,8 +90,10 @@ def test_old_settings_turn_the_us_scan_on_once():
 
 
 def test_status_lists_every_task():
-    ids = [r["id"] for r in automation.status()["tasks"]]
-    assert ids == ["news", "premarket", "fiidii", "ipo", "scan_in", "scan_us", "levels", "entry"]
+    st = automation.status()
+    assert [r["id"] for r in st["tasks"]] == automation.IDS
+    assert [r["id"] for r in st["always"]] == ["news", "premarket", "fiidii"]
+    assert set(st["overall"]) >= {"running", "queued", "pct", "names"} and st["mode"] in ("auto", "manual")
 
 
 def test_today_uses_saved_data_and_never_invents():

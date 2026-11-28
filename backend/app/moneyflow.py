@@ -63,8 +63,9 @@ def get(market: str = "IN", which: str = "") -> dict:
             deliv, ddays = {}, []
         need = [r["symbol"] for r in rows if r["symbol"] not in cls]
         missing = len(need)
+        from . import automation
         if need:
-            lookup = sectors.start_fill(need)
+            lookup = sectors.start_fill(need) if automation.allowed("classify_in") else sectors.status()
         sh = sectors.shares()
     else:
         from . import usuniverse

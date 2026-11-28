@@ -1000,3 +1000,18 @@ html[data-src="off"] .src-note, html[data-src="off"] .src { display: none !impor
 .mf-score { display: inline-block; min-width: 30px; text-align: center; font-weight: 800; padding: 2px 6px; border-radius: 8px; background: var(--card2); }
 .mf-score.g { background: rgba(34,197,94,.18); color: var(--good); } .mf-score.r { background: rgba(239,68,68,.16); color: var(--bad); }
 .mf-tbl td, .mf-tbl th { white-space: nowrap; }
+
+/* ---------- scans ---------- */
+.scan-bar { height: 6px; border-radius: 3px; background: var(--card2); overflow: hidden; margin: 5px 0 3px; border: 1px solid var(--line); }
+.scan-bar i { display: block; height: 100%; background: var(--accent); transition: width .4s ease; }
+.scan-bar i.indet { animation: scanmove 1.4s ease-in-out infinite; }
+@keyframes scanmove { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+.scan-all { display: flex; gap: 12px; align-items: center; padding: 10px 12px; margin-bottom: 10px; border-radius: 12px; background: var(--card2); border: 1px solid var(--line); }
+.scan-spin { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent);
+  animation: scanspin .9s linear infinite; vertical-align: -1px; margin-right: 6px; }
+@keyframes scanspin { to { transform: rotate(360deg); } }
+.scan-ind { display: inline-flex; align-items: center; white-space: nowrap; font-size: 12px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--card2); color: var(--text); margin-right: 8px; }
+.scan-ind:hover { border-color: var(--accent); }
+@media (max-width: 600px) { .scan-ind { font-size: 0; padding: 7px; margin-right: 4px; } .scan-ind .scan-spin { margin: 0; } }
+.running-card { border-color: var(--accent); }
