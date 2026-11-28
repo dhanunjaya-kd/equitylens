@@ -989,3 +989,14 @@ html[data-src="off"] .src-note, html[data-src="off"] .src { display: none !impor
 .scb.g { color: var(--good); border-color: rgba(34,197,94,.4); } .scb.r { color: var(--bad); border-color: rgba(239,68,68,.4); } .scb.b { color: #38bdf8; border-color: rgba(56,189,248,.4); }
 .scan-tbl td, .scan-tbl th { white-space: nowrap; }
 .scan-rec td, .scan-rec th { text-align: right; white-space: nowrap; }
+
+/* ---------- money flow ---------- */
+.mf-head { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--card2); border-left: 3px solid var(--accent); }
+.mf-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 10px; align-items: end; }
+.mf-filters label { display: flex; flex-direction: column; gap: 3px; color: var(--muted); } .mf-filters input { width: 100%; }
+.mf-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.mf-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 6px; background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--text); text-align: left; }
+.mf-row:hover { background: var(--card2); } .mf-row small { font-size: 11.5px; }
+.mf-score { display: inline-block; min-width: 30px; text-align: center; font-weight: 800; padding: 2px 6px; border-radius: 8px; background: var(--card2); }
+.mf-score.g { background: rgba(34,197,94,.18); color: var(--good); } .mf-score.r { background: rgba(239,68,68,.16); color: var(--bad); }
+.mf-tbl td, .mf-tbl th { white-space: nowrap; }

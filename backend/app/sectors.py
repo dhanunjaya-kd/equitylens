@@ -2,8 +2,10 @@
 
 1. NSE index lists that carry a sector ("Industry") column: NIFTY 500 and NIFTY Total Market
    (NIFTY 500 + Microcap 250, about 750 stocks), downloaded from niftyindices.com.
-2. For every other stock: NSE's quote page data (industryInfo.sector), looked up once in the
-   background (NSE allows about one request a second) and saved.
+2. For every stock: NSE's quote data, looked up once in the background (NSE allows about one request a
+   second) and saved. NSE's current quote answer (NextApi getSymbolData, secInfo) carries NSE's full
+   four-level classification - macro-economic sector, sector, industry, basic industry - used by Money flow;
+   the old quote-equity address (refused since Nov 2026) is only a fallback.
 The same quote data gives the issued shares, so market cap = issued shares x last close for any stock
 (shares are asked again after 90 days). Both use NSE's 22 sector names ("Financial Services", "Information Technology", ...), so all stocks are
 grouped the same way. A stock NSE gives no sector for stays "Sector not known yet": nothing is guessed.
@@ -24,6 +26,8 @@ LIST_URLS = [  # (file, url) - the first that downloads is used for each list
     ("nifty_microcap250.csv", "https://www.niftyindices.com/IndexConstituent/ind_niftymicrocap250_list.csv"),
 ]
 QUOTE_API = "https://www.nseindia.com/api/quote-equity"
+NEXT_QUOTE = "https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi"
+LEVELS = ("macro", "sector", "industry", "basic")
 RETRY_DAYS = 30          # a stock NSE gave no sector for is asked again after a month
 SHARES_DAYS = 90         # issued shares are refreshed every 3 months
 STATE = {"running": False, "done": 0, "total": 0, "found": 0, "failed": 0, "started": None, "error": None}
@@ -61,21 +65,46 @@ def sector_map() -> dict:
     return out
 
 
-def parse_quote(text: str) -> tuple[Optional[str], Optional[float]]:
-    """NSE quote JSON -> (sector from industryInfo.sector, issued shares from securityInfo.issuedSize)."""
+def _clean(v) -> Optional[str]:
+    s = str(v or "").strip()
+    return s if s and s.upper() not in ("NA", "-", "NULL", "N/A") else None
+
+
+def parse_class(text: str) -> tuple[Optional[dict], Optional[float]]:
+    """NSE quote JSON (current NextApi answer or the old quote-equity one) ->
+    ({macro, sector, industry, basic} as NSE states them, issued shares)."""
     try:
-        d = json.loads(text)
+        d = json.loads(text) or {}
     except (ValueError, TypeError):
         return None, None
-    d = d or {}
-    s = (((d.get("industryInfo") or {}).get("sector")) or "").strip()
-    sec = s if s and s.upper() not in ("NA", "-", "NULL") else None
+    if isinstance(d, dict) and d.get("equityResponse"):
+        e = (d["equityResponse"] or [{}])[0] or {}
+        si, ti = e.get("secInfo") or {}, e.get("tradeInfo") or {}
+        cls = {"macro": _clean(si.get("macro")), "sector": _clean(si.get("sector")),
+               "industry": _clean(si.get("industryInfo")), "basic": _clean(si.get("basicIndustry"))}
+        size = ti.get("issuedSize")
+    else:
+        ii = (d.get("industryInfo") or {}) if isinstance(d, dict) else {}
+        cls = {"macro": _clean(ii.get("macro")), "sector": _clean(ii.get("sector")),
+               "industry": _clean(ii.get("industry")), "basic": _clean(ii.get("basicIndustry"))}
+        size = ((d.get("securityInfo") or {}) if isinstance(d, dict) else {}).get("issuedSize")
     try:
-        sh = float((d.get("securityInfo") or {}).get("issuedSize"))
+        sh = float(size)
         sh = sh if sh > 0 else None
     except (TypeError, ValueError):
         sh = None
-    return sec, sh
+    return (cls if any(cls.values()) else None), sh
+
+
+def parse_quote(text: str) -> tuple[Optional[str], Optional[float]]:
+    """NSE quote JSON -> (NSE sector, issued shares)."""
+    cls, sh = parse_class(text)
+    return (cls or {}).get("sector"), sh
+
+
+def classes() -> dict:
+    """{symbol: {macro, sector, industry, basic}} for every stock looked up so far."""
+    return dict(_saved().get("class", {}))
 
 
 def shares() -> dict:
@@ -87,11 +116,11 @@ def missing(symbols: list[str]) -> list[str]:
     """Stocks whose sector or issued shares are not known (or are due a refresh), in the order given."""
     known = sector_map()
     saved = _saved()
-    asked, sh = saved.get("asked", {}), saved.get("shares", {})
+    asked, sh, cl = saved.get("asked", {}), saved.get("shares", {}), saved.get("class", {})
     now = time.time()
     out = []
     for s in symbols:
-        need_sec = s not in known and now - asked.get(s, 0) > RETRY_DAYS * 86400
+        need_sec = (s not in known or s not in cl) and now - asked.get(s, 0) > RETRY_DAYS * 86400
         need_sh = now - (sh.get(s) or {}).get("t", 0) > SHARES_DAYS * 86400 and now - asked.get(s, 0) > RETRY_DAYS * 86400
         if need_sec or need_sh:
             out.append(s)
@@ -115,12 +144,19 @@ def _fill(todo: list[str]) -> None:
     from . import flows
     saved = _saved()
     sectors, asked, sh = saved.setdefault("sectors", {}), saved.setdefault("asked", {}), saved.setdefault("shares", {})
+    cl = saved.setdefault("class", {})
     try:
         for k, sym in enumerate(todo, 1):
             try:
-                text = flows._nse_text(QUOTE_API, {"symbol": sym},
-                                       headers={"Referer": f"https://www.nseindia.com/get-quotes/equity?symbol={sym}"})
-                sec, n = parse_quote(text) if text else (None, None)
+                ref = {"Referer": f"https://www.nseindia.com/get-quotes/equity?symbol={sym}"}
+                text = flows._nse_text(NEXT_QUOTE, {"functionName": "getSymbolData", "marketType": "N", "series": "EQ", "symbol": sym}, headers=ref)
+                c, n = parse_class(text) if text else (None, None)
+                if not c and not n:
+                    text = flows._nse_text(QUOTE_API, {"symbol": sym}, headers=ref)
+                    c, n = parse_class(text) if text else (None, None)
+                sec = (c or {}).get("sector")
+                if c:
+                    cl[sym] = c
                 if sec:
                     sectors[sym] = sec
                 if n:

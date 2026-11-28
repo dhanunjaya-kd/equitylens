@@ -718,7 +718,8 @@ def sp500_universe(download: bool = True) -> tuple[list[dict], str]:
                     td = tr.find_all("td")
                     if len(td) >= 3:
                         rows.append({"symbol": "US:" + td[0].get_text(strip=True).replace(".", "-"),
-                                     "name": td[1].get_text(strip=True), "industry": td[2].get_text(strip=True)})
+                                     "name": td[1].get_text(strip=True), "industry": td[2].get_text(strip=True),
+                                     "sub": td[3].get_text(strip=True) if len(td) >= 4 else ""})   # GICS sector, GICS sub-industry
                 if len(rows) > 400:
                     cached.write_text(json.dumps(rows), encoding="utf-8")
         except Exception:  # noqa: BLE001 - fall back to cache / starter list

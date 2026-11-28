@@ -185,6 +185,8 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
                     r = compute_row(u["symbol"], u.get("name", ""), u.get("industry", ""), bars, market)
                     if r and u.get("idx"):
                         r["idx"] = u["idx"]
+                    if r and u.get("sub"):
+                        r["sub"] = u["sub"]
                     if r:
                         try:
                             a = scanners.analyse(bars, idx_close, history=history)

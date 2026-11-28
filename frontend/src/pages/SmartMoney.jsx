@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import MoneyFlow from './MoneyFlow'
 import { FnoBadge, FnoToggle, Logo, UniverseChips, useFno, useUniv } from '../components/ui'
 import { api, getMarket, go, inUniv, num, ok, signed, watchlist } from '../util'
 
@@ -117,7 +118,7 @@ export function StockMoney({ data }) {
 }
 
 // ---------------------------------------------------------------- market page
-const IN_TABS = [['delivery', '📦 Delivery'], ['deals', '🤝 Bulk & block'], ['insiders', '👔 Insider trades'], ['surv', '🚨 Surveillance']]
+const IN_TABS = [['flow', '💰 Money flow'], ['delivery', '📦 Delivery'], ['deals', '🤝 Bulk & block'], ['insiders', '👔 Insider trades'], ['surv', '🚨 Surveillance']]
 
 function Delivery() {
   const [d, setD] = useState(null), [err, setErr] = useState(null), [list, setList] = useState('buying')
@@ -270,7 +271,9 @@ function Surveillance() {
 
 export default function SmartMoney({ tab }) {
   const mk = getMarket()
-  const t = mk === 'US' ? 'insiders' : (tab || 'delivery')
+  const US_TABS = [['flow', '💰 Money flow'], ['insiders', '👔 Insider trades']]
+  const t = mk === 'US' ? (tab === 'insiders' ? 'insiders' : 'flow') : (tab || 'flow')
+  const tabs = mk === 'US' ? US_TABS : IN_TABS
   return (
     <div className="movers">
       <div className="card">
@@ -278,10 +281,11 @@ export default function SmartMoney({ tab }) {
           <h3 style={{ margin: 0 }}>{mk === 'US' ? '🇺🇸' : '🇮🇳'} Smart Money</h3>
           <button className="btn small" onClick={() => go('fiidii')}>🏦 {mk === 'US' ? 'Big money in futures' : 'FII / DII'}</button>
         </div>
-        <div className="small muted">{mk === 'US' ? 'What company insiders are doing with their own shares (SEC Form 4).' : 'Who is really buying: delivery, big-investor deals, insider trades and exchange red flags. Official NSE data.'}</div>
-        {mk === 'IN' && <div className="list-chips" style={{ marginTop: 10 }}>{IN_TABS.map(([k, l]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`money/${k}`)}>{l}</button>)}</div>}
-        {mk === 'IN' && <div className="row wrapflex" style={{ gap: 8, marginTop: 10 }}><UniverseChips /><FnoToggle /></div>}
+        <div className="small muted">{mk === 'US' ? 'Where money is flowing, and what company insiders are doing with their own shares (SEC Form 4).' : 'Where money is flowing and who is really buying: delivery, big-investor deals, insider trades and exchange red flags. Official NSE data.'}</div>
+        <div className="list-chips" style={{ marginTop: 10 }}>{tabs.map(([k, l]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`money/${k}`)}>{l}</button>)}</div>
+        {mk === 'IN' && t !== 'flow' && <div className="row wrapflex" style={{ gap: 8, marginTop: 10 }}><UniverseChips /><FnoToggle /></div>}
       </div>
+      {t === 'flow' && <MoneyFlow />}
       <div className="flow-main">
         {t === 'delivery' && <Delivery />}
         {t === 'deals' && <Deals />}

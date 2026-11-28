@@ -126,6 +126,32 @@ def test_movers_refresh_feeds_the_scanners_api():
     assert d["record"] and d["record"]["stocks"] > 0 and d["record"]["baseline"]["5"]["n"] > 0
 
 
+
+def test_money_flow_signs_delivery_by_the_day_move():
+    from app import main, moneyflow, movers, sectors, store
+    from app import flows
+    movers.refresh("IN", block=True)
+    rows = movers.get("IN", "1D", "")["rows"]
+    a, b = rows[0]["symbol"], rows[1]["symbol"]
+    store.put_company(sectors.KEY, {"sectors": {}, "asked": {}, "shares": {}, "class": {
+        a: {"macro": "M1", "sector": "S1", "industry": "I1", "basic": "B1"}, b: {"macro": "M1", "sector": "S1", "industry": "I2", "basic": "B2"}}})
+    days = [("2026-11-27", {a: {"close": 110, "prev": 100, "dq": 1e6}, b: {"close": 90, "prev": 100, "dq": 2e6}}),
+            ("2026-11-26", {a: {"close": 100, "prev": 100, "dq": 1e6}, b: {"close": 100, "prev": 95, "dq": 1e6}}),
+            ("2026-11-25", {a: {"close": 100, "prev": 101, "dq": 1e6}, b: {"close": 95, "prev": 96, "dq": 1e6}})]
+    old = flows.delivery_days
+    flows.delivery_days = lambda n=10: days
+    try:
+        d = main.moneyflow_get("IN", "")
+    finally:
+        flows.delivery_days = old
+    by = {x["symbol"]: x for x in d["stocks"]}
+    assert set(by) == {a, b}                                        # only classified stocks are grouped
+    # a: +11 Cr (up day: 10 lakh shares x 110) + 0 (flat) - 10 Cr (down day) = +1 Cr ; b: -18 + 10 - 9.5 = -17.5 Cr
+    assert by[a]["flow"]["flow5"] == 1.0 and by[b]["flow"]["flow5"] == -17.5
+    assert by[a]["flow"]["val5"] == 31.0 and by[a]["g"]["industry"] == "I1"
+    assert d["unclassified"] == len(rows) - 2 and "estimate" in d["method"]
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

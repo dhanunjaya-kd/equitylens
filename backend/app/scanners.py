@@ -306,8 +306,14 @@ def indicators(s: Series, i: int) -> dict:
         xs = [s.h[k] / s.l[k] - 1 for k in range(i - 19, i + 1) if s.l[k] > 0]
         adr = round(sum(xs) / len(xs) * 100, 2) if xs else None
     turn = sum(s.c[k] * s.v[k] for k in range(max(0, i - 19), i + 1)) / min(20, i + 1)
+    # traded value on up days minus down days, last 5 sessions, and all traded value in the 5 before (Money flow, US)
+    flow5 = sum((s.c[k] * s.v[k]) * (1 if s.c[k] > s.c[k - 1] else -1 if s.c[k] < s.c[k - 1] else 0) for k in range(max(1, i - 4), i + 1))
+    val5 = sum(s.c[k] * s.v[k] for k in range(max(0, i - 4), i + 1))
+    val_prev5 = sum(s.c[k] * s.v[k] for k in range(max(0, i - 9), max(0, i - 4)))
     return {"adr": adr, "ti65": round(sm[7][i] / sm[65][i], 3) if sm[7][i] and sm[65][i] else None,
             "lin": linearity(s, i), "turn20": turn, "wperf": _wperf(s, i),
+            "r6m": round((s.c[i] / s.c[i - 126] - 1) * 100, 2) if i >= 126 and s.c[i - 126] > 0 else None,
+            "flow5": flow5, "val5": val5, "val_prev5": val_prev5,
             "vol_x50": round(s.v[i] / s.vsma50[i], 2) if s.vsma50[i] else None}
 
 

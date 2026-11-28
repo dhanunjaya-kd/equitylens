@@ -689,6 +689,12 @@ def scanners_get(market: str = "IN", universe: str = ""):
             "horizons": list(scanners.HORIZONS)}
 
 
+@app.get("/api/moneyflow")
+def moneyflow_get(market: str = "IN", universe: str = ""):
+    from . import moneyflow
+    return moneyflow.get(market, universe)
+
+
 @app.get("/api/fiidii")
 def fiidii_get(market: str = "IN"):
     from . import fiidii

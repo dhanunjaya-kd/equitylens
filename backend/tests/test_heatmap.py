@@ -47,6 +47,9 @@ def test_nse_quote_gives_sector_and_shares():
     assert sectors.parse_quote(q) == ("Financial Services", 7651780468.0)
     assert sectors.parse_quote('{"industryInfo": {"sector": "NA"}, "securityInfo": {"issuedSize": 0}}') == (None, None)
     assert sectors.parse_quote("<html>blocked</html>") == (None, None)
+    nxt = (Path(__file__).parent / "fixtures" / "term" / "nse_quote_next.json").read_text(encoding="utf-8")   # NSE's real answer (HDFCBANK)
+    assert sectors.parse_class(nxt) == ({"macro": "Financial Services", "sector": "Financial Services", "industry": "Banks",
+                                         "basic": "Private Sector Bank"}, 15433823746.0)
 
 
 def test_market_cap_from_nse_shares_only_when_no_scan():
@@ -60,12 +63,14 @@ def test_market_cap_from_nse_shares_only_when_no_scan():
 
 def test_which_stocks_still_need_a_lookup():
     import time
-    store.put_company(sectors.KEY, {"sectors": {"AAA": "Power"}, "asked": {"CCC": time.time()},
+    store.put_company(sectors.KEY, {"sectors": {"AAA": "Power", "EEE": "Power"}, "asked": {"CCC": time.time()},
+                                    "class": {"AAA": {"macro": "Utilities", "sector": "Power", "industry": "Power", "basic": "Power Generation"}},
                                     "shares": {"AAA": {"n": 1e8, "t": time.time()}, "BBB": {"n": 1e8, "t": 0}}})
     need = sectors.missing(["AAA", "BBB", "CCC", "DDD"])
     assert "AAA" not in need                    # sector and fresh shares known
     assert "BBB" in need and "DDD" in need      # no sector / stale shares; never asked
     assert "CCC" not in need                    # asked recently and NSE had nothing: not asked again for a month
+    assert "EEE" in sectors.missing(["EEE"])    # sector from a list but no 4-level classification yet: asked
     assert sectors.sector_map()["AAA"] == "Power"
 
 

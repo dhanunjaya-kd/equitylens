@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-256_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-257_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -389,6 +389,15 @@ Sidebar → **IPO research** (on the phone: Market Movers → 🚀 IPOs). A dash
 
 **Source check:** every source's latest raw answer is saved in `backend/data/ipo_raw/`; the *Data sources* bar at the bottom shows each source and any field it stopped carrying.
 
+### 💰 Money flow
+
+Smart Money → **💰 Money flow** (first tab). Which groups of stocks money is going into and out of:
+
+- **Groups** are NSE's own four-level classification — macro sector › sector › industry › basic industry — read from NSE's quote data for every stock (looked up once in the background, about one a second, then saved). US: GICS sector and sub-industry, or Nasdaq's industry.
+- **Net 5D** (₹ Cr): shares actually delivered × close on each of the last 5 sessions (NSE bhavcopy), counted + on up days and − on down days. It is an estimate of direction — exchanges do not publish who bought or sold — and the page says so. US: traded value instead (no delivery data exists there).
+- **Flow score 0-100**: average of four ranks among the groups — net flow as a share of the group's delivered value, delivery vs the 5 sessions before, median 1-week and 1-month move.
+- Rank by flow, net 5D, delivery vs before, 1W, 1M, 3M or 6M; filters (All / F&O / Cash, turnover, ADR, price, distance from the 52-week high / low, market cap, minimum stocks); click a group for its stocks, an equal-weight line of the group and scanner badges; copy the groups as a TradingView watchlist.
+
 ### 🔎 Scanners and indicators
 
 Sidebar → **Scanners** (phone: More → Scanners). On the daily prices Market Movers already loads (NIFTY 50/100/500 or all NSE; S&P 500 / Nasdaq-100):
@@ -756,7 +765,7 @@ cd backend
 python run_tests.py
 ```
 
-256 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+257 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
