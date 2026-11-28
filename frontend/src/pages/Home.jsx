@@ -1,4 +1,3 @@
-import { RunningCard } from '../components/Automation'
 import { useEffect, useState } from 'react'
 import { Logo, SearchBox, ScoreRing } from '../components/ui'
 import { api, flag, getMarket, go, isDesktop, pct, recent, ticker, watchlist, signed, num, ok } from '../util'
@@ -158,7 +157,6 @@ export default function Home() {
   const flips = todayData?.flips || []
   return (
     <>
-    <RunningCard />
     <TodayStrip mk={mk} d={todayData} moves={moves} at={at} />
     <div className="home-grid">
       <div>

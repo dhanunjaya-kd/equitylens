@@ -1010,8 +1010,8 @@ html[data-src="off"] .src-note, html[data-src="off"] .src { display: none !impor
 .scan-spin { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent);
   animation: scanspin .9s linear infinite; vertical-align: -1px; margin-right: 6px; }
 @keyframes scanspin { to { transform: rotate(360deg); } }
-.scan-ind { display: inline-flex; align-items: center; white-space: nowrap; font-size: 12px; padding: 6px 10px; border-radius: 10px;
+.scan-ind { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; padding: 3px 8px 3px 4px; border-radius: 999px;
   border: 1px solid var(--line); background: var(--card2); color: var(--text); margin-right: 8px; }
 .scan-ind:hover { border-color: var(--accent); }
-@media (max-width: 600px) { .scan-ind { font-size: 0; padding: 7px; margin-right: 4px; } .scan-ind .scan-spin { margin: 0; } }
+.scan-ind svg.spin { animation: scanspin 1s linear infinite; }
 .running-card { border-color: var(--accent); }

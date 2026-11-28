@@ -79,7 +79,7 @@ export default function Automation() {
   )
 }
 
-// Top bar: a small spinning ring while scans run. Click -> Settings -> Scans.
+// Top bar: one small ring with the combined percentage of everything running. Hover for the list; click -> Settings -> Scans.
 export function ScanIndicator() {
   const [r, setR] = useState(null)
   useEffect(() => {
@@ -90,10 +90,18 @@ export function ScanIndicator() {
     return () => { stop = true; clearInterval(t) }
   }, [])
   if (!r || !r.overall?.running) return null
-  const o = r.overall
+  const p = r.overall.pct
+  const C = 2 * Math.PI * 9
+  const tip = r.running.map((x) => `${x.name}: ${x.progress?.total ? `${Math.round((x.progress.done / x.progress.total) * 100)}%` : 'running'}`).join('\n')
+    + (r.queued.length ? `\nNext: ${r.queued.join(', ')}` : '')
   return (
-    <button className="scan-ind" title={r.running.map((x) => x.name).join('\n')} onClick={toScans}>
-      <span className="scan-spin" />{o.running} scan{o.running > 1 ? 's' : ''} running{o.pct != null ? ` · ${o.pct}%` : ''}
+    <button className="scan-ind" title={tip} aria-label={`Scans running${p != null ? `, ${p}% done` : ''}`} onClick={toScans}>
+      <svg viewBox="0 0 24 24" width="22" height="22" className={p == null ? 'spin' : ''}>
+        <circle cx="12" cy="12" r="9" fill="none" stroke="var(--line)" strokeWidth="3" />
+        <circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round"
+          strokeDasharray={`${p == null ? C * 0.3 : (C * p) / 100} ${C}`} transform="rotate(-90 12 12)" />
+      </svg>
+      {p != null && <b>{p}%</b>}
     </button>
   )
 }
