@@ -244,6 +244,7 @@ export function parseHash(hash = window.location.hash) {
   if (parts[0] === 'terminal') return { page: 'terminal' }
   if (parts[0] === 'scanners') return { page: 'scanners' }
   if (parts[0] === 'patterns') return { page: 'patterns' }
+  if (parts[0] === 'dashboard') return { page: 'dashboard' }
   if (parts[0] === 'calendar') return { page: 'calendar', tab: parts[1] || 'results' }
   if (parts[0] === 'settings') return { page: 'settings' }
   if (parts[0] === 'compare') return { page: 'compare', symbols: (params.get('s') || '').split(',').filter(Boolean) }

@@ -711,6 +711,26 @@ def movers_get(market: str = "IN", tf: str = "1D", universe: str = ""):
     return d
 
 
+@app.get("/api/dashboard")
+def dashboard_get(market: str = "IN"):
+    """Market pulse, breadth and index pulse. Each part fails on its own with its reason."""
+    from . import dashboard
+    mk = market.upper()
+    out: dict = {"market": mk}
+    for k, fn in (("pulse", dashboard.pulse), ("breadth", dashboard.breadth), ("indices", dashboard.index_pulse)):
+        try:
+            out[k] = fn(mk)
+        except Exception as e:  # noqa: BLE001
+            out[k] = {"error": str(e)[:200]}
+    return out
+
+
+@app.get("/api/dashboard/rotation")
+def dashboard_rotation(market: str = "IN", frame: str = "daily"):
+    from . import dashboard
+    return dashboard.rotation(market, "weekly" if frame == "weekly" else "daily")
+
+
 @app.get("/api/patterns")
 def patterns_get(market: str = "IN", universe: str = ""):
     """Chart patterns, gaps and candlesticks found on each stock's real candles, with the written rules and the tested record."""

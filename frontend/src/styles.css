@@ -1153,3 +1153,32 @@ html[data-src="off"] .src-note, html[data-src="off"] .src { display: none !impor
   .ip-added { border-left: 0; border-top: 1px solid var(--line); max-height: 140px; }
   .ip { max-height: 94vh; }
 }
+
+/* Market dashboard */
+.dash-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 12px; margin-bottom: 12px; }
+.dash-grid > .card { margin: 0; }
+@media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
+.dash-gauge { width: 100%; max-width: 300px; display: block; margin: 6px auto 0; }
+.dash-tick { font-size: 10.5px; fill: var(--muted); }
+.dash-zones { display: flex; justify-content: space-between; gap: 4px; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.dash-big { font-size: 46px; font-weight: 800; line-height: 1; }
+.dash-big2 { font-size: 24px; font-weight: 800; }
+.dash-big2 small { font-size: 13px; font-weight: 600; }
+.dash-zone { font-size: 18px; font-weight: 700; }
+.dash-part { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 30px 34px; gap: 8px; align-items: center; font-size: 12.5px; margin-top: 5px; }
+.dash-bar { position: relative; height: 6px; background: var(--card2); border-radius: 3px; overflow: hidden; }
+.dash-bar i { display: block; height: 100%; }
+.dash-bar em { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--muted); opacity: .6; }
+.dash-net { font-size: 40px; font-weight: 800; margin-top: 8px; line-height: 1.1; }
+.dash-net span { font-size: 15px; font-weight: 600; color: var(--text); }
+.dash-dist { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; height: 90px; align-items: end; margin: 10px 0 4px; }
+.dash-dist > div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.dash-dist i { width: 100%; border-radius: 4px 4px 0 0; min-height: 2px; }
+.dash-dist span { font-size: 9.5px; color: var(--muted); margin-top: 3px; white-space: nowrap; }
+.dash-ix { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-top: 8px; }
+.dash-ixc { background: var(--card2); border-radius: 12px; padding: 10px; }
+.dash-ixv { font-size: 22px; font-weight: 800; }
+.dash-spark { width: 100%; height: 46px; display: block; margin: 4px 0; }
+.dash-rrg { width: 100%; height: auto; display: block; margin-top: 8px; }
+.dash-q { font-size: 12px; font-weight: 800; }
+.dash-lab { font-size: 11.5px; font-weight: 700; }

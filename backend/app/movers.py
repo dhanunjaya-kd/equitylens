@@ -190,6 +190,8 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
 
             prec = patterns.Record()
             prows: list[dict] = []
+            from . import dashboard
+            bh = dashboard.BreadthHistory()
 
             def one(u):
                 try:
@@ -212,6 +214,7 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
                             pass
                     if r:
                         try:                       # chart patterns, gaps, candlesticks on the full 5 years
+                            bh.add(full)
                             pa = patterns.analyse(full)
                             if pa.get("brk"):
                                 r["brk"] = pa["brk"]
@@ -240,6 +243,10 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
                 _finish_scans(rows, market)
                 if rec is not None and rec.stocks:
                     store.put_company(rec_key, dict(rec.finish(), updated=time.time(), index=bool(idx_close)))
+                try:                                   # Market pulse: daily history and its record
+                    dashboard.build_history(market, bh.finish())
+                except Exception:  # noqa: BLE001
+                    pass
                 if prec.stocks:
                     store.put_company(f"PATTERNS::{market}", {"rows": prows, "record": prec.finish(), "updated": time.time(),
                                                              "stocks": prec.stocks, "universe": which if market == "IN" else "SP500+NDX"})
