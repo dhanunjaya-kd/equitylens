@@ -741,7 +741,11 @@ def patterns_get(market: str = "IN", universe: str = ""):
     if not hit:
         movers.get(mk)        # starts the price refresh when it is allowed and due; patterns are built with it
         st = movers.STATE.get(mk, {})
-        return {"market": mk, "rows": [], "record": None, "updated": None, "names": patterns.NAMES, "rules": patterns.RULES,
+        from . import automation
+        ov = automation.status_cached()
+        job = next((t for t in ov["tasks"] if t["id"] == f"prices_{mk.lower()}"), {})
+        return {"market": mk, "rows": [], "record": None, "updated": None,
+                "scans": {"running": ov["overall"]["names"], "queued": job.get("queued", False), "mode": ov["mode"]}, "names": patterns.NAMES, "rules": patterns.RULES,
                 "candles": {k: {"name": v[0], "dir": v[1], "rule": v[2]} for k, v in patterns.CANDLES.items()}, "cfg": patterns.CFG,
                 "status": {"running": st.get("running", False), "done": st.get("done"), "total": st.get("total")}}
     d = hit[1]

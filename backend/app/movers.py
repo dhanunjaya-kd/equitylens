@@ -175,6 +175,7 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
             old = store.get_company(f"MOVERS::{market}")
             which = (old[1].get("universe") if old else None) or "N500"
         st.update(running=True, done=0, failed=0, total=0, started=time.time(), universe=which)
+        _NO_PAT_TRIED[market] = time.time()          # one reload for missing chart patterns per 6 hours, not a loop
 
     def work():
         try:
@@ -376,6 +377,7 @@ def snapshot_row(x: dict) -> dict:
 
 
 _NO_SCAN_TRIED: dict = {}
+_NO_PAT_TRIED: dict = {}
 
 
 def is_stale(market: str, hit=None) -> bool:
@@ -391,7 +393,9 @@ def is_stale(market: str, hit=None) -> bool:
         or ((not us_mkt) and technicals._market_open(now) and now - ts > OPEN_TTL) \
         or (us_mkt and meta["universe"] != "SP500+NDX") \
         or (meta["rows"] and not meta["scan"]
-            and now - _NO_SCAN_TRIED.get(market, 0) > 6 * 3600)          # saved before scanners existed: reload once
+            and now - _NO_SCAN_TRIED.get(market, 0) > 6 * 3600) \
+        or (meta["rows"] and not config.DEMO and store.stamp(f"PATTERNS::{market}") is None
+            and now - _NO_PAT_TRIED.get(market, 0) > 6 * 3600)           # saved before chart patterns existed: reload once
 
 
 _meta_memo: dict = {}

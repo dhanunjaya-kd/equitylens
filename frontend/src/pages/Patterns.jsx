@@ -140,10 +140,12 @@ export default function Patterns() {
   const [confOnly, setConfOnly] = useState(false)
   const [open, setOpen] = useState({})
   const [limit, setLimit] = useState(30)
+  const [wait, setWait] = useState(false)
   const which = mk === 'IN' ? univ : uu
   const load = () => api(`/api/patterns?market=${mk}&universe=${which}`).then((x) => { setD(x); setErr(null) }).catch((e) => setErr(e.message))
   useEffect(() => { setD(null); load() }, [mk, which])
-  useEffect(() => { if (!d?.status?.running) return undefined; const t = setTimeout(load, 10000); return () => clearTimeout(t) }, [d])
+  // keep checking while prices load, or while waiting for a queued load to start
+  useEffect(() => { if (!d || !(d.status?.running || (!d.updated && (d.scans?.queued || wait)))) return undefined; const t = setTimeout(load, 8000); return () => clearTimeout(t) }, [d, wait]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setLimit(30), [tab, view, tf, dir, type, sort, confOnly, which])
 
   const rows = useMemo(() => (d?.rows || []).filter((r) => !(fno && mk === 'IN') || r.fno), [d, fno, mk])
@@ -197,7 +199,22 @@ export default function Patterns() {
       </div>
       {err && <div className="card t-bad">⚠️ {err}</div>}
       {!d && !err && <div className="card empty">Loading patterns…</div>}
-      {d && !d.updated && <div className="card empty">Patterns are found during the price update{d.status?.running ? ` (running: ${d.status.done}/${d.status.total})` : ''}. They appear here when it finishes.</div>}
+      {d && !d.updated && (
+        <div className="card empty">
+          <div>Chart patterns are found while the app loads {mk === 'US' ? 'US' : 'India'} prices (5 years per stock). They appear here when that finishes.</div>
+          {d.status?.running ? (
+            <>
+              <div style={{ marginTop: 8 }}><b>Loading prices: {d.status.done} of {d.status.total}</b></div>
+              <div className="progress" style={{ maxWidth: 420, margin: '8px auto' }}><div style={{ width: `${d.status.total ? (d.status.done / d.status.total) * 100 : 0}%` }} /></div>
+            </>
+          ) : (
+            <>
+              {d.scans?.running?.length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Running now: {d.scans.running.join(', ')}. {d.scans.queued ? `${mk} prices are next in the queue.` : ''}</div>}
+              {!d.scans?.queued && <button className="btn primary" style={{ marginTop: 10 }} onClick={async () => { await api(`/api/automation/run/prices_${mk.toLowerCase()}`, { method: 'POST' }).catch(() => {}); setWait(true); load() }}>Load {mk === 'US' ? 'US' : 'India'} prices now</button>}
+            </>
+          )}
+        </div>
+      )}
 
       {d?.updated && tab === 'classic' && (
         <>
