@@ -7,6 +7,35 @@ export async function api(path, opts = {}) {
   return body
 }
 
+export async function streamSse(path, opts = {}, onEvent = () => {}) {
+  const r = await fetch(path, opts)
+  if (r.status === 401) { window.dispatchEvent(new Event('eql-login')); throw new Error('Please sign in') }
+  if (!r.ok) {
+    let body = null
+    try { body = await r.json() } catch { /* ignore */ }
+    throw new Error((body && body.detail) || `Request failed (${r.status})`)
+  }
+  const reader = r.body.getReader()
+  const dec = new TextDecoder()
+  let buf = '', done = null
+  while (true) {
+    const { value, done: eof } = await reader.read()
+    if (eof) break
+    buf += dec.decode(value, { stream: true })
+    const parts = buf.split('\n\n')
+    buf = parts.pop() || ''
+    for (const part of parts) {
+      const line = part.split('\n').find((l) => l.startsWith('data:'))
+      if (!line) continue
+      const ev = JSON.parse(line.slice(5).trim())
+      if (ev.type === 'error') throw new Error(ev.error || 'Stream failed')
+      onEvent(ev)
+      if (ev.type === 'done') done = ev.result
+    }
+  }
+  return done
+}
+
 // ---- market (🇮🇳 IND / 🇺🇸 US) and currency
 const readLS = (k, d) => { try { return localStorage.getItem(k) || d } catch { return d } }
 let MARKET = readLS('eql_market', 'IN')
@@ -61,7 +90,7 @@ export function ago(ts) {
 
 // --- saved lists: kept in this browser, and copied to your account when sign-in is on
 // browser key -> account key
-export const SYNC = { eql_watch: 'watchlist', eql_recent: 'recent', eql_screens: 'screens', eql_over2: 'chart_over', eql_panes: 'chart_panes', eql_notes: 'notes' }
+export const SYNC = { eql_watch: 'watchlist', eql_recent: 'recent', eql_screens: 'screens', eql_over2: 'chart_over', eql_panes: 'chart_panes', eql_notes: 'notes', eql_term_draw: 'term_draw', eql_term_watch_v2: 'term_watch', eql_term_alerts: 'price_alerts' }
 let ME = null
 const timers = {}
 export const me = () => ME

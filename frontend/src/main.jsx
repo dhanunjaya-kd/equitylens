@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
 // If the app was updated while this window stayed open, load the new version.
@@ -10,33 +10,37 @@ if (/^index-[\w-]+\.js$/.test(LOADED)) {
   window.addEventListener('focus', check)
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check() })
 }
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {})
+}
 import './styles.css'
 import { polyfillCountryFlagEmojis } from 'country-flag-emoji-polyfill'
 import flagFont from 'country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url'
-import { BottomNav, MarketToggle, SearchBox, SideNav, TopActions } from './components/ui'
+import { BottomNav, Loading, MarketToggle, SearchBox, SideNav, TopActions } from './components/ui'
 import { applyTheme, getMarket, getTheme, go, isDesktop, isUS, marketCurrency, parseHash, setCurrency, setMarketLS, me } from './util'
-import Home from './pages/Home'
-import Stock from './pages/Stock'
-import Rankings from './pages/Rankings'
-import Watch from './pages/Watch'
-import Compare from './pages/Compare'
-import Screener from './pages/Screener'
-import Movers from './pages/Movers'
-import Heatmap from './pages/Heatmap'
-import PreMarket from './pages/PreMarket'
-import Account from './pages/Account'
-import Calendar from './pages/Calendar'
 import IndexStrip from './components/IndexStrip'
 import BreakingBar from './components/BreakingBar'
-import SmartMoney from './pages/SmartMoney'
-import FiiDii from './pages/FiiDii'
-import News from './pages/News'
-import IPO from './pages/IPO'
-import Terminal from './pages/Terminal'
-import Guide from './pages/Guide'
-import Portfolio from './pages/Portfolio'
-import { Settings } from './pages/AI'
 import { Gate } from './components/Access'
+
+const Home = lazy(() => import('./pages/Home'))
+const Stock = lazy(() => import('./pages/Stock'))
+const Rankings = lazy(() => import('./pages/Rankings'))
+const Watch = lazy(() => import('./pages/Watch'))
+const Compare = lazy(() => import('./pages/Compare'))
+const Screener = lazy(() => import('./pages/Screener'))
+const Movers = lazy(() => import('./pages/Movers'))
+const Heatmap = lazy(() => import('./pages/Heatmap'))
+const PreMarket = lazy(() => import('./pages/PreMarket'))
+const Account = lazy(() => import('./pages/Account'))
+const Calendar = lazy(() => import('./pages/Calendar'))
+const SmartMoney = lazy(() => import('./pages/SmartMoney'))
+const FiiDii = lazy(() => import('./pages/FiiDii'))
+const News = lazy(() => import('./pages/News'))
+const IPO = lazy(() => import('./pages/IPO'))
+const Terminal = lazy(() => import('./pages/Terminal'))
+const Guide = lazy(() => import('./pages/Guide'))
+const Portfolio = lazy(() => import('./pages/Portfolio'))
+const Settings = lazy(() => import('./pages/AI').then((m) => ({ default: m.Settings })))
 
 // Windows has no flag emoji: load a small bundled flag font so the flags show instead of 'IN' / 'US'
 polyfillCountryFlagEmojis('Twemoji Country Flags', flagFont)
@@ -75,7 +79,7 @@ function App() {
             <img src="/icon.svg" alt="" /><span className="bw">Equity<span>Lens</span></span>
           </div>}
           {!desk && <MarketToggle market={market} onChange={changeMarket} />}
-          {route.page !== 'home' || desk ? <div className="grow"><SearchBox key={market} /></div> : <div className="grow" />}
+          {route.page !== 'home' || desk ? <div className="grow"><SearchBox key={market} shortcut={desk} /></div> : <div className="grow" />}
           {!desk && <button className="theme-btn" title="Light / dark theme" onClick={flipTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>}
           {!desk && me() && <button className="avatar-btn" title="My account" aria-label="My account" onClick={() => go('account')}>{(me().name || me().email || '?').slice(0, 1).toUpperCase()}</button>}
           {!desk && <button className="star" title="Settings" onClick={() => go('settings')}>⚙️</button>}
@@ -86,25 +90,27 @@ function App() {
       <main className={route.page === 'terminal' ? 'wrap wrap-wide' : 'wrap'} key={market + theme}>
         <BreakingBar market={route.page === 'stock' ? (isUS(route.symbol) ? 'US' : 'IN') : market} />
         {route.page !== 'settings' && <IndexStrip market={route.page === 'stock' ? (isUS(route.symbol) ? 'US' : 'IN') : market} />}
-        {route.page === 'home' && <Home />}
-        {route.page === 'stock' && <Stock key={route.symbol} symbol={route.symbol} tab={route.tab} />}
-        {route.page === 'rankings' && <Rankings />}
-        {route.page === 'watch' && <Watch />}
-        {route.page === 'screener' && <Screener />}
-        {route.page === 'movers' && <Movers />}
-        {route.page === 'heatmap' && <Heatmap sector={route.sector} />}
-        {route.page === 'premarket' && <PreMarket />}
-        {route.page === 'account' && <Account />}
-        {route.page === 'calendar' && <Calendar tab={route.tab} />}
-        {route.page === 'money' && <SmartMoney tab={route.tab} />}
-        {route.page === 'fiidii' && <FiiDii tab={route.tab} />}
-        {route.page === 'news' && <News />}
-        {route.page === 'ipo' && <IPO tab={route.tab} />}
-        {route.page === 'terminal' && <Terminal />}
-        {route.page === 'guide' && <Guide />}
-        {route.page === 'portfolio' && <Portfolio />}
-        {route.page === 'settings' && <Settings />}
-        {route.page === 'compare' && <Compare symbols={route.symbols} />}
+        <Suspense fallback={<Loading text="Loading page…" />}>
+          {route.page === 'home' && <Home />}
+          {route.page === 'stock' && <Stock key={route.symbol} symbol={route.symbol} tab={route.tab} />}
+          {route.page === 'rankings' && <Rankings />}
+          {route.page === 'watch' && <Watch />}
+          {route.page === 'screener' && <Screener />}
+          {route.page === 'movers' && <Movers />}
+          {route.page === 'heatmap' && <Heatmap sector={route.sector} />}
+          {route.page === 'premarket' && <PreMarket />}
+          {route.page === 'account' && <Account />}
+          {route.page === 'calendar' && <Calendar tab={route.tab} />}
+          {route.page === 'money' && <SmartMoney tab={route.tab} />}
+          {route.page === 'fiidii' && <FiiDii tab={route.tab} />}
+          {route.page === 'news' && <News />}
+          {route.page === 'ipo' && <IPO tab={route.tab} />}
+          {route.page === 'terminal' && <Terminal />}
+          {route.page === 'guide' && <Guide />}
+          {route.page === 'portfolio' && <Portfolio />}
+          {route.page === 'settings' && <Settings />}
+          {route.page === 'compare' && <Compare symbols={route.symbols} />}
+        </Suspense>
       </main>
       </div>
       {!desk && <BottomNav page={navPage} />}

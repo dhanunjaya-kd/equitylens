@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Area, AreaChart, CartesianGrid, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { FnoBadge, Logo, ScoreRing } from '../components/ui'
 import { ago, api, getMarket, go, isDesktop, ok, parseHash, signed } from '../util'
 import { Md } from './AI'
@@ -121,7 +122,7 @@ function Holdings({ x, mk }) {
     return (
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
         <table className="ptable">
-          <thead><tr><th>Company</th><th>Qty</th><th>Avg</th><th>LTP</th><th>Value</th><th>P&L</th><th>Weight</th><th>Score</th><th>Verdict</th><th>Watch-outs</th></tr></thead>
+          <thead><tr><th>Company</th><th>Qty</th><th>Avg</th><th>LTP</th><th>Value</th><th>P&L</th><th>Weight</th><th>Score</th><th>Entry</th><th>Div Yield</th><th>Verdict</th><th>Watch-outs</th></tr></thead>
           <tbody>
             {x.rows.map((r) => (
               <tr key={r.symbol} onClick={() => go(`stock/${r.symbol}`)}>
@@ -130,6 +131,8 @@ function Holdings({ x, mk }) {
                 <td className={tone(r.pnl)}>{money(r.pnl, mk)}<div className="small">{signed(r.pnl_pct, 1, '%')}</div></td>
                 <td><div className="wbar"><div style={{ width: `${Math.min(r.weight || 0, 100)}%` }} /></div><span className="small">{r.weight}%</span></td>
                 <td>{r.scored ? <ScoreRing value={r.overall} size={38} /> : <span className="small muted">{r.fund ? 'fund / ETF' : 'not scored'}</span>}</td>
+                <td>{r.entry_verdict && r.entry_verdict !== 'NA' ? <span className={`badge sm ${r.entry_verdict === 'ENTER' ? 't-good bg-good' : 't-warn bg-warn'}`}>{r.entry_verdict}</span> : '—'}</td>
+                <td className="small">{ok(r.dividend_yield) ? `${r.dividend_yield}%` : '—'}</td>
                 <td>{r.verdict ? <span className={`badge sm t-${r.tone} bg-${r.tone}`}>{r.verdict}</span> : '—'}</td>
                 <td className="small">{[r.surveillance && '🚨 surveillance', r.high_flags > 0 && `🚩 ${r.high_flags} red flag${r.high_flags > 1 ? 's' : ''}`, r.pledged >= 10 && `🔒 pledge ${r.pledged}%`, r.next_results && `📅 results ${r.next_results.slice(5)}`].filter(Boolean).join(' · ') || '—'}</td>
               </tr>
@@ -190,10 +193,12 @@ export default function Portfolio() {
         {note && <div className={`small ${note.err ? 't-bad' : 't-good'}`} style={{ marginTop: 8 }}>{note.err ? '⚠️ ' : '✓ '}{note.err || note.ok} <span className="muted" style={{ cursor: 'pointer' }} onClick={() => setNote(null)}>✕</span></div>}
         {tab === 'holdings' && s && (
           <div className="ptiles">
-            <div className="tile"><div className="k">Current value</div><div className="v">{money(s.value, mk)}</div></div>
-            <div className="tile"><div className="k">Invested</div><div className="v">{money(s.invested, mk)}</div></div>
-            <div className="tile"><div className="k">Total P&L</div><div className={`v ${tone(s.pnl)}`}>{money(s.pnl, mk)} <span className="small">{signed(s.pnl_pct, 1, '%')}</span></div></div>
-            <div className="tile"><div className="k">EquityLens score</div><div className="v">{s.score ?? '—'}<span className="small muted"> · {s.scored}/{s.count} scored</span></div></div>
+            <div className="tile"><div className="k">Current value</div><div className="v">{money(s.value, mk)}</div><div className="s">Invested {money(s.invested, mk)}</div></div>
+            <div className="tile"><div className="k">Total P&amp;L</div><div className={`v ${tone(s.pnl)}`}>{money(s.pnl, mk)} <span className="small">{signed(s.pnl_pct, 1, '%')}</span></div>
+              {s.benchmark && <div className="s">vs {s.benchmark.name}: <b className={tone(s.benchmark.alpha_1y)}>{signed(s.benchmark.alpha_1y, 1, '%')} alpha (1Y)</b></div>}</div>
+            <div className="tile"><div className="k">Portfolio Health Score</div><div className="v">{s.score ?? '—'}<span className="small muted"> / 100 · {s.scored}/{s.count} scored</span></div></div>
+            <div className="tile"><div className="k">Est. Annual Dividends</div><div className="v">{money(s.est_dividend || 0, mk)}<span className="small muted"> / yr</span></div>
+              {ok(s.dividend_yield) && <div className="s">{s.dividend_yield}% portfolio yield</div>}</div>
           </div>
         )}
         {tab === 'holdings' && s && <div className="row wrapflex small muted" style={{ gap: 10, marginTop: 8 }}><span>{s.count} holdings · {s.brokers.join(', ')} · synced {ago(s.synced)}</span>
@@ -229,6 +234,39 @@ export default function Portfolio() {
                     <div><b>{s.unscored.length} holding{s.unscored.length > 1 ? 's are' : ' is'} not scored yet</b> — scoring reads each company's 10-year financials (about 5 seconds each).</div>
                     {scan?.running ? <div>Scoring {scan.current || '…'} · {scan.done}/{scan.total}<div className="progress"><div style={{ width: `${scan.total ? (scan.done / scan.total) * 100 : 0}%` }} /></div></div>
                       : <button className="btn small primary" onClick={scoreAll}>Score my holdings</button>}
+                  </div>
+                )}
+                {(s.benchmark || s.drift?.length > 0) && (
+                  <div className="pgrid">
+                    {s.benchmark && (
+                      <div className="card">
+                        <div className="row between" style={{ marginBottom: 6 }}>
+                          <h3 style={{ margin: 0 }}>📈 Portfolio vs {s.benchmark.name} (1Y)</h3>
+                          <span className={`badge sm ${s.benchmark.alpha_1y >= 0 ? 't-good bg-good' : 't-bad bg-bad'}`}>{signed(s.benchmark.alpha_1y, 1, '%')} alpha</span>
+                        </div>
+                        <ResponsiveContainer width="100%" height={180}>
+                          <AreaChart data={s.benchmark.series}>
+                            <CartesianGrid stroke="var(--grid)" strokeDasharray="3 3" />
+                            <XAxis dataKey="date" stroke="var(--muted)" fontSize={10} tickFormatter={(d) => d.slice(5)} />
+                            <YAxis stroke="var(--muted)" fontSize={10} width={38} tickFormatter={(v) => `${v}%`} />
+                            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} formatter={(v) => `${v}%`} />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
+                            <Area type="monotone" dataKey="portfolio" name="Portfolio" stroke="#2dd4bf" fill="rgba(45,212,191,.16)" strokeWidth={2} />
+                            <Line type="monotone" dataKey="benchmark" name={s.benchmark.name} stroke="#8b98a5" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                    {s.drift?.length > 0 && (
+                      <div className="card">
+                        <h3>⚡ Fundamental Drift &amp; Risk Alerts</h3>
+                        {s.drift.map((d, i) => (
+                          <div key={i} className={`drift-row t-${d.tone}`} onClick={() => d.symbol && go(`stock/${d.symbol}`)} style={{ cursor: d.symbol ? 'pointer' : 'default' }}>
+                            <b>{d.symbol ? `${d.symbol.replace('US:', '')}: ` : ''}</b>{d.text}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 {s.warnings.length > 0 && (

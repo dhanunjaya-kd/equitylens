@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FnoBadge, FnoToggle, Logo, ScoreRing, UniverseChips, useFno, useUniv } from '../components/ui'
+import FnoScanner from '../components/FnoScanner'
 import { ExplainList } from './AI'
 import { api, cr, getMarket, go, inUniv, num, ok, saveLocal, ticker, univLabel } from '../util'
 
@@ -144,7 +145,7 @@ export default function Screener() {
             )
           })}
         </div>
-        {mk !== 'US' && <fno-scanner />}
+        {mk !== 'US' && <FnoScanner />}
         <div className="small muted" style={{ margin: '14px 0 8px', fontWeight: 700 }}>More ready-made screens</div>
         <div className="preset-row">
           {[...saved.map((s) => ({ ...s, desc: 'Saved screen', mine: true })), ...PRESETS.filter((p) => !(mk === 'US' && p.inOnly))].map((p) => (

@@ -23,7 +23,7 @@ from typing import Optional
 
 import requests
 
-from . import accounts, config, store
+from . import accounts, config, store, vault
 
 SETTINGS_FILE = config.DATA_DIR / "ai_settings.json"
 DEFAULTS = {
@@ -56,33 +56,34 @@ def _member() -> Optional[dict]:
 def load_settings() -> dict:
     if m := _member():
         s = {k: ("" if k in SECRET_KEYS else v) for k, v in DEFAULTS.items()}
-        s.update({k: v for k, v in (accounts.get_data(m["id"], "ai_settings") or {}).items() if k in DEFAULTS and v not in (None, "")})
+        raw = accounts.get_data(m["id"], "ai_settings") or {}
+        s.update({k: v for k, v in raw.items() if k in DEFAULTS and v not in (None, "")})
         s["ollama_url"] = DEFAULTS["ollama_url"]          # members can't point the server at other addresses
-        return s
+        return vault.decrypt_fields(s, SECRET_KEYS)
     s = dict(DEFAULTS)
     if SETTINGS_FILE.exists():
         try:
             s.update({k: v for k, v in json.loads(SETTINGS_FILE.read_text(encoding="utf-8")).items() if v not in (None, "")})
         except (OSError, json.JSONDecodeError):
             pass
-    return s
+    return vault.decrypt_fields(s, SECRET_KEYS)
 
 
 def save_settings(new: dict) -> dict:
     if m := _member():
-        cur = accounts.get_data(m["id"], "ai_settings") or {}
+        cur = vault.decrypt_fields(accounts.get_data(m["id"], "ai_settings") or {}, SECRET_KEYS)
         for k in DEFAULTS:
             if k in new and k != "ollama_url":
                 v = new[k]
                 if k in SECRET_KEYS and (v is None or "•" in str(v)):
                     continue
                 cur[k] = v
-        accounts.put_data(m["id"], "ai_settings", cur)
+        accounts.put_data(m["id"], "ai_settings", vault.encrypt_fields(cur, SECRET_KEYS))
         return public_settings()
     cur = {}
     if SETTINGS_FILE.exists():
         try:
-            cur = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+            cur = vault.decrypt_fields(json.loads(SETTINGS_FILE.read_text(encoding="utf-8")), SECRET_KEYS)
         except (OSError, json.JSONDecodeError):
             cur = {}
     for k in DEFAULTS:
@@ -91,7 +92,7 @@ def save_settings(new: dict) -> dict:
             if k in SECRET_KEYS and (v is None or "•" in str(v)):
                 continue  # masked value sent back unchanged: keep the stored key
             cur[k] = v
-    SETTINGS_FILE.write_text(json.dumps(cur, indent=2), encoding="utf-8")
+    SETTINGS_FILE.write_text(json.dumps(vault.encrypt_fields(cur, SECRET_KEYS), indent=2), encoding="utf-8")
     return public_settings()
 
 
@@ -309,6 +310,80 @@ def _system(report: dict, tech: Optional[dict], extra: str = "") -> str:
 def _cache_get(key: str, ttl: float) -> Optional[dict]:
     hit = store.get_company(key)
     return hit[1] if hit and time.time() - hit[0] < ttl else None
+
+
+def stream_note(report: dict, tech: Optional[dict], refresh: bool = False):
+    s = load_settings()
+    key = f"AI::NOTE::{report['symbol']}::{model_label(s)}"
+    if not refresh and (hit := _cache_get(key, 24 * 3600)):
+        yield {"type": "delta", "text": hit["text"]}
+        yield {"type": "done", "result": hit}
+        return
+    prompt = """Write a research note on this company with these sections:
+## In one paragraph
+## Business quality
+## Growth: what drove it and can it continue
+## Balance sheet & cash flow
+## Forensic & accounting checks
+## Valuation
+## 3 / 5 / 10-year view
+(base your view on the scenario numbers; explain what has to go right and what could go wrong)
+## Key risks
+## What to watch next (5 specific, measurable items, e.g. a margin level or a debt number)
+Keep it under 700 words."""
+    buf = []
+    for delta in stream_complete(_system(report, tech), [{"role": "user", "content": prompt}], s=s):
+        buf.append(delta)
+        yield {"type": "delta", "text": delta}
+    out = {"text": "".join(buf).strip(), "model": model_label(s), "created": time.time()}
+    store.put_company(key, out)
+    yield {"type": "done", "result": out}
+
+
+def stream_chat(report: dict, tech: Optional[dict], history: list[dict], focus: str = ""):
+    s = load_settings()
+    msgs = [{"role": h["role"], "content": str(h["content"])[:4000]} for h in history[-12:] if h.get("role") in ("user", "assistant")]
+    if not msgs or msgs[-1]["role"] != "user":
+        raise AIError("Ask a question first.")
+    extra = "Answer the user's question about this company in under 250 words unless they ask for detail."
+    if focus == "entry":
+        extra += (" The user is looking at the entry decision card (entry_decision, entry_track_record). Explain it from that data;"
+                  " you cannot change its verdict, and its track record is history, not a promise.")
+    buf = []
+    for delta in stream_complete(_system(report, tech, extra), msgs, max_tokens=1200, s=s):
+        buf.append(delta)
+        yield {"type": "delta", "text": delta}
+    yield {"type": "done", "result": {"text": "".join(buf).strip(), "model": model_label(s)}}
+
+
+def stream_debate(report: dict, tech: Optional[dict], refresh: bool = False):
+    s = load_settings()
+    key = f"AI::DEBATE::{report['symbol']}::{model_label(s)}"
+    if not refresh and (hit := _cache_get(key, 24 * 3600)):
+        yield {"type": "done", "result": hit}
+        return
+    bull_buf, bear_buf, judge_buf = [], [], []
+    for delta in stream_complete(_system(report, tech, "ROLE: You are the BULL analyst. Build the strongest honest case FOR owning this stock for 5+ years, using only the data. Acknowledge the single biggest risk at the end."),
+                                 [{"role": "user", "content": "Make the bull case in 5-7 bullet points with numbers, then one line on the biggest risk. Max 300 words."}], max_tokens=1200, s=s):
+        bull_buf.append(delta)
+        yield {"type": "part", "role": "bull", "text": delta}
+    bull = "".join(bull_buf).strip()
+    for delta in stream_complete(_system(report, tech, "ROLE: You are the BEAR analyst. Build the strongest honest case AGAINST owning this stock for 5+ years, using only the data. Acknowledge the single best counter-argument at the end."),
+                                 [{"role": "user", "content": "Make the bear case in 5-7 bullet points with numbers, then one line on the best counter-argument. Max 300 words."}], max_tokens=1200, s=s):
+        bear_buf.append(delta)
+        yield {"type": "part", "role": "bear", "text": delta}
+    bear = "".join(bear_buf).strip()
+    for delta in stream_complete(_system(report, tech, "ROLE: You are the neutral JUDGE. Weigh both cases against the data. Point out any claim that the data doesn't support."),
+                                 [{"role": "user", "content": f"BULL CASE:\n{bull}\n\nBEAR CASE:\n{bear}\n\nWhich case is better supported by the data and why? Then list the 3 facts that would settle the debate. Finish with a line 'Leaning: Bull / Bear / Balanced'. Max 300 words."}],
+                                 max_tokens=1200, s=s):
+        judge_buf.append(delta)
+        yield {"type": "part", "role": "judge", "text": delta}
+    judge = "".join(judge_buf).strip()
+    lean = re.search(r"Leaning:\s*\**\s*(Bull|Bear|Balanced)", judge, re.I)
+    out = {"bull": bull, "bear": bear, "judge": judge, "leaning": lean.group(1).title() if lean else None,
+           "model": model_label(s), "created": time.time()}
+    store.put_company(key, out)
+    yield {"type": "done", "result": out}
 
 
 def research_note(report: dict, tech: Optional[dict], refresh: bool = False) -> dict:
@@ -828,6 +903,95 @@ Then finish with:
 ## Before you shortlist
 (3 checks the user should do on any of them)"""
     return {"text": complete(system, [{"role": "user", "content": prompt}], s=s), "model": model_label(s)}
+
+
+def stream_complete(system: str, messages: list[dict], max_tokens: Optional[int] = None, s: Optional[dict] = None):
+    """Yield text deltas progressively across Claude, OpenAI, Gemini, Ollama, or Demo."""
+    s = s or load_settings()
+    mt = max_tokens or s["max_tokens"]
+    p = s["provider"]
+    if not _ready(s):
+        raise AIError(f"No API key set for {p}. Open ⚙️ Settings and add it (or switch to Ollama).")
+    if p == "demo":
+        txt = _demo_answer(system, messages)
+        for chunk in re.findall(r"\S+\s*", txt):
+            yield chunk
+            time.sleep(0.015)
+        return
+    try:
+        if p == "claude":
+            with requests.post("https://api.anthropic.com/v1/messages", timeout=180, stream=True, headers={
+                "x-api-key": s["anthropic_api_key"], "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                json={"model": s["claude_model"], "max_tokens": mt, "system": system, "messages": messages, "stream": True}) as r:
+                _raise(r, "Claude")
+                for line in r.iter_lines(decode_unicode=True):
+                    if line and line.startswith("data:"):
+                        try:
+                            ev = json.loads(line[5:].strip())
+                            if ev.get("type") == "content_block_delta":
+                                t = (ev.get("delta") or {}).get("text")
+                                if t:
+                                    yield t
+                        except ValueError:
+                            pass
+            return
+        if p == "openai":
+            with requests.post("https://api.openai.com/v1/chat/completions", timeout=180, stream=True, headers={
+                "Authorization": f"Bearer {s['openai_api_key']}", "Content-Type": "application/json"},
+                json={"model": s["openai_model"], "max_completion_tokens": mt, "stream": True,
+                      "messages": [{"role": "system", "content": system}] + messages}) as r:
+                _raise(r, "OpenAI")
+                for line in r.iter_lines(decode_unicode=True):
+                    if line and line.startswith("data:"):
+                        raw = line[5:].strip()
+                        if raw == "[DONE]":
+                            break
+                        try:
+                            ev = json.loads(raw)
+                            t = ((ev.get("choices") or [{}])[0].get("delta") or {}).get("content")
+                            if t:
+                                yield t
+                        except ValueError:
+                            pass
+            return
+        if p == "gemini":
+            contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in messages]
+            with requests.post(f"{GEMINI_BASE}/models/{s['gemini_model']}:streamGenerateContent?alt=sse", timeout=180, stream=True,
+                               headers={"x-goog-api-key": s["gemini_api_key"], "Content-Type": "application/json"},
+                               json={"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
+                                     "generationConfig": {"maxOutputTokens": mt + 8000}}) as r:
+                _raise(r, "Gemini")
+                for line in r.iter_lines(decode_unicode=True):
+                    if line and line.startswith("data:"):
+                        try:
+                            ev = json.loads(line[5:].strip())
+                            parts = (((ev.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
+                            for pt in parts:
+                                if pt.get("text"):
+                                    yield pt["text"]
+                        except ValueError:
+                            pass
+            return
+        if p == "ollama":
+            with requests.post(s["ollama_url"].rstrip("/") + "/api/chat", timeout=600, stream=True,
+                               json={"model": s["ollama_model"], "stream": True, "options": {"num_predict": mt},
+                                     "messages": [{"role": "system", "content": system}] + messages}) as r:
+                _raise(r, "Ollama")
+                for line in r.iter_lines(decode_unicode=True):
+                    if line:
+                        try:
+                            t = (json.loads(line).get("message") or {}).get("content")
+                            if t:
+                                yield t
+                        except ValueError:
+                            pass
+            return
+    except requests.ConnectionError as e:
+        hint = " Is Ollama running? Start it with `ollama serve`." if p == "ollama" else ""
+        raise AIError(f"Can't reach {p}.{hint} ({e.__class__.__name__})") from e
+    except requests.Timeout as e:
+        raise AIError(f"{p} took too long to answer. Try again or use a smaller model.") from e
+    raise AIError(f"Unknown provider '{p}'")
 
 
 # ------------------------------------------------------------------ demo

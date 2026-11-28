@@ -5,7 +5,7 @@ import re
 import time
 from datetime import date, datetime, timedelta
 
-from . import calendars, enrich, store
+from . import calendars, config, enrich, store, technicals
 
 HOLD_KEYS = ("zerodha", "upstox", "fyers", "angel", "dhan", "alpaca", "tradier", "schwab", "file")
 
@@ -64,8 +64,12 @@ def xray(market: str) -> dict:
         r["pnl"] = round(r["value"] - r["invested"], 2) if r["value"] is not None and r["invested"] else None
         r["pnl_pct"] = round(r["pnl"] / r["invested"] * 100, 2) if r["pnl"] is not None and r["invested"] else None
         for f in ("overall", "business", "valuation", "verdict", "tone", "sector", "high_flags", "pledged", "pe", "market_cap",
-                  "off_high_pct", "piotroski", "fair_value_upside"):
+                  "off_high_pct", "piotroski", "fair_value_upside", "dividend_yield", "entry_verdict"):
             r[f] = k.get(f)
+        if r.get("dividend_yield") and r.get("value"):
+            r["est_dividend"] = round(r["value"] * r["dividend_yield"] / 100.0, 2)
+        else:
+            r["est_dividend"] = 0.0
         if k.get("name"):
             r["name"] = k["name"]
         r["scored"] = bool(k)
@@ -114,15 +118,104 @@ def xray(market: str) -> dict:
         mix = {k: round(v, 1) for k, v in mix.items()}
     else:
         mix = None
+    est_div = round(sum(r.get("est_dividend") or 0.0 for r in rows), 2)
+    div_yield = round(est_div / total * 100, 2) if total else None
+
+    # Fundamental drift & concentration alerts
+    drift_hist = (store.get_company("DRIFT::HISTORY") or (0, {}))[1]
+    drift = []
+    for r in rows:
+        d = drift_hist.get(r["symbol"])
+        if not d:
+            continue
+        if isinstance(d.get("prev_business"), (int, float)) and isinstance(d.get("business"), (int, float)):
+            diff = round(d["business"] - d["prev_business"])
+            if abs(diff) >= 4:
+                drift.append({"symbol": r["symbol"], "name": r["name"], "kind": "score",
+                              "tone": "good" if diff > 0 else "warn",
+                              "text": f"Business score {round(d['prev_business'])} → {round(d['business'])} ({diff:+d} pts)"})
+        if d.get("prev_entry") and d.get("entry") and d["prev_entry"] != d["entry"]:
+            drift.append({"symbol": r["symbol"], "name": r["name"], "kind": "entry",
+                          "tone": "good" if d["entry"] == "ENTER" else "warn",
+                          "text": f"Entry signal flipped {d['prev_entry'].title()} → {d['entry'].title()}"})
+    for sc in sec:
+        if sc["sector"] != "Not scored yet" and sc["weight"] >= 30:
+            drift.append({"symbol": None, "name": sc["sector"], "kind": "sector", "tone": "bad",
+                          "text": f"{sc['sector']} sector weight {sc['weight']}% (above 25% guideline)"})
+
+    benchmark = _benchmark_series(market, rows, total)
+
     summary = {
         "value": round(total, 2), "invested": round(invested, 2), "pnl": round(total - invested, 2) if invested else None,
         "pnl_pct": round((total - invested) / invested * 100, 2) if invested else None, "count": len(rows),
         "score": w_score, "business": w_bus, "scored": len(scored), "unscored": [r["symbol"] for r in rows if not r["scored"] and not r["fund"]],
         "funds": [r["symbol"] for r in rows if r["fund"]],
         "sectors": sec, "top5": top5, "warnings": warn, "mix": mix,
+        "est_dividend": est_div, "dividend_yield": div_yield, "drift": drift[:8], "benchmark": benchmark,
         "fno": sum(1 for r in rows if r.get("fno")), "results_soon": [{"symbol": r["symbol"], "name": r["name"], "date": r["next_results"]}
                                                                      for r in rows if r.get("next_results")],
         "brokers": sorted({b for r in rows for b in r["brokers"]}),
         "synced": max((r.get("synced") or 0) for r in rows),
     }
     return {"market": market, "rows": rows, "summary": summary}
+
+
+def _benchmark_series(market: str, rows: list[dict], total: float) -> dict | None:
+    """1Y normalized Portfolio vs NIFTY 50 / S&P 500 comparison from cached/demo daily bars."""
+    if not rows or not total:
+        return None
+    idx_sym = "^GSPC" if market == "US" else "^NSEI"
+    idx_name = "S&P 500" if market == "US" else "NIFTY 50"
+    try:
+        idx_bars = technicals._demo(idx_sym)[-252:] if config.DEMO else technicals._yahoo(idx_sym, "1y")
+    except Exception:  # noqa: BLE001
+        return None
+    if len(idx_bars) < 20:
+        return None
+    idx_bars = idx_bars[-252:]
+    idx_dates = [b["t"] for b in idx_bars]
+    idx_base = idx_bars[0]["c"] or 1.0
+    idx_map = {b["t"]: round((b["c"] / idx_base - 1) * 100, 2) for b in idx_bars}
+
+    # Build weighted portfolio curve from cached daily bars (or demo bars)
+    weights = [(r["symbol"], (r.get("value") or 0) / total) for r in rows if (r.get("value") or 0) > 0]
+    series_by_sym: dict[str, dict[str, float]] = {}
+    covered_w = 0.0
+    for sym, w in weights[:25]:
+        try:
+            if config.DEMO:
+                bars = technicals._demo(sym)[-252:]
+            else:
+                hit = store.get_company(f"TECH::{sym}::1d::v{technicals.CACHE_VERSION}")
+                bars = (hit[1].get("bars") if hit else None) or []
+            if len(bars) >= 20:
+                bmap = {b["t"]: b["c"] for b in bars}
+                first = next((bmap[d] for d in idx_dates if d in bmap), None)
+                if first and first > 0:
+                    series_by_sym[sym] = {d: (bmap[d] / first - 1) * 100 for d in idx_dates if d in bmap}
+                    covered_w += w
+        except Exception:  # noqa: BLE001
+            continue
+    if covered_w < 0.2:
+        return None
+
+    step = max(1, len(idx_dates) // 30)
+    sample_dates = idx_dates[::step]
+    if sample_dates[-1] != idx_dates[-1]:
+        sample_dates.append(idx_dates[-1])
+    pts = []
+    last_p = 0.0
+    for d in sample_dates:
+        num = den = 0.0
+        for sym, w in weights:
+            sm = series_by_sym.get(sym)
+            if sm and d in sm:
+                num += sm[d] * w
+                den += w
+        p_ret = round(num / den, 2) if den > 0 else last_p
+        last_p = p_ret
+        pts.append({"date": d, "portfolio": p_ret, "benchmark": idx_map.get(d, 0.0)})
+    p_1y = pts[-1]["portfolio"]
+    b_1y = pts[-1]["benchmark"]
+    return {"name": idx_name, "portfolio_1y": p_1y, "benchmark_1y": b_1y,
+            "alpha_1y": round(p_1y - b_1y, 2), "covered_pct": round(covered_w * 100), "series": pts}

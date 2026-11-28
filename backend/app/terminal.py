@@ -331,8 +331,16 @@ def parse_chain(js: dict, expiry: Optional[str] = None) -> dict:
     ce_oi = sum(r["ce_oi"] or 0 for r in rows)
     pe_oi = sum(r["pe_oi"] or 0 for r in rows)
     atm = min(rows, key=lambda r: abs(r["strike"] - spot))["strike"] if rows and spot else None
+    atm_row = next((r for r in rows if r["strike"] == atm), None) if atm is not None else None
+    straddle = None
+    exp_move_pct = None
+    if atm_row and atm_row.get("ce_ltp") is not None and atm_row.get("pe_ltp") is not None:
+        straddle = round(atm_row["ce_ltp"] + atm_row["pe_ltp"], 2)
+        if spot:
+            exp_move_pct = round(straddle / spot * 100, 2)
     return {"expiries": exps, "expiry": exp, "spot": spot, "time": rec.get("timestamp") or js.get("timestamp"), "rows": rows,
             "atm": atm, "ce_oi": ce_oi or None, "pe_oi": pe_oi or None,
+            "straddle": straddle, "expected_move_pct": exp_move_pct,
             "pcr": round(pe_oi / ce_oi, 2) if ce_oi else None, "max_pain": max_pain(rows),
             "ok": len({r["strike"] for r in rows}) == len(rows)}
 

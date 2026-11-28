@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, createChart, createTextWatermark } from 'lightweight-charts'
-import { api, getMarket, num, ok, signed } from '../util'
+import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { api, getMarket, num, ok, saveLocal, signed } from '../util'
 import { chime } from '../components/BreakingBar'
 
 // Live terminal: a screen, no orders. NSE stocks, index options, stock F&O, US stocks.
@@ -14,6 +15,14 @@ const INDEX = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'US:SPX', 'US:NAS
 const US_NAMES = { 'US:SPX': 'S&P 500', 'US:NASDAQ': 'Nasdaq Composite', 'US:DOW': 'Dow Jones', 'US:RUSSELL': 'Russell 2000', 'US:VIX': 'CBOE VIX' }
 const loadJ = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d } catch { return d } }
 const saveJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* ignore */ } }
+const loadDraw = (s) => {
+  const all = loadJ('eql_term_draw', {})
+  return all[s] ?? loadJ(`eql_draw_${s}`, [])
+}
+const saveDraw = (s, shapes) => {
+  const all = { ...loadJ('eql_term_draw', {}), [s]: shapes }
+  saveLocal('eql_term_draw', all)
+}
 const isUSs = (s) => s.startsWith('US:')
 const isIdx = (s) => INDEX.includes(s)
 const ist = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
@@ -172,13 +181,13 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
   const [menu, setMenu] = useState(false)
   const [leg, setLeg] = useState(null)
   const [tool, setTool] = useState('cursor')
-  const [shapes, setShapesRaw] = useState(() => loadJ(`eql_draw_${sym}`, []))
+  const [shapes, setShapesRaw] = useState(() => loadDraw(sym))
   const [hideDraw, setHideDraw] = useState(false)
   const [temp, setTemp] = useState(null)
   const [lab, setLab] = useState(null)
   const dark = document.documentElement.dataset.theme !== 'light'
-  const setShapes = (s) => { setShapesRaw(s); saveJ(`eql_draw_${sym}`, s) }
-  useEffect(() => { setShapesRaw(loadJ(`eql_draw_${sym}`, [])); setTemp(null) }, [sym])
+  const setShapes = (s) => { setShapesRaw(s); saveDraw(sym, s) }
+  useEffect(() => { setShapesRaw(loadDraw(sym)); setTemp(null) }, [sym])
   const flip = (k) => { const o = { ...ind, [k]: !ind[k] }; setInd(o); saveJ('eql_term_ind', o) }
   useEffect(() => {
     let active = true
@@ -496,9 +505,11 @@ function Chain({ sym, live }) {
         <span className="chip">Spot <b>{f(c.spot, 2)}</b></span>
         <span className="chip" title="put OI ÷ call OI, worked out from NSE's open interest">PCR <b>{f(c.pcr, 2)}</b></span>
         <span className="chip" title="strike where option buyers' total value is smallest, worked out from NSE's open interest">Max pain <b>{f(c.max_pain)}</b></span>
+        {ok(c.straddle) && <span className="chip ipo-on" title="ATM Call + ATM Put premium">ATM Straddle <b>{num(c.straddle, 2)}</b>{ok(c.expected_move_pct) ? ` · ±${num(c.expected_move_pct, 2)}%` : ''}</span>}
         <span className="chip">Call OI <b>{big(c.ce_oi)}</b></span><span className="chip">Put OI <b>{big(c.pe_oi)}</b></span>
         <span className="small muted">{c.time ? `as of ${c.time}` : ''}<span className="src-note"> · NSE</span></span>
       </div>
+      <div className="term-oc-grid">
       <div className="tbl-wrap"><table className="tbl term-oc"><thead><tr>
         <th>Call OI</th><th>Chg OI</th><th>IV</th><th>Vol</th><th>LTP</th><th className="k">Strike</th><th>LTP</th><th>Vol</th><th>IV</th><th>Chg OI</th><th>Put OI</th>
       </tr></thead><tbody>
@@ -519,7 +530,39 @@ function Chain({ sym, live }) {
           )
         })}
       </tbody></table></div>
-      <div className="small muted" style={{ marginTop: 6 }}>Shaded = in the money. OI = open interest (contracts as NSE reports them). PCR and max pain are worked out from NSE's open interest.</div>
+      {rows.length > 0 && (
+        <div className="term-oc-charts">
+          <div className="tile">
+            <div className="k" style={{ marginBottom: 6 }}>OI Change by Strike (Call vs Put)</div>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={rows.map((r) => ({ k: r.strike, call: r.ce_oi_chg || 0, put: r.pe_oi_chg || 0 }))}>
+                <CartesianGrid stroke="var(--grid)" strokeDasharray="3 3" />
+                <XAxis dataKey="k" stroke="var(--muted)" fontSize={10} />
+                <YAxis stroke="var(--muted)" fontSize={10} width={42} />
+                <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="put" name="Put OI Chg" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="call" name="Call OI Chg" fill="#ef4444" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="tile" style={{ marginTop: 10 }}>
+            <div className="k" style={{ marginBottom: 6 }}>Implied Volatility Skew (%)</div>
+            <ResponsiveContainer width="100%" height={150}>
+              <LineChart data={rows.filter((r) => ok(r.ce_iv) || ok(r.pe_iv)).map((r) => ({ k: r.strike, ce_iv: r.ce_iv, pe_iv: r.pe_iv }))}>
+                <CartesianGrid stroke="var(--grid)" strokeDasharray="3 3" />
+                <XAxis dataKey="k" stroke="var(--muted)" fontSize={10} />
+                <YAxis stroke="var(--muted)" fontSize={10} width={34} />
+                <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} />
+                <Line type="monotone" dataKey="ce_iv" name="Call IV" stroke="#2dd4bf" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="pe_iv" name="Put IV" stroke="#38bdf8" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+      </div>
+      <div className="small muted" style={{ marginTop: 6 }}>Shaded = in the money. OI = open interest (contracts as NSE reports them). PCR, straddle and max pain are worked out from NSE's open interest.</div>
       <Futures d={d.deriv} err={d.sources?.[1]?.error} />
     </div>
   )
@@ -547,18 +590,34 @@ const LA = 'eql_term_alerts'
 const loadA = () => { try { return JSON.parse(localStorage.getItem(LA)) || [] } catch { return [] } }
 function Alerts({ sym, head, alerts, setAlerts }) {
   const [p, setP] = useState('')
-  const add = (dir) => { const v = parseFloat(p); if (!v) return; const a = [...alerts, { id: Date.now(), sym, dir, price: v }]; setAlerts(a); setP('') }
+  const [tg, setTg] = useState(true)
+  const add = async (dir) => {
+    const v = parseFloat(p)
+    if (!v) return
+    const item = { id: Date.now(), sym, dir, price: v, telegram: tg }
+    setAlerts([...alerts, item])
+    setP('')
+    try {
+      const r = await api('/api/alerts/price', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sym, dir, price: v, telegram: tg }) })
+      if (r?.items) setAlerts(r.items)
+    } catch { /* offline / member */ }
+  }
+  const drop = async (id) => {
+    setAlerts(alerts.filter((x) => x.id !== id))
+    try { await api(`/api/alerts/price/${id}`, { method: 'DELETE' }) } catch { /* ignore */ }
+  }
   return (
     <div>
       <div className="row wrapflex" style={{ gap: 8 }}>
         <input type="number" placeholder={ok(head?.ltp) ? `e.g. ${num(head.ltp, 0)}` : 'price'} value={p} onChange={(e) => setP(e.target.value)} style={{ width: 140 }} />
         <button className="btn small" onClick={() => add('above')}>Alert when {sym} goes above</button>
         <button className="btn small" onClick={() => add('below')}>…goes below</button>
+        <label className="row small muted" style={{ gap: 5, cursor: 'pointer' }}><input type="checkbox" checked={tg} onChange={(e) => setTg(e.target.checked)} /> Notify via Telegram even when closed</label>
       </div>
       <div style={{ marginTop: 10 }}>
-        {alerts.length === 0 ? <div className="small muted">No alerts. They sound on this device while the terminal is open, and show a desktop notification if allowed.</div>
+        {alerts.length === 0 ? <div className="small muted">No alerts. Active price alerts sound here and dispatch via Telegram (when enabled in Settings).</div>
           : alerts.map((a) => (
-            <div key={a.id} className="term-r"><span>{a.sym} {a.dir} {num(a.price, 2)}{a.hit ? ` · hit ${a.hit}` : ''}</span><button className="chip" onClick={() => setAlerts(alerts.filter((x) => x.id !== a.id))}>remove</button></div>
+            <div key={a.id} className="term-r"><span>{a.sym} {a.dir} {num(a.price, 2)}{a.telegram ? ' · 📨' : ''}{a.hit ? ` · hit ${a.hit}` : ''}</span><button className="chip" onClick={() => drop(a.id)}>remove</button></div>
           ))}
       </div>
     </div>
@@ -570,6 +629,8 @@ export default function Terminal() {
   const mk = getMarket() === 'US' ? 'US' : 'IN'
   const LS = `eql_term_watch_${mk}`
   const startList = () => {
+    const synced = loadJ('eql_term_watch_v2', null)
+    if (synced?.[mk]?.length) return synced[mk]
     const own = loadJ(LS, null)
     if (own) return own
     const old = loadJ('eql_term_watch', null)                 // the single list from before: split by market
@@ -587,16 +648,53 @@ export default function Terminal() {
   const [wq, setWq] = useState({})
   const [add, setAdd] = useState('')
   const [expanded, setExpanded] = useState(false)
+  const [sseOn, setSseOn] = useState(false)
   const [alerts, setAlertsRaw] = useState(() => loadJ('eql_term_alerts', []))
-  const setAlerts = (a) => { setAlertsRaw(a); saveJ('eql_term_alerts', a) }
+  const setAlerts = (a) => { setAlertsRaw(a); saveLocal('eql_term_alerts', a) }
   const nse = !isUSs(sym) && !isIdx(sym)
   const live = mk === 'US' ? usOpen() : nseOpen()
-  useEffect(() => { saveJ(LS, watch) }, [watch])
+  useEffect(() => {
+    saveJ(LS, watch)
+    const all = loadJ('eql_term_watch_v2', {})
+    saveLocal('eql_term_watch_v2', { ...all, [mk]: watch })
+  }, [watch, mk, LS])
+  useEffect(() => { api('/api/alerts/price').then((r) => { if (r?.items?.length) setAlerts(r.items) }).catch(() => {}) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setNseq(null); setYq(null) }, [sym])
-  usePoll(() => {
-    if (nse) api(`/api/term/stock/${encodeURIComponent(sym)}`).then(setNseq).catch(() => {})
-    api(`/api/term/candles/${encodeURIComponent(sym)}?frame=5m`).then(setYq).catch(() => {})
-  }, live ? 3000 : 60000, [sym, live])
+  useEffect(() => {
+    let alive = true, es = null, timer = null
+    const fetchOnce = () => {
+      if (!alive || document.hidden) return
+      if (nse) api(`/api/term/stock/${encodeURIComponent(sym)}`).then((x) => alive && setNseq(x)).catch(() => {})
+      api(`/api/term/candles/${encodeURIComponent(sym)}?frame=5m`).then((x) => alive && setYq(x)).catch(() => {})
+    }
+    fetchOnce()
+    if (live && typeof EventSource !== 'undefined') {
+      try {
+        es = new EventSource(`/api/stream/terminal/${encodeURIComponent(sym)}?frame=5m&nse=${nse}`)
+        es.onopen = () => alive && setSseOn(true)
+        es.onmessage = (e) => {
+          if (!alive) return
+          try {
+            const p = JSON.parse(e.data)
+            if (p.stock) setNseq(p.stock)
+            if (p.candles) setYq(p.candles)
+          } catch { /* ignore */ }
+        }
+        es.onerror = () => {
+          if (!alive) return
+          setSseOn(false)
+          es?.close()
+          if (!timer) timer = setInterval(fetchOnce, 3000)
+        }
+      } catch {
+        timer = setInterval(fetchOnce, 3000)
+      }
+    } else {
+      setSseOn(false)
+      timer = setInterval(fetchOnce, live ? 3000 : 60000)
+    }
+    return () => { alive = false; setSseOn(false); es?.close(); clearInterval(timer) }
+  }, [sym, live, nse])
   usePoll(() => api(`/api/term/watch?symbols=${encodeURIComponent(watch.join(','))}`).then((x) => setWq(Object.fromEntries(x.rows.map((r) => [r.symbol, r])))).catch(() => {}), 15000, [watch.join(',')])
   const q = nseq?.quote
   const head = q ? { ltp: q.ltp, change: q.change, pchange: q.pchange, name: q.name, time: q.time, src: 'NSE', fno: q.fno }
@@ -636,9 +734,10 @@ export default function Terminal() {
           <h2 style={{ margin: 0 }}>{sym.replace('US:', '')}</h2>
           <span className="muted small">{US_NAMES[sym] || head?.name || ''}</span>
           {head && ok(head.ltp) && <><b className="term-ltp">{cur}{num(head.ltp, 2)}</b><b style={{ color: tone(head.change) }}>{signed(head.change, 2)} ({signed(head.pchange, 2, '%')})</b></>}
-          <span className={`ipo-cd ${live ? 'warm' : ''}`}>{mk === 'US' ? (live ? '🟢 US market open' : 'US market closed · last prices') : live ? '🟢 NSE open · live every 3 s' : 'NSE closed · last prices'}</span>
+          <span className={`ipo-cd ${live ? 'warm' : ''}`}>{sseOn ? '● Live Stream (SSE)' : mk === 'US' ? (live ? '🟢 US market open' : 'US market closed · last prices') : live ? '🟢 NSE open · live every 3 s' : 'NSE closed · last prices'}</span>
           {head?.time && <span className="small muted">as of {head.time}<span className="src-note"> ({head.src})</span></span>}
         </div>
+        <button className="btn small" onClick={goAlerts}>🔔 Quick Alert</button>
       </div>
       <Stats sym={sym} q={q} t={nseq?.trade} y={!q ? yq : null} />
       <div className="term-grid">

@@ -3,8 +3,9 @@
 - EQL_PASSWORD (backend/.env): when set, every /api call needs a login cookie.
   Needed whenever EquityLens is reachable from the internet (cloud server),
   because Settings holds AI keys and broker keys.
+- Sessions use revocable random tokens (with IP-based login rate limiting).
 - network_info(): the addresses a phone can use (same Wi-Fi, Tailscale).
-- tail_logs(): last lines of the log files for Settings → Logs.
+- tail_logs(): last lines of the log files for Settings -> Logs.
 """
 from __future__ import annotations
 
@@ -12,28 +13,61 @@ import hashlib
 import hmac
 import ipaddress
 import os
+import secrets
 import socket
+import time
 from collections import deque
 
 from . import config
 
 COOKIE = "eql_auth"
 OPEN_PATHS = ("/api/health", "/api/auth", "/api/login", "/api/logout", "/api/shutdown")
+_sessions: dict[str, str] = {}   # token -> password digest at issuance
+_fails: dict[str, list[float]] = {}
 
 
 def password() -> str:
     return os.getenv("EQL_PASSWORD", "").strip()
 
 
-def token(pw: str | None = None) -> str:
+def _pw_digest(pw: str | None = None) -> str:
     pw = password() if pw is None else pw
     return hashlib.sha256(f"equitylens|{pw}".encode()).hexdigest()
 
 
+def token(pw: str | None = None) -> str:
+    """Issue a new revocable session token bound to the current password."""
+    tok = secrets.token_urlsafe(32)
+    _sessions[tok] = _pw_digest(pw)
+    return tok
+
+
+def revoke(cookie_value: str | None) -> None:
+    if cookie_value:
+        _sessions.pop(cookie_value, None)
+
+
+def limited(ip: str) -> bool:
+    now = time.time()
+    xs = [t for t in _fails.get(ip or "local", []) if now - t < 600]
+    _fails[ip or "local"] = xs
+    return len(xs) >= 5
+
+
+def record_fail(ip: str) -> None:
+    _fails.setdefault(ip or "local", []).append(time.time())
+
+
 def check(cookie_value: str | None) -> bool:
-    if not password():
+    pw = password()
+    if not pw:
         return True
-    return bool(cookie_value) and hmac.compare_digest(cookie_value, token())
+    if not cookie_value:
+        return False
+    digest = _sessions.get(cookie_value)
+    if digest is not None:
+        return hmac.compare_digest(digest, _pw_digest(pw))
+    return False
 
 
 def is_open(path: str) -> bool:

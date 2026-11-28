@@ -14,19 +14,23 @@ from typing import Optional
 
 import requests
 
-from . import config, store
+from . import config, store, vault
 
-KEY, SENT = "ALERTS::SETTINGS", "ALERTS::SENT"
+KEY, SENT, PRICE_KEY = "ALERTS::SETTINGS", "ALERTS::SENT", "ALERTS::PRICE"
 API = "https://api.telegram.org/bot{token}/{method}"
 IST = timezone(timedelta(hours=5, minutes=30))
 MAX_PER_RUN = 8
 DEFAULTS = {"on": False, "token": "", "chat_id": "", "chat_name": "", "breaking": True, "filings": True, "central": True,
-            "top": False, "markets": ["IN", "US"], "watch": [], "since": None, "last_sent": None, "last_error": None, "sent_count": 0}
+            "top": False, "entry_flips": True, "high_low_52w": True, "price_targets": True,
+            "markets": ["IN", "US"], "watch": [], "since": None, "last_sent": None, "last_error": None, "sent_count": 0}
 
 
 def settings() -> dict:
     hit = store.get_company(KEY)
-    return {**DEFAULTS, **(hit[1] if hit else {})}
+    out = {**DEFAULTS, **(hit[1] if hit else {})}
+    if out.get("token"):
+        out["token"] = vault.decrypt(out["token"])
+    return out
 
 
 def public(s: Optional[dict] = None) -> dict:
@@ -37,7 +41,7 @@ def public(s: Optional[dict] = None) -> dict:
 
 def save(patch: dict) -> dict:
     s = settings()
-    for k in ("on", "breaking", "filings", "central", "top"):
+    for k in ("on", "breaking", "filings", "central", "top", "entry_flips", "high_low_52w", "price_targets"):
         if k in patch:
             s[k] = bool(patch[k])
     for k in ("token", "chat_id", "chat_name"):
@@ -51,7 +55,10 @@ def save(patch: dict) -> dict:
         s["since"] = datetime.now(timezone.utc).isoformat()
     if patch.get("on") is False:
         s["since"] = None
-    store.put_company(KEY, s)
+    stored = dict(s)
+    if stored.get("token"):
+        stored["token"] = vault.encrypt(stored["token"])
+    store.put_company(KEY, stored)
     return public(s)
 
 
@@ -168,5 +175,118 @@ def dispatch(pages: Optional[dict] = None) -> int:
         time.sleep(0.4)
     cut = time.time() - 8 * 86400
     store.put_company(SENT, {k: v for k, v in sent.items() if v >= cut})
-    store.put_company(KEY, s)
+    stored = dict(s)
+    if stored.get("token"):
+        stored["token"] = vault.encrypt(stored["token"])
+    store.put_company(KEY, stored)
+    return n
+
+
+# ------------------------------------------------------------------ server-side price, 52W, and entry-flip alerts
+def price_alerts_list() -> list[dict]:
+    hit = store.get_company(PRICE_KEY)
+    return list(hit[1].get("items") or []) if hit else []
+
+
+def price_alert_add(sym: str, direction: str, price: float, telegram: bool = True) -> list[dict]:
+    items = price_alerts_list()
+    sym = (sym or "").strip().upper()
+    if not sym or direction not in ("above", "below") or not price or price <= 0:
+        raise ValueError("Invalid price alert")
+    aid = f"{int(time.time() * 1000)}"
+    items.append({"id": aid, "sym": sym, "dir": direction, "price": round(float(price), 2),
+                  "telegram": bool(telegram), "hit": None, "created": time.time()})
+    items = items[-200:]
+    store.put_company(PRICE_KEY, {"items": items})
+    return items
+
+
+def price_alert_remove(aid: str) -> list[dict]:
+    items = [x for x in price_alerts_list() if str(x.get("id")) != str(aid)]
+    store.put_company(PRICE_KEY, {"items": items})
+    return items
+
+
+def check_price_alerts(prices: Optional[dict[str, float]] = None) -> int:
+    """Evaluate server-side price targets, 52-week highs/lows, and entry flips; send Telegram when active."""
+    s = settings()
+    items = price_alerts_list()
+    sent_hit = store.get_company(SENT)
+    sent = dict(sent_hit[1]) if sent_hit else {}
+    watch = set(s.get("watch") or [])
+    n = 0
+
+    # 1. Price targets
+    if prices is None:
+        prices = {}
+        for mk in ("IN", "US"):
+            mv = store.get_company(f"MOVERS::{mk}")
+            for r in ((mv[1] if mv else {}).get("rows") or []):
+                sp = (r.get("spark") or [None])[-1]
+                if sp is not None:
+                    prices[r["symbol"]] = sp
+    changed = False
+    for a in items:
+        if a.get("hit"):
+            continue
+        p0 = prices.get(a["sym"])
+        if p0 is None:
+            continue
+        if (a["dir"] == "above" and p0 >= a["price"]) or (a["dir"] == "below" and p0 <= a["price"]):
+            a["hit"] = datetime.now(IST).strftime("%d %b %H:%M IST")
+            changed = True
+            if s["on"] and s.get("price_targets", True) and a.get("telegram", True) and s["token"] and s["chat_id"]:
+                try:
+                    cur = "$" if a["sym"].startswith("US:") else "₹"
+                    send(f"🎯 <b>Price Alert: {html.escape(a['sym'].replace('US:', ''))}</b>\n"
+                         f"Crossed {a['dir']} {cur}{a['price']:,.2f} (now {cur}{p0:,.2f})", s)
+                    n += 1
+                except Exception:  # noqa: BLE001
+                    pass
+    if changed:
+        store.put_company(PRICE_KEY, {"items": items})
+
+    if not (s["on"] and s["token"] and s["chat_id"]):
+        return n
+
+    # 2. Watchlist entry flips (Avoid -> Enter)
+    if s.get("entry_flips", True) and watch:
+        drift = (store.get_company("DRIFT::HISTORY") or (0, {}))[1]
+        for sym, d in drift.items():
+            if sym not in watch or d.get("entry") != "ENTER" or d.get("prev_entry") != "AVOID":
+                continue
+            eid = f"FLIP::{sym}::{int(d.get('entry_at') or 0)}"
+            if eid in sent:
+                continue
+            try:
+                send(f"🟢 <b>Entry Flip: {html.escape(d.get('name') or sym)}</b>\n"
+                     f"Entry decision turned <b>Avoid → Enter</b>.", s)
+                sent[eid] = time.time()
+                n += 1
+            except Exception:  # noqa: BLE001
+                break
+
+    # 3. Watchlist 52-week high/low breakouts
+    if s.get("high_low_52w", True) and watch:
+        today_str = datetime.now(IST).date().isoformat()
+        for mk in s.get("markets", ["IN", "US"]):
+            mv = (store.get_company(f"MOVERS::{mk}") or (0, {}))[1]
+            for r in mv.get("rows") or []:
+                sym = r.get("symbol")
+                if sym not in watch or not (r.get("new_high") or r.get("new_low")):
+                    continue
+                hid = f"52W::{sym}::{today_str}::{'H' if r.get('new_high') else 'L'}"
+                if hid in sent:
+                    continue
+                try:
+                    kind = "New 52-week HIGH 📈" if r.get("new_high") else "New 52-week LOW 📉"
+                    send(f"<b>{kind}: {html.escape(r.get('name') or sym)}</b>\n"
+                         f"1D move: {(r.get('ret') or {}).get('1D', 0):+.2f}%", s)
+                    sent[hid] = time.time()
+                    n += 1
+                except Exception:  # noqa: BLE001
+                    break
+
+    cut = time.time() - 8 * 86400
+    store.put_company(SENT, {k: v for k, v in sent.items() if v >= cut})
     return n

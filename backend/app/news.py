@@ -592,6 +592,7 @@ def refresh() -> dict:
         try:
             from . import alerts
             alerts.dispatch()
+            alerts.check_price_alerts()
         except Exception as e:  # noqa: BLE001 - alerts never stop the news
             STATE["feeds"]["telegram"] = {"name": "Telegram alerts", "ok": False, "count": 0, "error": str(e)[:120], "at": time.time()}
         try:

@@ -1,7 +1,9 @@
 """EquityLens API + web app (one process)."""
 from __future__ import annotations
 
+import asyncio
 import hmac
+import json
 import secrets
 import re
 import logging
@@ -17,7 +19,7 @@ from urllib.parse import quote
 from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import universe as universe_mod
@@ -28,9 +30,14 @@ store.init()
 accounts.init()
 log = logging.getLogger("equitylens")
 
+_CORS_ORIGINS = [x.strip() for x in os.getenv(
+    "EQL_CORS_ORIGINS",
+    f"http://localhost:{config.PORT},http://127.0.0.1:{config.PORT},http://localhost:5174,http://127.0.0.1:5174",
+).split(",") if x.strip()]
+
 app = FastAPI(title="EquityLens", version="1.0.0")
 app.add_middleware(GZipMiddleware, minimum_size=2000)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["*"])
 
 
 @app.on_event("startup")
@@ -142,6 +149,7 @@ def auth_register(request: Request, body: dict = Body(...)):
 @app.post("/api/auth/logout")
 def auth_logout(request: Request):
     accounts.end_session(request.cookies.get(accounts.COOKIE))
+    access.revoke(request.cookies.get(access.COOKIE))
     r = JSONResponse({"ok": True})
     r.delete_cookie(accounts.COOKIE)
     r.delete_cookie(access.COOKIE)
@@ -250,8 +258,12 @@ def me_export():
 def login(request: Request, body: dict = Body(...)):
     if not access.password():
         return {"ok": True}
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "")
+    if access.limited(ip):
+        raise HTTPException(429, "Too many wrong tries. Wait 10 minutes and try again.")
     if not hmac.compare_digest(str(body.get("password", "")), access.password()):
-        time.sleep(1.5)                                   # slows down guessing
+        access.record_fail(ip)
+        time.sleep(0 if config.DEMO else 1.5)
         raise HTTPException(401, "Wrong password")
     r = JSONResponse({"ok": True})
     https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
@@ -394,6 +406,37 @@ def ai_chat(symbol: str, body: dict = Body(...)):
     return _ai(ai.chat, rep, tech, body.get("messages") or [], str(body.get("focus") or ""))
 
 
+def _sse(gen):
+    def wrap():
+        try:
+            for ev in gen:
+                yield f"data: {json.dumps(ev, default=str)}\n\n"
+        except ai.AIError as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        except Exception as e:  # noqa: BLE001
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)[:200]})}\n\n"
+    return StreamingResponse(wrap(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/api/ai/stream/note/{symbol}")
+def ai_stream_note(symbol: str, refresh: bool = False):
+    rep, tech = _report_and_tech(symbol)
+    return _sse(ai.stream_note(rep, tech, refresh))
+
+
+@app.post("/api/ai/stream/chat/{symbol}")
+def ai_stream_chat(symbol: str, body: dict = Body(...)):
+    rep, tech = _report_and_tech(symbol)
+    return _sse(ai.stream_chat(rep, tech, body.get("messages") or [], str(body.get("focus") or "")))
+
+
+@app.post("/api/ai/stream/debate/{symbol}")
+def ai_stream_debate(symbol: str, refresh: bool = False):
+    rep, tech = _report_and_tech(symbol)
+    return _sse(ai.stream_debate(rep, tech, refresh))
+
+
 @app.get("/api/premarket")
 def premarket_get(market: str = "IN", refresh: bool = False):
     try:
@@ -458,6 +501,44 @@ def term_candles(symbol: str, frame: str = "5m"):
 def term_watch(symbols: str = ""):
     from . import terminal
     return terminal.watch(symbols.split(","))
+
+
+@app.get("/api/stream/terminal/{symbol}")
+async def term_stream(symbol: str, request: Request, frame: str = "5m", nse: bool = True):
+    from . import terminal
+
+    async def gen():
+        for _ in range(120):
+            if await request.is_disconnected():
+                break
+            payload = {"ts": time.time()}
+            try:
+                if nse:
+                    payload["stock"] = await asyncio.to_thread(terminal.stock, symbol)
+                payload["candles"] = await asyncio.to_thread(terminal.candles, symbol, frame)
+            except Exception as e:  # noqa: BLE001
+                payload["error"] = str(e)[:160]
+            yield f"data: {json.dumps(payload, default=str)}\n\n"
+            await asyncio.sleep(3)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/stream/scan")
+async def scan_stream(request: Request):
+    async def gen():
+        for _ in range(600):
+            if await request.is_disconnected():
+                break
+            st = service.scan_status()
+            yield f"data: {json.dumps(st, default=str)}\n\n"
+            if not st.get("running"):
+                break
+            await asyncio.sleep(2)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/today")
@@ -652,6 +733,38 @@ def alerts_test():
         return alerts.test()
     except Exception as e:  # noqa: BLE001
         raise HTTPException(400, str(e))
+
+
+@app.get("/api/alerts/price")
+def alerts_price_list():
+    from . import alerts
+    return {"items": alerts.price_alerts_list()}
+
+
+@app.post("/api/alerts/price")
+def alerts_price_add(body: dict = Body(...)):
+    from . import alerts
+    try:
+        return {"items": alerts.price_alert_add(body.get("sym", ""), body.get("dir", ""), float(body.get("price") or 0), bool(body.get("telegram", True)))}
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/alerts/price/{aid}")
+def alerts_price_delete(aid: str):
+    from . import alerts
+    return {"items": alerts.price_alert_remove(aid)}
+
+
+@app.get("/api/security/status")
+def security_status():
+    return {
+        "vault_encrypted": True,
+        "auth_mode": "accounts" if accounts.enabled() else ("password" if access.password() else "local_open"),
+        "strict_cors": "*" not in _CORS_ORIGINS,
+        "cors_origins": _CORS_ORIGINS,
+        "sync_keys": sorted(accounts.DATA_KEYS),
+    }
 
 
 @app.get("/api/fiidii/stocks")

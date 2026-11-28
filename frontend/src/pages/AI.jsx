@@ -7,7 +7,7 @@ import TelegramCard from '../components/TelegramCard'
 import { BreakingSoundCard } from '../components/BreakingBar'
 import { useEffect, useRef, useState } from 'react'
 import { Badge } from '../components/ui'
-import { ago, api, go, me } from '../util'
+import { ago, api, go, me, streamSse } from '../util'
 
 marked.setOptions({ gfm: true, breaks: true })
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -53,16 +53,30 @@ export function StockAI({ d }) {
 }
 
 function Note({ sym }) {
-  const [r, setR] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
-  const run = async (refresh) => { setBusy(true); setErr(null); try { setR(await post(`/api/ai/note/${sym}${refresh ? '?refresh=1' : ''}`)) } catch (e) { setErr(e.message) } finally { setBusy(false) } }
+  const [r, setR] = useState(null), [stream, setStream] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
+  const run = async (refresh) => {
+    setBusy(true); setErr(null); setStream('')
+    try {
+      let acc = ''
+      const res = await streamSse(`/api/ai/stream/note/${sym}${refresh ? '?refresh=1' : ''}`, { method: 'POST' }, (ev) => {
+        if (ev.type === 'delta') { acc += ev.text; setStream(acc) }
+      })
+      if (res) setR(res)
+    } catch (e) { setErr(e.message) } finally { setBusy(false) }
+  }
   return (
     <div className="card">
       <div className="row between"><h3 style={{ margin: 0 }}>🧠 AI research note</h3>
-        {r ? <button className="btn small" disabled={busy} onClick={() => run(true)}>↻ Rewrite</button> : <button className="btn small primary" disabled={busy} onClick={() => run(false)}>Write note</button>}</div>
+        <div className="row" style={{ gap: 8 }}>
+          {busy && <span className="stream-badge">Streaming…</span>}
+          {r ? <button className="btn small" disabled={busy} onClick={() => run(true)}>↻ Rewrite</button> : <button className="btn small primary" disabled={busy} onClick={() => run(false)}>Write note</button>}
+        </div>
+      </div>
       {!r && !busy && <p className="small muted" style={{ marginBottom: 0 }}>A full write-up: business quality, growth, balance sheet, forensics, valuation, 3/5/10-year view, risks and what to watch.</p>}
-      {busy && <Busy text="Reading the whole report and writing… (20–60 s)" />}
+      {busy && !stream && <Busy text="Reading the whole report and streaming…" />}
+      {busy && stream && <div className="streaming"><Md text={stream} /><span className="stream-cur" /></div>}
       <Err e={err} />
-      {r && <><Md text={r.text} /><div className="small muted">{r.model} · {ago(r.created)}</div></>}
+      {!busy && r && <><Md text={r.text} /><div className="small muted">{r.model} · {ago(r.created)}</div></>}
     </div>
   )
 }
@@ -70,27 +84,36 @@ function Note({ sym }) {
 const SUGGEST = ['Is the debt a worry?', 'Why did margins change?', 'What could go wrong in 5 years?', 'Is it cheap or expensive vs history?', 'Explain the forensic scores simply']
 
 function Chat({ sym, name }) {
-  const [msgs, setMsgs] = useState([]), [q, setQ] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
+  const [msgs, setMsgs] = useState([]), [stream, setStream] = useState(''), [q, setQ] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
   const end = useRef()
-  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [msgs, busy])
+  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [msgs, stream, busy])
   const ask = async (text) => {
     const t = (text ?? q).trim()
     if (!t || busy) return
     const next = [...msgs, { role: 'user', content: t }]
-    setMsgs(next); setQ(''); setBusy(true); setErr(null)
-    try { const r = await post(`/api/ai/chat/${sym}`, { messages: next }); setMsgs([...next, { role: 'assistant', content: r.text }]) }
-    catch (e) { setErr(e.message) } finally { setBusy(false) }
+    setMsgs(next); setQ(''); setBusy(true); setErr(null); setStream('')
+    try {
+      let acc = ''
+      const res = await streamSse(`/api/ai/stream/chat/${sym}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: next }) }, (ev) => {
+        if (ev.type === 'delta') { acc += ev.text; setStream(acc) }
+      })
+      setMsgs([...next, { role: 'assistant', content: res?.text || acc }])
+    } catch (e) { setErr(e.message) } finally { setBusy(false); setStream('') }
   }
   return (
     <div className="card">
       <div className="row between"><h3 style={{ margin: 0 }}>💬 Ask about {name}</h3>
-        {msgs.length > 0 && <button className="btn small" onClick={() => setMsgs([])}>Clear</button>}</div>
+        <div className="row" style={{ gap: 8 }}>
+          {busy && <span className="stream-badge">Live SSE</span>}
+          {msgs.length > 0 && <button className="btn small" onClick={() => setMsgs([])}>Clear</button>}
+        </div>
+      </div>
       {msgs.length === 0 && <div style={{ marginTop: 10 }}>{SUGGEST.map((s) => <span key={s} className="chip" style={{ cursor: 'pointer' }} onClick={() => ask(s)}>{s}</span>)}</div>}
       <div style={{ marginTop: 8 }}>
         {msgs.map((m, i) => (
           <div key={i} className={`bubble ${m.role}`}>{m.role === 'assistant' ? <Md text={m.content} /> : m.content}</div>
         ))}
-        {busy && <Busy text="Thinking…" />}
+        {busy && (stream ? <div className="bubble assistant streaming"><Md text={stream} /><span className="stream-cur" /></div> : <Busy text="Thinking…" />)}
         <div ref={end} />
       </div>
       <Err e={err} />
@@ -118,22 +141,36 @@ function Guidance({ sym }) {
 }
 
 function Debate({ sym }) {
-  const [r, setR] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
-  const run = async (refresh) => { setBusy(true); setErr(null); try { setR(await post(`/api/ai/debate/${sym}${refresh ? '?refresh=1' : ''}`)) } catch (e) { setErr(e.message) } finally { setBusy(false) } }
+  const [r, setR] = useState(null), [parts, setParts] = useState({ bull: '', bear: '', judge: '' }), [busy, setBusy] = useState(false), [err, setErr] = useState(null)
+  const run = async (refresh) => {
+    setBusy(true); setErr(null); setParts({ bull: '', bear: '', judge: '' })
+    try {
+      const acc = { bull: '', bear: '', judge: '' }
+      const res = await streamSse(`/api/ai/stream/debate/${sym}${refresh ? '?refresh=1' : ''}`, { method: 'POST' }, (ev) => {
+        if (ev.type === 'part' && ev.role) { acc[ev.role] += ev.text; setParts({ ...acc }) }
+      })
+      if (res) setR(res)
+    } catch (e) { setErr(e.message) } finally { setBusy(false) }
+  }
+  const show = busy ? parts : r
   const tone = { Bull: 'good', Bear: 'bad', Balanced: 'warn' }[r?.leaning] || 'neutral'
   return (
     <div className="card">
       <div className="row between"><h3 style={{ margin: 0 }}>⚔️ Bull vs Bear debate</h3>
-        {r ? <button className="btn small" disabled={busy} onClick={() => run(true)}>↻ Re-run</button> : <button className="btn small primary" disabled={busy} onClick={() => run(false)}>Start debate</button>}</div>
+        <div className="row" style={{ gap: 8 }}>
+          {busy && <span className="stream-badge">Streaming…</span>}
+          {r ? <button className="btn small" disabled={busy} onClick={() => run(true)}>↻ Re-run</button> : <button className="btn small primary" disabled={busy} onClick={() => run(false)}>Start debate</button>}
+        </div>
+      </div>
       {!r && !busy && <p className="small muted" style={{ marginBottom: 0 }}>Three AI agents: one argues for, one against, and a judge checks both against the data.</p>}
-      {busy && <Busy text="Bull, bear and judge are working… (30–90 s)" />}
+      {busy && !parts.bull && <Busy text="Bull, bear and judge are starting…" />}
       <Err e={err} />
-      {r && (
+      {show && (show.bull || show.bear || show.judge) && (
         <>
-          <div className="debate bull"><div className="dh t-good">🐂 Bull case</div><Md text={r.bull} /></div>
-          <div className="debate bear"><div className="dh t-bad">🐻 Bear case</div><Md text={r.bear} /></div>
-          <div className="debate judge"><div className="dh row between"><span>⚖️ Judge</span>{r.leaning && <Badge tone={tone}>Leaning: {r.leaning}</Badge>}</div><Md text={r.judge} /></div>
-          <div className="small muted">{r.model} · {ago(r.created)}</div>
+          {show.bull && <div className="debate bull"><div className="dh t-good">🐂 Bull case</div><Md text={show.bull} /></div>}
+          {show.bear && <div className="debate bear"><div className="dh t-bad">🐻 Bear case</div><Md text={show.bear} /></div>}
+          {show.judge && <div className="debate judge"><div className="dh row between"><span>⚖️ Judge</span>{r?.leaning && <Badge tone={tone}>Leaning: {r.leaning}</Badge>}</div><Md text={show.judge} /></div>}
+          {!busy && r && <div className="small muted">{r.model} · {ago(r.created)}</div>}
         </>
       )}
     </div>
@@ -208,6 +245,24 @@ function SourcesCard() {
           <input type="checkbox" checked={on} onChange={(e) => { setOn(e.target.checked); setSourcesShown(e.target.checked) }} /> {on ? 'Shown' : 'Hidden'}
         </label>
       </div>
+    </div>
+  )
+}
+
+function SecurityVaultCard() {
+  const [sec, setSec] = useState(null)
+  useEffect(() => { api('/api/security/status').then(setSec).catch(() => {}) }, [])
+  if (!sec) return null
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>🔐 Security &amp; Sync Vault</h3>
+      <div className="vault-pills">
+        {sec.vault_encrypted && <span className="badge sm t-good bg-good">API &amp; Broker Keys Encrypted</span>}
+        {sec.strict_cors && <span className="badge sm t-good bg-good">Strict CORS Active</span>}
+        <span className="badge sm t-good bg-good">Syncing {sec.sync_keys?.length || 9} Lists &amp; Drawings</span>
+        <span className="badge sm t-ok bg-ok">Auth: {sec.auth_mode}</span>
+      </div>
+      <div className="small muted" style={{ marginTop: 8 }}>Stored secrets (AI keys, Telegram bot token, broker keys/tokens) are encrypted at rest with a local vault key.</div>
     </div>
   )
 }
@@ -302,7 +357,7 @@ export function Settings() {
       </div>
       <AccountsCard />
       <BreakingSoundCard />
-      {(!me() || me().role === 'owner') && <><Automation /><TelegramCard /><DataChecks /><PhoneCard /><LogsCard /></>}
+      {(!me() || me().role === 'owner') && <><SecurityVaultCard /><Automation /><TelegramCard /><DataChecks /><PhoneCard /><LogsCard /></>}
     </>
   )
 }

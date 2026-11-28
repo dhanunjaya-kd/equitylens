@@ -22,16 +22,17 @@ import threading
 import time
 from typing import Optional
 
-from . import config
+from . import config, store, vault
 
 COOKIE = "eql_session"
 SESSION_DAYS = 30
 SETTINGS_FILE = config.DATA_DIR / "accounts_settings.json"
-DATA_KEYS = {"watchlist", "recent", "screens", "chart_over", "chart_panes", "notes", "premarket_watch", "ai_settings"}
+DATA_KEYS = {"watchlist", "recent", "screens", "chart_over", "chart_panes", "notes", "premarket_watch", "ai_settings",
+             "term_draw", "term_watch", "price_alerts"}
 MAX_VALUE_BYTES = 512 * 1024
 # owner-only: anything that shows the owner's private data or controls the computer
 OWNER_ONLY = ("/api/brokers", "/api/broker/", "/api/portfolio", "/api/ai/portfolio", "/api/logs", "/api/network",
-              "/api/scan/start", "/api/premarket/backtest", "/api/jobs/", "/api/alerts", "/api/automation")
+              "/api/scan/start", "/api/premarket/backtest", "/api/jobs/", "/api/alerts", "/api/automation", "/api/security")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _lock = threading.Lock()
 _current: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("eql_user", default=None)
@@ -46,9 +47,7 @@ class AccountError(Exception):
 
 # ------------------------------------------------------------------ storage
 def _conn() -> sqlite3.Connection:
-    c = sqlite3.connect(config.DB_PATH, timeout=30)
-    c.row_factory = sqlite3.Row
-    return c
+    return store._conn()
 
 
 def init() -> None:
@@ -275,6 +274,8 @@ def github_settings() -> dict:
             s.update({k: v for k, v in json.loads(SETTINGS_FILE.read_text(encoding="utf-8")).items() if v})
         except (OSError, json.JSONDecodeError):
             pass
+    if s.get("client_secret"):
+        s["client_secret"] = vault.decrypt(s["client_secret"])
     return s
 
 
@@ -283,7 +284,10 @@ def save_github_settings(client_id: str, client_secret: Optional[str]) -> dict:
     cur["client_id"] = (client_id or "").strip()
     if client_secret and "•" not in client_secret:
         cur["client_secret"] = client_secret.strip()
-    SETTINGS_FILE.write_text(json.dumps({k: cur[k] for k in ("client_id", "client_secret")}, indent=2), encoding="utf-8")
+    SETTINGS_FILE.write_text(
+        json.dumps({"client_id": cur["client_id"], "client_secret": vault.encrypt(cur.get("client_secret"))}, indent=2),
+        encoding="utf-8",
+    )
     return public_github()
 
 

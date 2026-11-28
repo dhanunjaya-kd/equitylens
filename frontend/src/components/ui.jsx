@@ -36,12 +36,25 @@ export function Loading({ text = 'Loading…' }) {
   return <div className="empty"><div className="spinner" />{text}</div>
 }
 
-export function SearchBox({ autoFocus }) {
+export function SearchBox({ autoFocus, shortcut }) {
   const [q, setQ] = useState('')
   const [res, setRes] = useState([])
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const t = useRef()
+  const inp = useRef()
+  useEffect(() => {
+    if (!shortcut) return undefined
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault(); inp.current?.focus(); inp.current?.select()
+      } else if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) {
+        e.preventDefault(); inp.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [shortcut])
   useEffect(() => {
     clearTimeout(t.current)
     if (q.trim().length < 2) { setRes([]); return }
@@ -54,10 +67,11 @@ export function SearchBox({ autoFocus }) {
   const pick = (s) => { setOpen(false); setQ(''); go(`stock/${encodeURIComponent(s)}`) }
   return (
     <div className="search-box">
-      <input autoFocus={autoFocus} value={q} placeholder={getMarket() === 'US' ? 'Search US stocks — ticker or name' : 'Search NSE/BSE stocks — name or symbol'}
+      <input ref={inp} autoFocus={autoFocus} value={q} placeholder={getMarket() === 'US' ? 'Search US stocks — ticker or name' : 'Search NSE/BSE stocks — name or symbol'}
         onChange={(e) => setQ(e.target.value)} onFocus={() => res.length && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 200)}
         onKeyDown={(e) => { if (e.key === 'Enter') { if (res[0]) pick(res[0].symbol); else if (q.trim()) pick(q.trim().toUpperCase()) } }} />
+      {shortcut && !q && <span className="kbd-hint">Ctrl+K</span>}
       {open && (res.length > 0 || busy) && (
         <div className="suggest">
           {busy && !res.length && <div className="muted">Searching…</div>}

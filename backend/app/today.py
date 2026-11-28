@@ -15,7 +15,57 @@ def _premarket(day: str) -> Optional[dict]:
     if not hit:
         return None
     c = hit[1]
-    return {"day": day, "call": c.get("call"), "label": c.get("label"), "built": c.get("built")}
+    return {"day": day, "call": c.get("call"), "label": c.get("label"), "built": c.get("built"),
+            "is_latest": False, "outcome": c.get("outcome")}
+
+
+def _latest_premarket() -> Optional[dict]:
+    keys = sorted(store.keys_like("PREMARKET::CALL::IN::%"), reverse=True)
+    if not keys:
+        return None
+    hit = store.get_company(keys[0])
+    if not hit:
+        return None
+    c = hit[1]
+    track = store.get_company("PREMARKET::TRACK::IN")
+    acc = None
+    if track and isinstance(track[1], dict):
+        acc = (track[1].get("all") or {}).get("gap_accuracy") or (track[1].get("second_half") or {}).get("gap_accuracy")
+    return {"day": c.get("day") or keys[0].split("::")[-1], "call": c.get("call"), "label": c.get("label"),
+            "built": c.get("built"), "is_latest": True, "outcome": c.get("outcome"), "accuracy": acc}
+
+
+def _sector_pulse(market: str) -> Optional[dict]:
+    """Top gaining and lagging sectors from cached Market Movers data."""
+    from . import movers
+    hit = store.get_company(movers._key(market))
+    rows = (hit[1].get("rows") if hit else None) or []
+    if not rows:
+        return None
+    secs = movers._sectors(rows, "1D") if hasattr(movers, "_sectors") else []
+    if not secs:
+        return None
+    best = secs[0]
+    worst = secs[-1]
+    return {"best": {"sector": best.get("sector"), "ret": best.get("avg")},
+            "worst": {"sector": worst.get("sector"), "ret": worst.get("avg")},
+            "count": len(secs)}
+
+
+def _entry_flips(market: str, mine: set) -> list[dict]:
+    """Recent entry-decision flips (Avoid <-> Enter), prioritizing watchlist stocks."""
+    hit = store.get_company("DRIFT::HISTORY")
+    if not hit or not isinstance(hit[1], dict):
+        return []
+    out = []
+    for sym, d in hit[1].items():
+        if d.get("market", "IN") != market:
+            continue
+        if d.get("entry") and d.get("prev_entry") and d["entry"] != d["prev_entry"]:
+            out.append({"symbol": sym, "name": d.get("name") or sym, "from": d["prev_entry"],
+                        "to": d["entry"], "at": d.get("entry_at"), "mine": sym in mine})
+    out.sort(key=lambda x: (not x["mine"], -(x.get("at") or 0)))
+    return out[:8]
 
 
 def _fiidii() -> Optional[dict]:
@@ -119,9 +169,10 @@ def get(market: str = "IN", symbols: str = "") -> dict:
     day = now.date()
     mine = {s.strip().upper() for s in (symbols or "").split(",") if s.strip()}
     out = {"market": market, "now": now.isoformat(timespec="minutes"), "errors": {}}
-    parts = {"breaking": lambda: news.breaking_now(market)[:2], "breadth": lambda: _breadth(market)}
+    parts = {"breaking": lambda: news.breaking_now(market)[:2], "breadth": lambda: _breadth(market),
+             "sectors": lambda: _sector_pulse(market), "flips": lambda: _entry_flips(market, mine)}
     if market == "IN":
-        parts.update(premarket=lambda: _premarket(day.isoformat()), fiidii=_fiidii,
+        parts.update(premarket=lambda: _premarket(day.isoformat()) or _latest_premarket(), fiidii=_fiidii,
                      ipo=lambda: _ipos(day.isoformat()), results=lambda: _results(day, mine))
     elif market == "US":
         et = calendars.us_eastern_now()

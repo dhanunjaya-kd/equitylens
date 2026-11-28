@@ -4,6 +4,9 @@ import { ago, api } from '../util'
 const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}), headers: { 'Content-Type': 'application/json' } })
 const OPTS = [['breaking', '🔴 Breaking market news', 'Serious market-wide events that at least two publishers report, central-bank emergencies, and NIFTY / SENSEX / S&P 500 / Nasdaq moving 2% or more in a day'],
   ['filings', '📄 Filings of my watchlist stocks', 'Results, orders and deals, corporate actions and top-management changes of the stocks in your watchlists'],
+  ['entry_flips', '🟢 Entry decision flips (Avoid → Enter)', 'Watchlist stocks whose 1–3 year entry verdict turned from Avoid to Enter'],
+  ['high_low_52w', '📈 52-week High / Low breakouts', 'Watchlist stocks hitting a new 52-week high or low'],
+  ['price_targets', '🎯 Terminal price target alerts', 'Custom above/below price alerts created in Live Terminal, even when the browser is closed'],
   ['central', '🏛 RBI and Fed releases', 'Policy, rates, liquidity and market operations'],
   ['top', '📰 Top stories', 'Stories covered by three or more publishers (more messages)']]
 

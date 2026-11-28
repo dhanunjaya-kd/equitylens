@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Logo, SearchBox, ScoreRing } from '../components/ui'
-import { api, flag, getMarket, go, pct, recent, ticker, watchlist, signed, num, ok } from '../util'
+import { api, flag, getMarket, go, isDesktop, pct, recent, ticker, watchlist, signed, num, ok } from '../util'
 
 // 'Today' strip: the day's key facts from data the app already keeps; refreshes itself (every minute in market hours).
 const istNow = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
@@ -24,23 +24,10 @@ const Big = ({ children, c }) => <div className="big" style={c ? { color: c } : 
 const Sub = ({ children, c }) => <div className="sub" style={c ? { color: c } : null}>{children}</div>
 const dayLabel = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
-function TodayStrip({ mk }) {
-  const [d, setD] = useState(null)
-  const [moves, setMoves] = useState(null)
-  const [at, setAt] = useState(null)
-  const syms = watchlist.all().map((w) => w.symbol).filter((s) => (mk === 'US' ? s.startsWith('US:') : !s.startsWith('US:')))
-  const load = () => {
-    api(`/api/today?market=${mk}&symbols=${encodeURIComponent(syms.join(','))}`).then((x) => { setD(x); setAt(new Date()) }).catch(() => {})
-    if (syms.length) api(`/api/watch/quotes?symbols=${encodeURIComponent(syms.slice(0, 40).join(','))}`).then((x) => setMoves(x.rows.filter((r) => ok(r.ret?.['1D'])))).catch(() => {})
-  }
-  useEffect(() => {
-    load()
-    const t = setInterval(load, marketOpen(mk) ? 60000 : 600000)
-    return () => clearInterval(t)
-  }, [mk]) // eslint-disable-line react-hooks/exhaustive-deps
+function TodayStrip({ mk, d, moves, at }) {
   if (!d) return null
   const up = (moves || []).slice().sort((a, b) => b.ret['1D'] - a.ret['1D'])
-  const pm = d.premarket, fd = d.fiidii, ip = d.ipo, rs = d.results
+  const pm = d.premarket, fd = d.fiidii, ip = d.ipo, rs = d.results, sec = d.sectors
   const open = marketOpen(mk)
   const ur = mk === 'US' ? d.results : null, ui = mk === 'US' ? d.ipo : null, bm = mk === 'US' ? d.bigmoney : null
   const callC = pm?.call === 'up' ? 'var(--good)' : pm?.call === 'down' ? 'var(--bad)' : 'var(--muted)'
@@ -60,8 +47,20 @@ function TodayStrip({ mk }) {
       <div className={`today-grid ${mk === 'US' ? 'us' : ''}`}>
         {mk !== 'US' && (
           <TodayTile icon="🌅" tint={pm?.call === 'down' ? 'red' : pm?.call === 'up' ? 'green' : 'grey'} k="NIFTY opening call" onClick={() => go('premarket')} cls={`hero ${pm?.call || ''}`}>
-            {pm ? <><Big c={callC}>{pm.call === 'up' ? '▲ ' : pm.call === 'down' ? '▼ ' : ''}{pm.label}</Big><Sub>Made {String(pm.built || '').slice(-5)} · see its track record</Sub></>
-              : <><Big c="var(--muted)">No call yet</Big><Sub>It is made between 08:20 and 09:15</Sub></>}
+            {pm ? (
+              <>
+                <Big c={callC}>
+                  {pm.is_latest ? <span className="small muted" style={{ fontWeight: 500, display: 'block', fontSize: 12 }}>Last call ({dayLabel(pm.day)})</span> : null}
+                  {pm.call === 'up' ? '▲ ' : pm.call === 'down' ? '▼ ' : ''}{pm.label}
+                  {pm.outcome === 'hit' && <span className="t-good" style={{ fontSize: 14, marginLeft: 6 }}>✓ Hit</span>}
+                </Big>
+                <Sub>
+                  {pm.is_latest
+                    ? `Next call 08:20 IST${ok(pm.accuracy) ? ` · ${num(pm.accuracy, 0)}% accuracy` : ''}`
+                    : `Made ${String(pm.built || '').slice(-5)} · see its track record`}
+                </Sub>
+              </>
+            ) : <><Big c="var(--muted)">No call yet</Big><Sub>It is made between 08:20 and 09:15 IST</Sub></>}
           </TodayTile>
         )}
         {mk !== 'US' && fd && (
@@ -120,9 +119,14 @@ function TodayStrip({ mk }) {
             <Sub>{d.breadth.above200}% above 200-day average · {d.breadth.new_highs} new 52-week highs</Sub>
           </TodayTile>
         )}
-        <TodayTile icon="⚠️" tint="red" k="Breaking" onClick={() => go('news')} cls="news">
-          {d.breaking?.length ? <><div className="headline">{d.breaking[0].title}</div>{d.breaking[0].sources?.[0]?.name && <div className="src-note"><Sub>{d.breaking[0].sources.map((x) => x.name).slice(0, 2).join(' · ')}</Sub></div>}</>
-            : <Sub>Nothing market-wide right now</Sub>}
+        <TodayTile icon="🧭" tint="blue" k="Sector pulse" onClick={() => go('heatmap')}>
+          {sec ? (
+            <>
+              <div className="row between mv"><span className="ellip">{sec.best.sector}</span><b style={{ color: tone(sec.best.ret) }}>{signed(sec.best.ret, 1, '%')}</b></div>
+              <div className="row between mv"><span className="ellip">{sec.worst.sector}</span><b style={{ color: tone(sec.worst.ret) }}>{signed(sec.worst.ret, 1, '%')}</b></div>
+              <Sub>Top &amp; lagging sectors across {sec.count} groups</Sub>
+            </>
+          ) : <Sub>Open Heatmap or Movers to refresh sector pulse</Sub>}
         </TodayTile>
       </div>
     </div>
@@ -131,23 +135,39 @@ function TodayStrip({ mk }) {
 
 export default function Home() {
   const [top, setTop] = useState([])
+  const [todayData, setTodayData] = useState(null)
+  const [moves, setMoves] = useState(null)
+  const [at, setAt] = useState(null)
   const mk = getMarket()
+  const desk = isDesktop()
   useEffect(() => { api(`/api/rankings?sort=overall&market=${mk}`).then((d) => setTop((d.rows || []).slice(0, 5))).catch(() => {}) }, [mk])
+  useEffect(() => {
+    const syms = watchlist.all().map((w) => w.symbol).filter((s) => (mk === 'US' ? s.startsWith('US:') : !s.startsWith('US:')))
+    const load = () => {
+      api(`/api/today?market=${mk}&symbols=${encodeURIComponent(syms.join(','))}`).then((x) => { setTodayData(x); setAt(new Date()) }).catch(() => {})
+      if (syms.length) api(`/api/watch/quotes?symbols=${encodeURIComponent(syms.slice(0, 40).join(','))}`).then((x) => setMoves(x.rows.filter((r) => ok(r.ret?.['1D'])))).catch(() => {})
+    }
+    load()
+    const t = setInterval(load, marketOpen(mk) ? 60000 : 600000)
+    return () => clearInterval(t)
+  }, [mk])
+
   const inMk = (r) => (mk === 'US') === r.symbol.startsWith('US:')
   const rec = recent.all().filter(inMk), watch = watchlist.all().filter(inMk)
+  const flips = todayData?.flips || []
   return (
     <>
-    <TodayStrip mk={mk} />
+    <TodayStrip mk={mk} d={todayData} moves={moves} at={at} />
     <div className="home-grid">
       <div>
       <div style={{ padding: '18px 2px 6px' }}>
         <h1 style={{ margin: '0 0 6px', fontSize: 24 }}>{mk === 'US' ? '🇺🇸 Research any US stock' : '🇮🇳 Research any Indian stock'}</h1>
-        <div className="muted" style={{ marginBottom: 14 }}>
+        <div className="muted" style={{ marginBottom: desk ? 6 : 14 }}>
           {mk === 'US'
             ? 'NYSE & Nasdaq companies: 10+ years of financials, forensics, valuation, chart outlook and a 3 / 5 / 10-year view.'
             : 'NSE & BSE companies: 10+ years of financials, forensics, valuation, chart outlook and a 3 / 5 / 10-year view.'}
         </div>
-        <SearchBox autoFocus />
+        {!desk && <SearchBox autoFocus />}
       </div>
 
       {mk !== 'US' && (
@@ -178,6 +198,20 @@ export default function Home() {
           {watch.map((r) => <span key={r.symbol} className="chip chip-logo" style={{ cursor: 'pointer' }} onClick={() => go(`stock/${r.symbol}`)}><Logo sym={r.symbol} name={r.name} size={18} /><span style={{ color: '#f59e0b' }}>★</span> {flag(r.symbol)} {ticker(r.symbol)}</span>)}
         </div>
       )}
+      {flips.length > 0 && (
+        <div className="card">
+          <div className="row between" style={{ marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>🚦 Entry flips today</h3>
+            <span className="small muted">{flips.length} recent</span>
+          </div>
+          {flips.slice(0, 4).map((f) => (
+            <div key={f.symbol} className="row between small" style={{ padding: '5px 0', cursor: 'pointer' }} onClick={() => go(`stock/${f.symbol}`)}>
+              <span><b>{ticker(f.symbol)}</b> <span className="muted">{f.name}</span></span>
+              <span className={`badge sm ${f.to === 'ENTER' ? 't-good bg-good' : 't-warn bg-warn'}`}>{f.from} → {f.to}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       </div>
       <div className="home-right">
@@ -206,7 +240,7 @@ export default function Home() {
       <div className="card">
         <h3>How it works</h3>
         <ul className="list">
-          <li><span className="ic" style={{ color: 'var(--accent)' }}>1</span>Pulls the company's public financials: 10–12 years of P&L, balance sheet, cash flow, quarterly results, shareholding and peers.</li>
+          <li><span className="ic" style={{ color: 'var(--accent)' }}>1</span>Pulls the company's public financials: 10–12 years of P&amp;L, balance sheet, cash flow, quarterly results, shareholding and peers.</li>
           <li><span className="ic" style={{ color: 'var(--accent)' }}>2</span>Scores growth, quality, balance-sheet strength, cash generation, ownership and valuation (0–100), and flags risks.</li>
           <li><span className="ic" style={{ color: 'var(--accent)' }}>3</span>Projects earnings and price for 3, 5 and 10 years under bear / base / bull assumptions you can see.</li>
         </ul>

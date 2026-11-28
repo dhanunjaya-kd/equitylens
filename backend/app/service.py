@@ -243,7 +243,9 @@ def build_report(symbol: str, refresh: bool = False) -> dict:
     a = analysis.analyse(company, median_pe_from(extras), extras.get("peers"), extras.get("pe_chart"))
     if company.get("market", "IN") == "IN":
         a = dict(a, entry=entry_decision(payload["symbol"], a, extras))
-    store.put_ranking(payload["symbol"], ranking_row(payload, a))
+    row = ranking_row(dict(payload, company=company), a)
+    _record_drift(payload["symbol"], row)
+    store.put_ranking(payload["symbol"], row)
     return {
         "symbol": payload["symbol"],
         "view": payload["view"],
@@ -312,7 +314,40 @@ def ranking_row(payload: dict, a: dict) -> dict:
         "base_5y": h.get("5", {}).get("base", {}).get("cagr"),
         "base_10y": h.get("10", {}).get("base", {}).get("cagr"),
         "high_flags": sum(1 for f in a["flags"] if f["severity"] == "high"),
+        "entry_verdict": (a.get("entry") or {}).get("verdict"),
+        "entry_rule": (a.get("entry") or {}).get("rule"),
     }
+
+
+def _record_drift(symbol: str, row: dict) -> None:
+    """Remember prior score & entry verdict so Portfolio Drift and Today Entry Flips can detect changes."""
+    try:
+        prev = {r["symbol"]: r for r in store.all_rankings()}.get(symbol)
+        if not prev:
+            return
+        hist_hit = store.get_company("DRIFT::HISTORY")
+        hist = dict(hist_hit[1]) if hist_hit else {}
+        changed = False
+        old_biz, new_biz = prev.get("business"), row.get("business")
+        old_ent, new_ent = prev.get("entry_verdict"), row.get("entry_verdict")
+        entry = dict(hist.get(symbol) or {})
+        if isinstance(old_biz, (int, float)) and isinstance(new_biz, (int, float)) and abs(new_biz - old_biz) >= 4:
+            entry["prev_business"] = old_biz
+            entry["business"] = new_biz
+            entry["biz_at"] = time.time()
+            changed = True
+        if old_ent and new_ent and old_ent != new_ent and "NA" not in (old_ent, new_ent):
+            entry["prev_entry"] = old_ent
+            entry["entry"] = new_ent
+            entry["entry_at"] = time.time()
+            entry["name"] = row.get("name")
+            entry["market"] = row.get("market", "IN")
+            changed = True
+        if changed:
+            hist[symbol] = entry
+            store.put_company("DRIFT::HISTORY", hist)
+    except Exception:  # noqa: BLE001 - drift tracking never breaks a report/scan
+        pass
 
 
 # ----------------------------------------------------------------- scan
@@ -360,10 +395,17 @@ def _scan_worker(limit: Optional[int], market: str = "IN", which: str = "N500", 
             cached = store.get_company(scraper.clean_symbol(sym))
             fresh = cached and time.time() - cached[0] < config.SCAN_REUSE_HOURS * 3600
             payload, _ = get_payload(sym, full=False, max_age_h=config.SCAN_REUSE_HOURS)
-            a = analysis.analyse(payload["company"], median_pe_from(payload["extras"]), None, payload["extras"].get("pe_chart"))
-            row = ranking_row(payload, a)
+            company = payload["company"]
+            ratios = company.get("ratios") or {}
+            if company.get("market", "IN") == "IN" and (ratios.get("current_price") is None or ratios.get("pe") is None):
+                company, _ = live_price(company, payload["symbol"])
+            a = analysis.analyse(company, median_pe_from(payload["extras"]), None, payload["extras"].get("pe_chart"))
+            if company.get("market", "IN") == "IN":
+                a = dict(a, entry=entry_decision(payload["symbol"], a, payload["extras"]))
+            row = ranking_row(dict(payload, company=company), a)
             if not row["sector"] and r.get("industry"):
                 row["sector"] = r["industry"]
+            _record_drift(payload["symbol"], row)
             store.put_ranking(payload["symbol"], row)
             if not fresh:
                 time.sleep(config.SCAN_DELAY_SECONDS + random.random() * 1.5)

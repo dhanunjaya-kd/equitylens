@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 
 import requests
 
-from . import config, store
+from . import config, store, vault
 
 FILE = config.DATA_DIR / "brokers.json"
 T = 20  # request timeout
@@ -97,16 +97,21 @@ BROKERS = {
 
 
 # ------------------------------------------------------------------ local storage (git-ignored)
+_SECRET_KEYS = ("api_secret", "secret", "pin", "totp_secret", "access_token", "token", "app_secret", "refresh_token", "feed_token")
+
+
 def _load() -> dict:
     try:
-        return json.loads(FILE.read_text(encoding="utf-8")) if FILE.exists() else {}
+        raw = json.loads(FILE.read_text(encoding="utf-8")) if FILE.exists() else {}
+        return {bid: vault.decrypt_fields(cfg, _SECRET_KEYS) if isinstance(cfg, dict) else cfg for bid, cfg in raw.items()}
     except (OSError, ValueError):
         return {}
 
 
 def _save(d: dict) -> None:
     FILE.parent.mkdir(parents=True, exist_ok=True)
-    FILE.write_text(json.dumps(d, indent=2), encoding="utf-8")
+    enc = {bid: vault.encrypt_fields(cfg, _SECRET_KEYS) if isinstance(cfg, dict) else cfg for bid, cfg in d.items()}
+    FILE.write_text(json.dumps(enc, indent=2), encoding="utf-8")
 
 
 def _cfg(bid: str) -> dict:
