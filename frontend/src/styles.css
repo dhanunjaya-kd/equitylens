@@ -1037,3 +1037,8 @@ html[data-src="off"] .src-note, html[data-src="off"] .src { display: none !impor
 .pc-hrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); }
 .pc-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
 .pc-privacy { margin-top: 12px; } .pc-privacy summary { cursor: pointer; color: var(--muted); }
+
+/* Phones and tablets: a blurred see-through top bar is redrawn on every scroll frame. Keep it solid there. */
+@media (hover: none) {
+  .topbar { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg); }
+}

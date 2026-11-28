@@ -76,7 +76,7 @@ def _cache(key: str):
 
 def live_maps(market: str) -> dict:
     """Read every live cache once; reuse for a whole list."""
-    mv = _cache(f"MOVERS::{market}") or {}
+    mv = _cache(f"MOVERS::v2::{market}") or {}
     from . import universe
     out = {"mv": {r["symbol"]: r for r in mv.get("rows", [])}, "fno": fno() if market == "IN" else {},
            "member": universe.membership() if market == "IN" else {}}

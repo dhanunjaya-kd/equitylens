@@ -41,6 +41,17 @@ app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["
 
 
 @app.on_event("startup")
+async def _more_request_threads():
+    """Each page call runs on a worker thread; the default 40 can all be busy waiting on NSE or SEC
+    while the next tap waits behind them. Waiting threads cost almost nothing, so allow more."""
+    try:
+        import anyio.to_thread
+        anyio.to_thread.current_default_thread_limiter().total_tokens = 120
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@app.on_event("startup")
 def _background_jobs():
     premarket.start_background()      # builds the pre-market page before the open; refreshes its backtest weekly
     from . import fiidii
@@ -495,7 +506,7 @@ def automation_run(task: str):
 def automation_running():
     """Small answer for the top-bar indicator and the Home card (every signed-in user)."""
     from . import automation
-    st = automation.status()
+    st = automation.status_cached()
     return {"overall": st["overall"], "mode": st["mode"],
             "running": [{"id": r["id"], "name": r["name"], "progress": r["progress"], "eta_s": r["eta_s"]} for r in st["tasks"] if r["running"]],
             "queued": [r["name"] for r in st["tasks"] if r["queued"]]}
@@ -694,7 +705,10 @@ def ai_picks(body: dict = Body(...)):
 
 @app.get("/api/movers")
 def movers_get(market: str = "IN", tf: str = "1D", universe: str = ""):
-    return movers.get(market, tf, universe.upper())
+    d = movers.get(market, tf, universe.upper())
+    for r in d.get("rows", []):
+        r.pop("spark_t", None)        # the page draws the sparkline from prices only; dates were ~1/3 of the download
+    return d
 
 
 @app.get("/api/scanners")
@@ -1108,8 +1122,9 @@ def indices_get(market: str = "IN"):
 
 @app.get("/api/logo/{symbol}")
 def logo(symbol: str, name: str = ""):
-    data, media = logos.get(scraper.clean_symbol(symbol), name)
-    return Response(content=data, media_type=media, headers={"Cache-Control": "public, max-age=604800"})
+    data, media, final = logos.lookup(scraper.clean_symbol(symbol), name)
+    # initials while the real logo downloads in the background: let the browser ask again in a few minutes
+    return Response(content=data, media_type=media, headers={"Cache-Control": f"public, max-age={604800 if final else 300}"})
 
 
 @app.get("/api/compare")
@@ -1206,7 +1221,16 @@ def scan_status():
 
 # ------------------------------------------------------------ web app
 if (config.STATIC_DIR / "index.html").exists():
-    app.mount("/assets", StaticFiles(directory=config.STATIC_DIR / "assets"), name="assets")
+    class _Assets(StaticFiles):
+        """Built files have a content hash in their name, so a name never changes meaning:
+        let the browser keep them for a year instead of asking the laptop again on every open."""
+        async def get_response(self, path, scope):
+            res = await super().get_response(path, scope)
+            if res.status_code == 200:
+                res.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return res
+
+    app.mount("/assets", _Assets(directory=config.STATIC_DIR / "assets"), name="assets")
 
     @app.get("/{path:path}")
     def spa(path: str):

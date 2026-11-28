@@ -200,7 +200,16 @@ function Insiders({ mk }) {
   useEffect(() => {
     setD(null); setErr(null)
     const syms = watchlist.all().map((w) => w.symbol).join(',')
-    api(mk === 'US' ? `/api/flows/insiders?market=US&symbols=${encodeURIComponent(syms)}` : '/api/flows/insiders?market=IN&days=30').then(setD).catch((e) => setErr(e.message))
+    const url = mk === 'US' ? `/api/flows/insiders?market=US&symbols=${encodeURIComponent(syms)}` : '/api/flows/insiders?market=IN&days=30'
+    let stop = false, timer = null, tries = 0
+    // India: the list shows at once; filings still being read in the background fill in on these re-checks
+    const load = () => api(url).then((x) => {
+      if (stop) return
+      setD(x)
+      if (x?.waiting > 0 && tries++ < 40) timer = setTimeout(() => (document.hidden ? (timer = setTimeout(load, 20000)) : load()), 20000)
+    }).catch((e) => !stop && setErr(e.message))
+    load()
+    return () => { stop = true; clearTimeout(timer) }
   }, [mk])
   const [fno] = useFno()
   const [univ] = useUniv()
@@ -222,6 +231,7 @@ function Insiders({ mk }) {
           {mk === 'US' ? 'Form 4 filings for your watchlist and your 15 highest-scored US stocks (last 6 months). Insiders sell for many reasons; they usually buy for one.'
             : 'Every insider disclosure on NSE in the last 30 days. Promoters buying from the open market is one of the cleanest signals of confidence.'}
         </div>
+        {d?.waiting > 0 && <div className="small t-warn" style={{ marginTop: 6 }}>⏳ {d.waiting} filings are still being read from NSE in the background. They fill in here by themselves.</div>}
       </div>
       {byCo.length > 0 && (
         <div className="card">

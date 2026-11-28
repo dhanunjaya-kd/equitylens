@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import marshal
 import sqlite3
 import threading
 import time
+from collections import OrderedDict
 from typing import Optional
 
 from . import config
@@ -57,16 +59,80 @@ def init() -> None:
     _rank_cache.pop(str(config.DB_PATH), None)
 
 
+# Big saved payloads (price lists with scans, the all-US list, IPO history...) are read many times a minute.
+# Re-reading and JSON-decoding several MB each time made every page slow. Keep the decoded payload of big
+# entries in memory as marshal bytes, keyed by its save time: a cheap time check, then marshal.loads hands
+# every caller its own fresh copy (about 3x faster than json.loads, and safe to change).
+BIG = 100_000                 # characters of JSON
+_MEM_CAP = 300_000_000        # bytes kept in memory at most
+_dec: "OrderedDict[tuple, tuple[float, bytes]]" = OrderedDict()
+_dec_lock = threading.Lock()
+
+
+def _remember(k: tuple, ts: float, payload) -> None:
+    try:
+        b = marshal.dumps(payload)
+    except ValueError:
+        return
+    with _dec_lock:
+        _dec[k] = (ts, b)
+        _dec.move_to_end(k)
+        total = sum(len(v[1]) for v in _dec.values())
+        while total > _MEM_CAP and len(_dec) > 1:
+            _, (_, old) = _dec.popitem(last=False)
+            total -= len(old)
+
+
+def _forget(symbol: str) -> None:
+    with _dec_lock:
+        _dec.pop((str(config.DB_PATH), symbol), None)
+
+
 def get_company(symbol: str) -> Optional[tuple[float, dict]]:
-    with _conn() as c:
-        r = c.execute("SELECT fetched_at, payload FROM company WHERE symbol=?", (symbol,)).fetchone()
-    return (r["fetched_at"], json.loads(r["payload"])) if r else None
+    k = (str(config.DB_PATH), symbol)
+    with _dec_lock:
+        m = _dec.get(k)
+    c = _conn()
+    if m is not None:
+        r = c.execute("SELECT fetched_at FROM company WHERE symbol=?", (symbol,)).fetchone()
+        if r and r[0] == m[0]:
+            return m[0], marshal.loads(m[1])
+        _forget(symbol)
+    r = c.execute("SELECT fetched_at, payload FROM company WHERE symbol=?", (symbol,)).fetchone()
+    if not r:
+        return None
+    text = r["payload"]
+    payload = json.loads(text)
+    if len(text) >= BIG:
+        _remember(k, r["fetched_at"], payload)
+    return r["fetched_at"], payload
+
+
+def stamp(symbol: str) -> Optional[float]:
+    """When an entry was saved, without reading it."""
+    r = _conn().execute("SELECT fetched_at FROM company WHERE symbol=?", (symbol,)).fetchone()
+    return r[0] if r else None
+
+
+def get_many(symbols: list[str]) -> dict[str, tuple[float, dict]]:
+    """Several small entries in one query: {symbol: (fetched_at, payload)} for those that exist."""
+    out: dict = {}
+    c = _conn()
+    syms = list(dict.fromkeys(s for s in symbols if s))
+    for i in range(0, len(syms), 500):
+        part = syms[i:i + 500]
+        q = "SELECT symbol, fetched_at, payload FROM company WHERE symbol IN (%s)" % ",".join("?" * len(part))
+        for r in c.execute(q, part).fetchall():
+            out[r["symbol"]] = (r["fetched_at"], json.loads(r["payload"]))
+    return out
 
 
 def put_company(symbol: str, payload: dict) -> None:
+    _forget(symbol)
     with _lock, _conn() as c:
         c.execute("INSERT OR REPLACE INTO company(symbol, fetched_at, payload) VALUES (?,?,?)",
                   (symbol, time.time(), json.dumps(payload)))
+    _forget(symbol)
 
 
 def put_ranking(symbol: str, row: dict) -> None:

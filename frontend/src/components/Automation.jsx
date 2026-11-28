@@ -83,11 +83,17 @@ export default function Automation() {
 export function ScanIndicator() {
   const [r, setR] = useState(null)
   useEffect(() => {
-    let stop = false
-    const load = () => api('/api/automation/running').then((x) => !stop && setR(x)).catch(() => !stop && setR(null))
+    // every 8 s while something runs, every 45 s when idle; nothing while the app is in the background
+    let stop = false, timer = null
+    const next = (x) => { if (!stop) timer = setTimeout(load, x?.overall?.running || x?.queued?.length ? 8000 : 45000) }
+    const load = () => {
+      if (document.hidden) return next(null)
+      api('/api/automation/running').then((x) => { if (!stop) { setR(x); next(x) } }).catch(() => { if (!stop) { setR(null); next(null) } })
+    }
+    const wake = () => { if (!document.hidden) { clearTimeout(timer); load() } }
     load()
-    const t = setInterval(load, 8000)
-    return () => { stop = true; clearInterval(t) }
+    document.addEventListener('visibilitychange', wake)
+    return () => { stop = true; clearTimeout(timer); document.removeEventListener('visibilitychange', wake) }
   }, [])
   if (!r || !r.overall?.running) return null
   const p = r.overall.pct

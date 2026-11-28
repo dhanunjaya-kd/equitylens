@@ -72,7 +72,7 @@ export function BreakingSoundCard() {
 export default function BreakingBar({ market }) {
   const [items, setItems] = useState([]), [hid, setHid] = useState(seen())
   useEffect(() => {
-    const load = () => api(`/api/news/breaking?market=${market}`).then((d) => { setItems(d.items || []); ring(d.items || []) }).catch(() => {})
+    const load = () => !document.hidden && api(`/api/news/breaking?market=${market}`).then((d) => { setItems(d.items || []); ring(d.items || []) }).catch(() => {})
     load()
     const t = setInterval(load, 60 * 1000)
     return () => clearInterval(t)

@@ -480,16 +480,37 @@ def _fill_queue() -> None:
             _fetch_filing(url)
 
 
+_pl_busy: set = set()
+
+
+def _refresh_pitlist(lk: str, start, end) -> None:
+    if lk in _pl_busy:
+        return
+    _pl_busy.add(lk)
+
+    def run():
+        try:
+            j = pit_fetch(start, end)
+            if j.get("data"):
+                store.put_company(lk, j)
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            _pl_busy.discard(lk)
+    threading.Thread(target=run, daemon=True).start()
+
+
 def expand_filings(data: list, budget: int = 0) -> tuple[list, int]:
     """Turn NSE's filing list into classic records using each filing's XBRL.
     Up to `budget` uncached filings are read now; the rest are read in the background.
     Returns (records, number still waiting)."""
     out, waiting, todo = [], 0, []
+    saved = store.get_many([_xml_key(u) for u in (_filing_url(r) for r in data) if u])   # one query, not one per filing
     for r in data:
         base = {"symbol": r.get("symbol"), "company": r.get("companyName") or r.get("company"),
                 "intimDt": r.get("broadcastDateTime") or r.get("exchdisstime"), "xbrl": r.get("ixbrl")}
         url = _filing_url(r)
-        hit = store.get_company(_xml_key(url)) if url else None
+        hit = saved.get(_xml_key(url)) if url else None
         rows = hit[1]["rows"] if hit else None
         if rows is None and url and budget > 0:
             budget -= 1
@@ -518,7 +539,7 @@ def insiders_in(days: int = 30, symbol: Optional[str] = None) -> dict:
     sym = (symbol or "").upper()
     key = f"PIT4::IN::{days}" + (f"::{sym}" if sym else "")
     hit = store.get_company(key)
-    if hit and time.time() - hit[0] < (6 * 3600 if not hit[1].get("waiting") else 120):
+    if hit and time.time() - hit[0] < (6 * 3600 if not hit[1].get("waiting") else 15):
         return hit[1]
     end, start = _today(), _today() - timedelta(days=days)
     waiting = 0
@@ -529,12 +550,17 @@ def insiders_in(days: int = 30, symbol: Optional[str] = None) -> dict:
         lhit = store.get_company(lk)
         if lhit and time.time() - lhit[0] < 3 * 3600:
             j = lhit[1]
+        elif lhit and lhit[1].get("data"):
+            j = lhit[1]                                   # show the saved list now, fetch the new one in the background
+            _refresh_pitlist(lk, start, end)
         else:
             j = pit_fetch(start, end)
             store.put_company(lk, j)
         if j.get("kind") == "gg":
             data = [r for r in j["data"] if not sym or (r.get("symbol") or "").upper() == sym]
-            recs, waiting = expand_filings(data, budget=25 if sym else 15)
+            # one stock: read up to 25 filings now. The full list never waits on NSE: it shows what is saved
+            # and the rest are read in the background (the page checks again while any are waiting).
+            recs, waiting = expand_filings(data, budget=25 if sym else 0)
             j = {"data": recs}
     rows = [r for r in parse_pit(j) if r["date"] and (not sym or r["symbol"] == sym)]
     rows.sort(key=lambda r: (r["date"], r["value"] or 0), reverse=True)

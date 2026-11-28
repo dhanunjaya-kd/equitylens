@@ -27,7 +27,7 @@ def test_parse_mktlots():
 
 
 def test_join_fields():
-    store.put_company("MOVERS::IN", {"rows": [{"symbol": "AARTIIND", "ret": {"1W": 2.0, "1M": 5.5, "3M": 9.0, "1Y": 20.0},
+    store.put_company("MOVERS::v2::IN", {"rows": [{"symbol": "AARTIIND", "ret": {"1W": 2.0, "1M": 5.5, "3M": 9.0, "1Y": 20.0},
                                                "above50": True, "above200": False, "from_hi": -3.2, "rvol": 1.8, "new_high": False}]})
     store.put_company("DELIVERY::IN", {"rows": [{"symbol": "AARTIIND", "dp": 62.0, "dq_x": 1.7}]})
     store.put_company("SURV::IN", {"flags": {"BADCO": [{"label": "GSM stage 2", "severity": "high"}]}})

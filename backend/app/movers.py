@@ -345,15 +345,43 @@ _NO_SCAN_TRIED: dict = {}
 def is_stale(market: str, hit=None) -> bool:
     """Saved prices are out of date: none yet, older than the TTL, a market close since, 15 min old in market hours,
     saved before Nasdaq-100 / scanners existed."""
-    hit = hit if hit is not None else store.get_company(_key(market))
-    data = hit[1] if hit else None
+    meta = _meta(hit) if hit is not None else _saved_meta(market)
     now = time.time()
     us_mkt = market == "US"
-    return (not hit) or (now - hit[0] > TTL) or technicals._last_close_after(hit[0], now, us_mkt) \
-        or ((not us_mkt) and technicals._market_open(now) and now - hit[0] > OPEN_TTL) \
-        or (us_mkt and data is not None and data.get("universe") != "SP500+NDX") \
-        or (data is not None and bool(data.get("rows")) and not any("scan" in r for r in data["rows"][:20])
+    if meta is None:
+        return True
+    ts = meta["ts"]
+    return (now - ts > TTL) or technicals._last_close_after(ts, now, us_mkt) \
+        or ((not us_mkt) and technicals._market_open(now) and now - ts > OPEN_TTL) \
+        or (us_mkt and meta["universe"] != "SP500+NDX") \
+        or (meta["rows"] and not meta["scan"]
             and now - _NO_SCAN_TRIED.get(market, 0) > 6 * 3600)          # saved before scanners existed: reload once
+
+
+_meta_memo: dict = {}
+
+
+def _meta(hit) -> Optional[dict]:
+    if not hit:
+        return None
+    data = hit[1] or {}
+    rows = data.get("rows") or []
+    return {"ts": hit[0], "universe": data.get("universe"), "rows": bool(rows), "scan": any("scan" in r for r in rows[:20])}
+
+
+def _saved_meta(market: str) -> Optional[dict]:
+    """The few facts is_stale needs, worked out once per save: the scan status asks every few seconds."""
+    key = _key(market)
+    t = store.stamp(key)
+    if t is None:
+        return None
+    m = _meta_memo.get(key)
+    if m and m["ts"] == t:
+        return m
+    m = _meta(store.get_company(key))
+    if m:
+        _meta_memo[key] = m
+    return m
 
 
 def get(market: str, tf: str = "1D", which: str = "") -> dict:

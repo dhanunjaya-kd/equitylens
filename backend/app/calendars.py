@@ -434,7 +434,7 @@ def earnings(market: str, start: date, days: int = 7) -> dict:
         source = "NSE event calendar (board meetings announced by the companies)"
     ranks = {r["symbol"]: r for r in store.all_rankings() if r.get("market", "IN") == market}
     idx = _index_symbols(market)
-    mv_hit = store.get_company(f"MOVERS::{market}")
+    mv_hit = store.get_company(f"MOVERS::v2::{market}")
     mv = {r["symbol"]: r for r in (mv_hit[1]["rows"] if mv_hit else [])}
     today = datetime.now(IST).date().isoformat()
     from . import enrich, universe

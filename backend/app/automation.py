@@ -71,8 +71,12 @@ def settings() -> dict:
     return out
 
 
+_status_memo: list = [0.0, None]
+
+
 def _save(s: dict) -> None:
     store.put_company(KEY, s)
+    _status_memo[1] = None            # the top-bar ring shows a change at once
 
 
 def mode() -> str:
@@ -138,15 +142,25 @@ def ipo_due(now: datetime, last_ts: float, ts: float) -> bool:
     return now.weekday() < 5 and (9, 0) <= (now.hour, now.minute) <= (17, 30) and ts - last_ts >= 15 * 60
 
 
+_sym_memo: dict = {}
+
+
 def _price_symbols(market: str) -> list[str]:
+    """Symbols in the saved price list, worked out once per save (the list is several MB)."""
     from . import movers
-    hit = store.get_company(movers._key(market))
-    return [r["symbol"] for r in (hit[1].get("rows", []) if hit else [])]
+    key = movers._key(market)
+    t = store.stamp(key)
+    m = _sym_memo.get(key)
+    if m and m[0] == t:
+        return list(m[1])
+    hit = store.get_company(key)
+    syms = [r["symbol"] for r in (hit[1].get("rows", []) if hit else [])]
+    _sym_memo[key] = (hit[0] if hit else None, syms)
+    return list(syms)
 
 
 def _ts(key: str) -> Optional[float]:
-    hit = store.get_company(key)
-    return hit[0] if hit else None
+    return store.stamp(key)          # only the save time: never decode a big list for it
 
 
 # ------------------------------------------------------------------ each scan: running / progress, due, start, last run
@@ -344,6 +358,15 @@ def start_background() -> None:
 
 
 # ------------------------------------------------------------------ one list of everything
+def status_cached(max_age: float = 3.0) -> dict:
+    """status() shared for a few seconds: every open phone, tablet and tab asks for it."""
+    if _status_memo[1] is not None and time.time() - _status_memo[0] < max_age:
+        return _status_memo[1]
+    st = status()
+    _status_memo[0], _status_memo[1] = time.time(), st
+    return st
+
+
 def status() -> dict:
     now = datetime.now(IST)
     ts = time.time()

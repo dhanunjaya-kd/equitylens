@@ -220,7 +220,7 @@ def check_price_alerts(prices: Optional[dict[str, float]] = None) -> int:
     if prices is None:
         prices = {}
         for mk in ("IN", "US"):
-            mv = store.get_company(f"MOVERS::{mk}")
+            mv = store.get_company(f"MOVERS::v2::{mk}")
             for r in ((mv[1] if mv else {}).get("rows") or []):
                 sp = (r.get("spark") or [None])[-1]
                 if sp is not None:
@@ -270,7 +270,7 @@ def check_price_alerts(prices: Optional[dict[str, float]] = None) -> int:
     if s.get("high_low_52w", True) and watch:
         today_str = datetime.now(IST).date().isoformat()
         for mk in s.get("markets", ["IN", "US"]):
-            mv = (store.get_company(f"MOVERS::{mk}") or (0, {}))[1]
+            mv = (store.get_company(f"MOVERS::v2::{mk}") or (0, {}))[1]
             for r in mv.get("rows") or []:
                 sym = r.get("symbol")
                 if sym not in watch or not (r.get("new_high") or r.get("new_low")):

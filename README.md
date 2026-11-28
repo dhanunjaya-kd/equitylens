@@ -699,6 +699,15 @@ AI keys and model names: see `backend/.env.example`, or set them in ⚙️ Setti
 
 ---
 
+### ⚡ Speed
+
+- Big saved lists (prices with scan results, the all-US list, IPO history) are kept decoded in memory and checked by their save time, so pages no longer re-read several MB on every visit.
+- The scan ring in the top bar asks only for save times: every 8 s while a scan runs, every 45 s when idle, never while the app is in the background.
+- A logo that hasn't been downloaded yet shows the company's initials at once. The real logo downloads in the background and appears on the next visit. Pages never wait for logos.
+- Insider trades show at once. Filings still being read from NSE fill in by themselves.
+- React is a separate small file; the chart libraries load only on pages with charts. App files are cached by the browser, since their names change with every build.
+- On phones and tablets the top bar is solid instead of blurred, which makes scrolling cheaper.
+
 ## 🧭 How it works
 
 <img src="docs/pipeline.svg" alt="How EquityLens works: fetch, analyse and test, store and check, your screen and Telegram (animated)" width="100%"/>
@@ -782,7 +791,7 @@ cd backend
 python run_tests.py
 ```
 
-267 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+273 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
