@@ -417,6 +417,42 @@ Sidebar → **Scanners** (phone: More → Scanners). On the daily prices Market 
 - Columns: 1D, LTP, **ADR %**, **RS rating** (IBD-style 12-month rank within the list), **TI65**, **linearity** (R² of the last 65 closes), % from 52-week high / low, market cap, turnover; filters and a copy-to-TradingView list. Badges also show on Market Movers.
 - **Tested record** for every scanner: each past session's close is checked with the same rule and the stock's move 5, 20 and 60 sessions later is compared with "any stock, any day" (median, % up, number of signals; under 30 signals is marked too few). Limits are on the page: today's list only, about one year of signals, no costs.
 
+### 📐 Chart patterns, gaps and candlesticks (More → Chart patterns)
+- **Classic patterns, daily and weekly:** double/triple bottoms and tops, head and shoulders (both ways), triangles, wedges, rectangles, channels, broadening.
+- **How they're found:** each pattern is found on the stock's real swing points (5 years of candles) and drawn on those exact points with breakout, target and stop. Every rule is written out under "Learn this pattern". A shape that misses any rule is not shown.
+- **Tabs:**
+  - *Forming now*: all swing points are in place, no breakout yet.
+  - *Breaking out*: a close beyond the line in the last 5 daily or 3 weekly candles.
+  - *Confirmed*: that candle traded at least 1.5x its average volume (1.3x weekly). Otherwise it's *Marginal*.
+- **Tested record:** every past breakout is followed forward to see whether it reached its target or its stop first. A test proves the detector never uses future candles: history cut at any day gives exactly the same breakouts.
+- **Gaps:** full gaps of 1% or more, whether they filled, and how often past gaps filled.
+- **Candlesticks:** 14 candlestick patterns with written rules, each with its record against any day.
+
+### 🚀 Breakout cards (Scanners → Breakouts → Cards)
+- **Scanners:** new 3-month, 52-week and 5-year highs. The app has 5 years of prices, so it never calls a high "all-time".
+- **Score:** each card has a 0–100 score built only from parts shown on the card: close near the high 25, volume 25, above the EMAs 20, held the level 15, small upper wick 15.
+- **Checked:** past 52-week-high closes are grouped by score band, so you can see whether the score actually mattered.
+
+### 📈 Chart: 58 indicators and drawing tools
+- **Indicators:** a searchable picker with groups, favourites, recent, and On price / Own pane. Every indicator uses standard settings and is checked in tests against the independent `ta` library; Parabolic SAR is checked against TradingView's documented algorithm.
+- **Drawing tools:**
+  - Lines: trend, ray, extended, horizontal, vertical
+  - Parallel channel, Fibonacci, price range
+  - Shapes: rectangle, circle, ellipse, triangle, path
+  - Arrows, brush, highlighter, text
+  - Magnet snapping
+  - Tap a drawing to select and delete it
+- **On the iPad:** drawing works with a finger, and the chart stops panning while a tool is in use.
+
+### 📊 Market dashboard (More → Dashboard)
+- **Market pulse 0–100**, made of five parts, all shown: stocks up 30%, above the 50-day 25%, above the 200-day 15%, volume in rising stocks 20%, calm 10%. Its daily history is rebuilt from every stock's candles, with what NIFTY did 20 sessions after each zone.
+- **Breadth:** from NSE's full end-of-day file (Nasdaq's list for the US).
+- **Index pulse:** intraday lines for the main indices.
+- **Sector rotation:** RS-Ratio and RS-Momentum against NIFTY 50 / S&P 500, with tails, daily and weekly. The formulas are on the page.
+
+### 🗺️ Heatmap extras
+- *Group by → Up vs down* (bullish / bearish / unchanged), and *Show → F&O stocks*.
+
 ### 🇺🇸 Every US stock
 
 - **The stock list**: every common stock and ADR on NYSE, Nasdaq and NYSE American from Nasdaq's public screener (warrants, rights, units and preferreds are dropped; a day move that disagrees with the price change is left out; market cap exactly as Nasdaq states it). Raw answers: `backend/data/us_raw/`.
@@ -791,7 +827,7 @@ cd backend
 python run_tests.py
 ```
 
-273 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+288 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|

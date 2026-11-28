@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ago, api, cr, getMarket, go, rs, signed } from '../util'
+import { ago, api, cr, getMarket, go, ok, rs, signed } from '../util'
 import { Logo, useUsUniv } from '../components/ui'
 
 const TFS = ['1D', '1W', '1M', '3M', '1Y']
@@ -142,7 +142,7 @@ function Preview({ r, tf, pos }) {
 }
 
 // ---------------------------------------------------------------- the whole map (web)
-function MapWeb({ rows, sectors, tf, size, width }) {
+function MapWeb({ rows, sectors, tf, size, width, grouped }) {
   const [pick, setPick] = useState(null), [hover, setHover] = useState(null)
   const wrap = useRef(null)
   const H = Math.max(480, Math.min(780, Math.round(width * 0.58)))
@@ -153,7 +153,7 @@ function MapWeb({ rows, sectors, tf, size, width }) {
     const groups = sectors.map((s) => {
       const rs = rows.filter((r) => r.sector === s.sector).map((r) => ({ r, v: wOf.get(r.symbol) })).sort((a, b) => b.v - a.v)
       return { s, rs, v: rs.reduce((a, b) => a + b.v, 0) }
-    }).filter((g) => g.v > 0).sort((a, b) => b.v - a.v)
+    }).filter((g) => g.v > 0).sort((a, b) => (grouped ? 0 : b.v - a.v))
     const boxes = squarify(groups, 0, 0, width, H)
     const secs = [], tiles = []
     boxes.forEach((b) => {
@@ -174,8 +174,8 @@ function MapWeb({ rows, sectors, tf, size, width }) {
     <div ref={wrap} className="hm-map" style={{ height: H }} onClick={() => setPick(null)}>
       {layout.tiles.map((t) => <Tile key={t.r.symbol} t={t} tf={tf} onPick={(r, e) => { setHover(null); setPick({ r, pos: at(e) }) }} onHover={(r, e) => setHover(r && !pick ? { r, pos: at(e) } : null)} />)}
       {layout.secs.filter((s) => s.head).map((s) => (
-        <button key={s.s.sector} className="hm-head" style={{ left: s.x, top: s.y, width: s.w }} onClick={(e) => { e.stopPropagation(); go(`heatmap/${encodeURIComponent(s.s.sector)}`) }}>
-          {s.s.sector} · {signed(s.s.avg, 2, '%')} · {s.s.up} of {s.s.priced} up
+        <button key={s.s.sector} className={`hm-head ${grouped ? `grp ${s.s.sector.toLowerCase()}` : ''}`} style={{ left: s.x, top: s.y, width: s.w }} onClick={(e) => { e.stopPropagation(); if (!grouped) go(`heatmap/${encodeURIComponent(s.s.sector)}`) }}>
+          {grouped ? `${s.s.sector} ${s.s.sector === 'Bullish' ? '▲' : s.s.sector === 'Bearish' ? '▼' : ''} ${s.s.count} of ${s.s.total} stocks · avg ${signed(s.s.avg, 2, '%')}` : `${s.s.sector} · ${signed(s.s.avg, 2, '%')} · ${s.s.up} of ${s.s.priced} up`}
         </button>
       ))}
       {hover && <Preview r={hover.r} tf={tf} pos={hover.pos} />}
@@ -186,23 +186,23 @@ function MapWeb({ rows, sectors, tf, size, width }) {
 
 // ---------------------------------------------------------------- one card per sector (phone)
 const PER_SECTOR = 8
-function MapPhone({ rows, sectors, tf, size, width }) {
+function MapPhone({ rows, sectors, tf, size, width, grouped }) {
   const [pick, setPick] = useState(null)
   const ws = useMemo(() => { const w = weights(rows, size); return new Map(rows.map((r, i) => [r.symbol, w[i]])) }, [rows, size])
   const groups = useMemo(() => sectors.map((s) => {
     const rs = rows.filter((r) => r.sector === s.sector).map((r) => ({ r, v: ws.get(r.symbol) })).sort((a, b) => b.v - a.v)
     return { s, rs, v: rs.reduce((a, b) => a + b.v, 0) }
-  }).filter((g) => g.v > 0).sort((a, b) => b.v - a.v), [rows, sectors, ws])
+  }).filter((g) => g.v > 0).sort((a, b) => (grouped ? 0 : b.v - a.v)), [rows, sectors, ws, grouped])
   const inner = Math.max(200, width - 14)
   return (
     <>
       {groups.map((g, gi) => {
         const h = gi < 3 ? 190 : gi < 8 ? 160 : 130
-        const top = g.rs.slice(0, PER_SECTOR)
+        const top = g.rs.slice(0, grouped ? 30 : PER_SECTOR)
         const tiles = squarify(top, 0, 0, inner, h)
         return (
           <div key={g.s.sector} className="hm-pcard">
-            <button className="hm-phead" onClick={() => go(`heatmap/${encodeURIComponent(g.s.sector)}`)}>
+            <button className="hm-phead" onClick={() => !grouped && go(`heatmap/${encodeURIComponent(g.s.sector)}`)}>
               <b>{g.s.sector}</b><span className="small muted">{signed(g.s.avg, 2, '%')} · {g.s.up}/{g.s.priced} up ›</span>
             </button>
             <div className="hm-map" style={{ height: h, margin: '0 6px' }}>
@@ -319,9 +319,11 @@ export default function Heatmap({ sector }) {
   const [size, setSize] = useState(SIZES.some((x) => x[0] === saved.size) ? saved.size : 'mcap')
   const [univ, setUniv] = useState(saved.univ === 'ALL' ? 'ALL' : 'N500')
   const [more, setMore] = useState(false)
+  const [fnoOnly, setFnoOnly] = useState(!!saved.fno)
+  const [group, setGroup] = useState(saved.group === 'updown' ? 'updown' : 'sector')
   const [uu, setUu] = useUsUniv()
   const US_CH = [['SP500', 'S&P 500'], ['NDX', 'Nasdaq-100'], ['ALL', 'All US']]
-  useEffect(() => { try { localStorage.setItem('eql_heatmap', JSON.stringify({ tf, size, univ })) } catch { /* private mode */ } }, [tf, size, univ])
+  useEffect(() => { try { localStorage.setItem('eql_heatmap', JSON.stringify({ tf, size, univ, fno: fnoOnly, group })) } catch { /* private mode */ } }, [tf, size, univ, fnoOnly, group])
   const [d, setD] = useState(null)
   const [ref, width] = useWidth()
   const poll = useRef(null)
@@ -335,6 +337,23 @@ export default function Heatmap({ sector }) {
     return () => clearInterval(poll.current)
   }, [d?.status?.running, filling]) // eslint-disable-line react-hooks/exhaustive-deps
   const phone = width > 0 && width < PHONE
+  // F&O-only list and the "Up vs down" grouping, worked out from the same rows
+  const view = useMemo(() => {
+    if (!d) return null
+    let rows = d.rows
+    if (mk === 'IN' && fnoOnly) rows = rows.filter((r) => r.fno)
+    const stat = (name, rs, total) => {
+      const pr = rs.filter((r) => ok(r.ret?.[tf]))
+      return { sector: name, avg: pr.length ? pr.reduce((a, r) => a + r.ret[tf], 0) / pr.length : null, up: pr.filter((r) => r.ret[tf] > 0).length, priced: pr.length, count: rs.length, total }
+    }
+    if (group === 'updown') {
+      const g = (r) => (!ok(r.ret?.[tf]) || Math.abs(r.ret[tf]) < 0.1 ? 'Unchanged' : r.ret[tf] > 0 ? 'Bullish' : 'Bearish')
+      const rs = rows.map((r) => ({ ...r, sector: g(r) }))
+      return { rows: rs, sectors: ['Bullish', 'Bearish', 'Unchanged'].map((n) => stat(n, rs.filter((r) => r.sector === n), rs.length)), grouped: true }
+    }
+    if (!(mk === 'IN' && fnoOnly)) return { rows, sectors: d.sectors, grouped: false }
+    return { rows, sectors: [...new Set(rows.map((r) => r.sector))].map((n) => stat(n, rows.filter((r) => r.sector === n), rows.length)), grouped: false }
+  }, [d, fnoOnly, group, tf, mk])
   const st = d?.status || {}
   const noMcapAll = d && d.rows.length > 0 && d.no_mcap === d.rows.length
   const list = mk === 'US' ? ({ SP500: 'S&P 500', NDX: 'Nasdaq-100', ALL: 'All US stocks' }[d?.universe] || 'S&P 500') : univ === 'ALL' && d?.universe === 'ALL' ? 'All NSE stocks' : 'NIFTY 500'
@@ -344,7 +363,7 @@ export default function Heatmap({ sector }) {
         <div className="row between" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
           <div>
             <h2 style={{ margin: 0 }}>🗺️ Heatmap</h2>
-            <div className="small muted">{list} · {d?.rows?.length || 0} stocks{d?.session ? ` · ${d.live ? 'live session' : 'close of'} ${new Date(d.session + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}{d?.updated ? ` · updated ${ago(d.updated)}` : ''} · Yahoo, may be delayed</div>
+            <div className="small muted">{list}{mk === 'IN' && fnoOnly ? ' · F&O stocks only' : ''} · {view?.rows?.length || 0} stocks{d?.session ? ` · ${d.live ? 'live session' : 'close of'} ${new Date(d.session + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}{d?.updated ? ` · updated ${ago(d.updated)}` : ''} · Yahoo, may be delayed</div>
           </div>
           <Legend tf={tf} />
         </div>
@@ -359,6 +378,8 @@ export default function Heatmap({ sector }) {
                 {mk === 'IN' && <Chips list={[['N500', 'NIFTY 500'], ['ALL', 'All NSE']]} value={univ} onPick={setUniv} label="Stocks" />}
                 {mk === 'US' && <Chips list={US_CH} value={uu} onPick={setUu} label="Stocks" />}
                 <Chips list={SIZES} value={size} onPick={setSize} label="Box size" />
+                <Chips list={[['sector', 'Sector'], ['updown', 'Up vs down']]} value={group} onPick={setGroup} label="Group by" />
+                {mk === 'IN' && <Chips list={[['all', 'Every stock'], ['fno', 'F&O stocks']]} value={fnoOnly ? 'fno' : 'all'} onPick={(k) => setFnoOnly(k === 'fno')} label="Show" />}
               </div>
             )}
           </>
@@ -368,6 +389,8 @@ export default function Heatmap({ sector }) {
             {mk === 'US' && <Chips list={US_CH} value={uu} onPick={setUu} label="Stocks" />}
             <Chips list={TFS.map((k) => [k, k])} value={tf} onPick={setTf} label="Period" />
             <Chips list={SIZES} value={size} onPick={setSize} label="Box size" />
+            <Chips list={[['sector', 'Sector'], ['updown', 'Up vs down']]} value={group} onPick={setGroup} label="Group by" />
+            {mk === 'IN' && <Chips list={[['all', 'Every stock'], ['fno', 'F&O stocks']]} value={fnoOnly ? 'fno' : 'all'} onPick={(k) => setFnoOnly(k === 'fno')} label="Show" />}
           </div>
         )}
         {mk === 'IN' && univ === 'ALL' && d && d.universe !== 'ALL' && !st.running && (
@@ -391,8 +414,9 @@ export default function Heatmap({ sector }) {
       {d && !d.rows.length && <div className="card empty">{st.running ? 'Fetching prices for the whole list. The first load takes 1–3 minutes, after that it’s instant.' : 'No prices yet.'}</div>}
       {d && d.rows.length > 0 && width > 0 && (sector
         ? <SectorView name={sector} d={d} tf={tf} size={size} phone={phone} width={width} />
-        : phone ? <MapPhone rows={d.rows} sectors={d.sectors} tf={tf} size={size} width={width} />
-          : <MapWeb rows={d.rows} sectors={d.sectors} tf={tf} size={size} width={width} />)}
+        : phone ? <MapPhone rows={view.rows} sectors={view.sectors} tf={tf} size={size} width={width} grouped={view.grouped} />
+          : <MapWeb rows={view.rows} sectors={view.sectors} tf={tf} size={size} width={width} grouped={view.grouped} />)}
+      {d && view?.grouped && <div className="small muted" style={{ marginTop: 6 }}>Bullish = up over {tf}, Bearish = down, Unchanged = moved less than 0.1% (or no price).</div>}
       <p className="disclaimer">Box size = {SIZES.find((x) => x[0] === size)[1].toLowerCase()} · colour = % change over {tf} (full colour at ±{SCALE[tf]}%) · grey = no price.<span className="src-note"> Prices: Yahoo Finance via Market Movers; sectors: NSE's own classification; market cap: the EquityLens scan, or the shares from NSE (India) or the company's SEC filing (US) × last close; score: the EquityLens scan; logos: the company's own logo, or its initials when none is found.</span></p>
     </div>
   )
