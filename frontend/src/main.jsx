@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
 // If the app was updated while this window stayed open, load the new version.
@@ -17,7 +17,7 @@ import './styles.css'
 import { polyfillCountryFlagEmojis } from 'country-flag-emoji-polyfill'
 import flagFont from 'country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url'
 import { BottomNav, Loading, MarketToggle, SearchBox, SideNav, TopActions } from './components/ui'
-import { applyTheme, getMarket, getTheme, go, isDesktop, isUS, marketCurrency, parseHash, setCurrency, setMarketLS, me } from './util'
+import { applyTheme, canGoBack, getMarket, getTheme, go, goBack, isDesktop, isUS, marketCurrency, parseHash, routeKey, setCurrency, setMarketLS, syncNavIdx, me } from './util'
 import IndexStrip from './components/IndexStrip'
 import BreakingBar from './components/BreakingBar'
 import { Gate } from './components/Access'
@@ -47,6 +47,35 @@ const Settings = lazy(() => import('./pages/AI').then((m) => ({ default: m.Setti
 // Windows has no flag emoji: load a small bundled flag font so the flags show instead of 'IN' / 'US'
 polyfillCountryFlagEmojis('Twemoji Country Flags', flagFont)
 
+const KEEP = 4                                              // pages kept open for Back
+const NO_KEEP = new Set(['terminal', 'settings', 'account'])  // live or private pages always start fresh
+
+function renderPage(r) {
+  return (
+    r.page === 'home' ? <Home /> :
+    r.page === 'stock' ? <Stock key={r.symbol} symbol={r.symbol} tab={r.tab} /> :
+    r.page === 'rankings' ? <Rankings /> :
+    r.page === 'watch' ? <Watch /> :
+    r.page === 'screener' ? <Screener /> :
+    r.page === 'movers' ? <Movers /> :
+    r.page === 'heatmap' ? <Heatmap sector={r.sector} /> :
+    r.page === 'premarket' ? <PreMarket /> :
+    r.page === 'account' ? <Account /> :
+    r.page === 'calendar' ? <Calendar tab={r.tab} /> :
+    r.page === 'money' ? <SmartMoney tab={r.tab} /> :
+    r.page === 'fiidii' ? <FiiDii tab={r.tab} /> :
+    r.page === 'news' ? <News /> :
+    r.page === 'ipo' ? <IPO tab={r.tab} /> :
+    r.page === 'terminal' ? <Terminal /> :
+    r.page === 'scanners' ? <Scanners /> :
+    r.page === 'guide' ? <Guide /> :
+    r.page === 'portfolio' ? <Portfolio /> :
+    r.page === 'settings' ? <Settings /> :
+    r.page === 'compare' ? <Compare symbols={r.symbols} /> :
+    null
+  )
+}
+
 function App() {
   const [route, setRoute] = useState(parseHash())
   const [market, setMarket] = useState(getMarket())
@@ -65,8 +94,32 @@ function App() {
     if (route.page === 'stock' || route.page === 'compare') go('')
   }
   if (route.page !== 'stock') setCurrency(marketCurrency(market))
+  // The last few pages stay open (hidden) so Back returns to the same list, filters and scroll position
+  const [alive, setAlive] = useState(() => [{ key: routeKey(route), route }])
+  const scrolls = useRef({})
+  const aliveKeys = useRef([])
+  aliveKeys.current = alive.map((p) => p.key)
+  const curKey = useRef(routeKey(route))
+  const [back, setBack] = useState(false)
   useEffect(() => {
-    const on = () => { setRoute(parseHash()); window.scrollTo(0, 0) }
+    syncNavIdx(); setBack(canGoBack())
+    const on = () => {
+      syncNavIdx(); setBack(canGoBack())
+      const r = parseHash(), k = routeKey(r), was = curKey.current
+      if (k === was) { setRoute(r); setAlive((a) => a.map((p) => (p.key === k ? { key: k, route: r } : p))); return }
+      scrolls.current[was] = window.scrollY
+      curKey.current = k
+      const kept = aliveKeys.current.includes(k)
+      setAlive((a) => {
+        const rest = a.filter((p) => p.key !== k && !NO_KEEP.has(p.route.page))
+        return [...rest.slice(-(KEEP - 1)), { key: k, route: r }]
+      })
+      setRoute(r)
+      requestAnimationFrame(() => {
+        window.scrollTo(0, kept ? (scrolls.current[k] || 0) : 0)
+        window.dispatchEvent(new Event('resize'))        // charts on a page shown again re-measure
+      })
+    }
     window.addEventListener('hashchange', on)
     return () => window.removeEventListener('hashchange', on)
   }, [])
@@ -77,6 +130,9 @@ function App() {
       <div className="content">
       <header className="topbar">
         <div className="topbar-inner">
+          {route.page !== 'home' && <button className="back-btn" title={back ? 'Back' : 'Home'} aria-label="Back" onClick={goBack}>
+            <svg viewBox="0 0 24 24" width="20" height="20"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>}
           {!desk && <div className="brand" onClick={() => go('')} style={{ cursor: 'pointer' }}>
             <img src="/icon.svg" alt="" /><span className="bw">Equity<span>Lens</span></span>
           </div>}
@@ -94,28 +150,11 @@ function App() {
       <main className={route.page === 'terminal' ? 'wrap wrap-wide' : 'wrap'} key={market + theme}>
         <BreakingBar market={route.page === 'stock' ? (isUS(route.symbol) ? 'US' : 'IN') : market} />
         {route.page !== 'settings' && <IndexStrip market={route.page === 'stock' ? (isUS(route.symbol) ? 'US' : 'IN') : market} />}
-        <Suspense fallback={<Loading text="Loading page…" />}>
-          {route.page === 'home' && <Home />}
-          {route.page === 'stock' && <Stock key={route.symbol} symbol={route.symbol} tab={route.tab} />}
-          {route.page === 'rankings' && <Rankings />}
-          {route.page === 'watch' && <Watch />}
-          {route.page === 'screener' && <Screener />}
-          {route.page === 'movers' && <Movers />}
-          {route.page === 'heatmap' && <Heatmap sector={route.sector} />}
-          {route.page === 'premarket' && <PreMarket />}
-          {route.page === 'account' && <Account />}
-          {route.page === 'calendar' && <Calendar tab={route.tab} />}
-          {route.page === 'money' && <SmartMoney tab={route.tab} />}
-          {route.page === 'fiidii' && <FiiDii tab={route.tab} />}
-          {route.page === 'news' && <News />}
-          {route.page === 'ipo' && <IPO tab={route.tab} />}
-          {route.page === 'terminal' && <Terminal />}
-          {route.page === 'scanners' && <Scanners />}
-          {route.page === 'guide' && <Guide />}
-          {route.page === 'portfolio' && <Portfolio />}
-          {route.page === 'settings' && <Settings />}
-          {route.page === 'compare' && <Compare symbols={route.symbols} />}
-        </Suspense>
+        {alive.map((p) => (
+          <div key={p.key} className="page-slot" style={p.key === routeKey(route) ? undefined : { display: 'none' }}>
+            <Suspense fallback={<Loading text="Loading page…" />}>{renderPage(p.route)}</Suspense>
+          </div>
+        ))}
       </main>
       </div>
       {!desk && <BottomNav page={navPage} />}

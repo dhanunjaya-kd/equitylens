@@ -222,8 +222,8 @@ export const recent = {
 }
 
 // hash routing:  #/  #/stock/TCS  #/rankings  #/watch  #/compare?s=A,B
-export function parseHash() {
-  const h = decodeURIComponent(window.location.hash.replace(/^#\/?/, ''))
+export function parseHash(hash = window.location.hash) {
+  const h = decodeURIComponent(hash.replace(/^#\/?/, ''))
   const [path, query] = h.split('?')
   const parts = path.split('/').filter(Boolean)
   const params = new URLSearchParams(query || '')
@@ -248,7 +248,36 @@ export function parseHash() {
   if (parts[0] === 'compare') return { page: 'compare', symbols: (params.get('s') || '').split(',').filter(Boolean) }
   return { page: 'home' }
 }
-export const go = (path) => { window.location.hash = '#/' + path }
+// One page = one step in the history. Tabs inside a page (a stock's Chart / Financials, Smart Money's tabs…)
+// replace the current step, so Back goes to the page you came from, not through every tab.
+export const routeKey = (r) => (r.page === 'stock' ? `stock:${r.symbol}` : r.page)
+let lastIdx = 0
+export const navIdx = () => {
+  const st = window.history.state
+  return st && typeof st.eqlIdx === 'number' ? st.eqlIdx : null
+}
+export function syncNavIdx() {          // a link, a typed address or the first load: give this step its number
+  const i = navIdx()
+  if (i === null) { try { window.history.replaceState({ ...(window.history.state || {}), eqlIdx: lastIdx + (window.location.hash.length > 2 ? 1 : 0) }, '') } catch { /* ignore */ } }
+  lastIdx = navIdx() ?? 0
+  return lastIdx
+}
+export const go = (path, opts = {}) => {
+  const url = '#/' + path
+  if (url === window.location.hash) return
+  const replace = opts.replace ?? routeKey(parseHash(url)) === routeKey(parseHash())
+  const cur = navIdx() ?? lastIdx
+  try {
+    if (replace) window.history.replaceState({ eqlIdx: cur }, '', url)
+    else window.history.pushState({ eqlIdx: cur + 1 }, '', url)
+    lastIdx = replace ? cur : cur + 1
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+  } catch {
+    window.location.hash = url
+  }
+}
+export const canGoBack = () => (navIdx() ?? 0) > 0
+export const goBack = () => { if (canGoBack()) window.history.back(); else go('', { replace: true }) }
 
 export const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1100px)').matches
 
