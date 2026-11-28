@@ -277,6 +277,27 @@ def test_real_nse_pit_filing():
     assert r["before_pct"] == 0.06 and r["after_pct"] == 0.07
 
 
+
+def test_block_trade_listed_in_both_files_shows_once():
+    """The IGIL session of 27 Nov 2026 as the app showed it (rows from NSE's bulk.csv and block.csv)."""
+    def r(kind, client, side, qty):
+        return {"kind": kind, "date": "2026-11-27", "symbol": "IGIL", "name": "Intl Gemological Inst Ltd", "client": client,
+                "side": side, "qty": qty, "price": 417.0, "value": round(qty * 417 / 1e7, 2), "remarks": None}
+    rows = [r("bulk", "BCP ASIA II TOPCO PTE. LTD.", "SELL", 3358016), r("bulk", "BCP ASIA II TOPCO PTE . LTD .", "SELL", 3358015),
+            r("block", "BCP ASIA II TOPCO PTE . LTD .", "SELL", 3358015), r("block", "BCP ASIA II TOPCO PTE. LTD.", "SELL", 3358016),
+            r("bulk", "OLD BRIDGE MUTUAL FUND", "BUY", 2400000), r("block", "OLD BRIDGE MUTUAL FUND", "BUY", 2400000),
+            r("block", "STALLION ASSET PRIVATE LIMITED", "BUY", 1198522)]
+    out = flows.dedupe_deals(rows)
+    assert len(out) == 4                                                   # 2 sells (two trades), Old Bridge once, Stallion once
+    sells = sorted(x["qty"] for x in out if x["side"] == "SELL")
+    assert sells == [3358015, 3358016] and all(x["kind"] == "block" and x.get("also_bulk") for x in out if x["side"] == "SELL")
+    ob = [x for x in out if x["client"].startswith("OLD BRIDGE")]
+    assert len(ob) == 1 and ob[0]["also_bulk"]
+    assert not next(x for x in out if x["client"].startswith("STALLION")).get("also_bulk")
+    only_bulk = [r("bulk", "SOME FUND", "BUY", 1000000)]                  # a bulk deal with no block twin stays
+    assert flows.dedupe_deals(only_bulk)[0]["kind"] == "bulk"
+
+
 if __name__ == "__main__":
     bad = 0
     for n, f in list(globals().items()):

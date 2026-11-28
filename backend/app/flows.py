@@ -196,10 +196,35 @@ def parse_deals(text: str, kind: str) -> list[dict]:
     return out
 
 
+def _client_key(name: str) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (name or "").upper())
+
+
+def dedupe_deals(rows: list[dict]) -> list[dict]:
+    """NSE lists a trade made in the block-deal window in BOTH files: block.csv, and bulk.csv when it is more than
+    0.5% of the company. Same day, stock, client (spaces / dots ignored), side and quantity, price within 0.5%
+    -> one trade, kept as the block deal and marked also_bulk. Different quantities stay separate trades."""
+    blocks = [r for r in rows if r["kind"] == "block"]
+    out = [dict(r) for r in blocks]
+    used: set = set()
+    for b in rows:
+        if b["kind"] != "bulk":
+            continue
+        k = (b["date"], b["symbol"], _client_key(b["client"]), b["side"], b["qty"])
+        hit = next((i for i, x in enumerate(out) if i not in used and (x["date"], x["symbol"], _client_key(x["client"]), x["side"], x["qty"]) == k
+                    and x["price"] and abs(x["price"] - b["price"]) / x["price"] <= 0.005), None)
+        if hit is None:
+            out.append(dict(b))
+        else:
+            used.add(hit)
+            out[hit]["also_bulk"] = True
+    return out
+
+
 def deals() -> dict:
     hit = store.get_company("DEALS::latest")
     if hit and time.time() - hit[0] < 3600:
-        return hit[1]
+        return dict(hit[1], rows=sorted(dedupe_deals(hit[1]["rows"]), key=lambda r: -r["value"]))   # saved before the fix
     got = []
     for kind in ("bulk", "block"):
         text = _demo_deals(kind) if config.DEMO else _nse_text(f"{ARCH}/content/equities/{kind}.csv")
@@ -210,7 +235,7 @@ def deals() -> dict:
     for d, rows in by_day.items():                  # keep a growing day-by-day history for the stock pages
         store.put_company(f"DEALS::{d}", {"rows": rows})
     latest = max(by_day) if by_day else None
-    out = {"date": latest, "rows": sorted(by_day.get(latest, []), key=lambda r: -r["value"]),
+    out = {"date": latest, "rows": sorted(dedupe_deals(by_day.get(latest, [])), key=lambda r: -r["value"]),
            "source": "NSE bulk & block deal files (nsearchives)"}
     store.put_company("DEALS::latest", out)
     return out
@@ -220,7 +245,7 @@ def deals_for(sym: str) -> list[dict]:
     rows = []
     for k in store.keys_like("DEALS::20%"):
         hit = store.get_company(k)
-        rows += [r for r in (hit[1]["rows"] if hit else []) if r["symbol"] == sym]
+        rows += dedupe_deals([r for r in (hit[1]["rows"] if hit else []) if r["symbol"] == sym])
     return sorted(rows, key=lambda r: r["date"], reverse=True)
 
 

@@ -107,7 +107,7 @@ export function StockMoney({ data }) {
           {d.deals?.length ? d.deals.map((x, i) => (
             <div key={i} className="ins-row">
               <div className="grow"><div className="ellip"><SideTag s={x.side} /> <b>{x.client}</b></div>
-                <div className="small muted">{fmtDate(x.date)} · {x.kind} deal · {num(x.qty)} sh @ ₹{num(x.price, 2)}</div></div>
+                <div className="small muted">{fmtDate(x.date)} · {x.kind} deal{x.also_bulk ? ' (also in the bulk list)' : ''} · {num(x.qty)} sh @ ₹{num(x.price, 2)}</div></div>
               <div className={`ins-val ${x.side === 'BUY' ? 't-good' : 't-bad'}`}>{cr(x.value)}</div>
             </div>
           )) : <div className="small muted">No bulk or block deals seen yet. EquityLens keeps every day's deals from the first time you open Smart Money, so history builds up over time.</div>}
@@ -169,7 +169,7 @@ function Deals() {
     <>
       <div className="card" style={{ paddingBottom: 10 }}>
         <div className="row wrapflex" style={{ gap: 6 }}>{[['', 'All'], ['BUY', '🟢 Buys'], ['SELL', '🔴 Sells']].map(([k, l]) => <button key={k} className={`tab ${side === k ? 'on' : ''}`} onClick={() => setSide(k)}>{l}</button>)}</div>
-        <div className="small muted" style={{ marginTop: 6 }}>Bulk deal = one client trades more than 0.5% of a company's shares in a day. Block deal = a large trade done in the special block window.{d?.date ? ` Session ${fmtDate(d.date)}.` : ''}</div>
+        <div className="small muted" style={{ marginTop: 6 }}>Bulk deal = one client trades more than 0.5% of a company's shares in a day. Block deal = a large trade done in the special block window. NSE lists a big block trade in both lists; it is shown once here.{d?.date ? ` Session ${fmtDate(d.date)}.` : ''}</div>
       </div>
       {err && <div className="card t-bad">⚠️ {err}</div>}
       {!d && !err && <div className="card empty">Loading deals…</div>}
@@ -180,7 +180,7 @@ function Deals() {
             <div key={i} className="ins-row" onClick={() => go(`stock/${r.symbol}/money`)}>
               <Logo sym={r.symbol} name={r.name} size={28} />
               <div className="grow" style={{ minWidth: 0 }}>
-                <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol} · {r.kind}</span>{r.fno && <FnoBadge />}</div>
+                <div className="ellip"><b>{r.name}</b> <span className="small muted">{r.symbol} · {r.kind}{r.also_bulk ? ' (also in the bulk list)' : ''}</span>{r.fno && <FnoBadge />}</div>
                 <div className="small ellip"><SideTag s={r.side} /> {r.client}</div>
                 <div className="small muted">{num(r.qty)} sh @ ₹{num(r.price, 2)}</div>
               </div>
