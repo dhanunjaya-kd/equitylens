@@ -152,6 +152,35 @@ def test_money_flow_signs_delivery_by_the_day_move():
     assert d["unclassified"] == len(rows) - 2 and "estimate" in d["method"]
 
 
+
+def test_new_pages_answer_over_http():
+    """Through the real web endpoints (not only the functions): scanners, money flow, IPO history, both markets."""
+    from fastapi.testclient import TestClient
+    from app import main
+    c = TestClient(main.app)
+    for url in ("/api/scanners?market=IN", "/api/scanners?market=US", "/api/moneyflow?market=IN", "/api/moneyflow?market=US",
+                "/api/ipo/history?market=IN", "/api/ipo/history?market=US", "/api/us/universe"):
+        r = c.get(url)
+        assert r.status_code == 200, (url, r.status_code, r.text[:300])
+
+
+def test_rows_saved_before_scanners_trigger_one_reload():
+    from app import movers, store
+    store.put_company(movers._key("IN"), {"rows": [{"symbol": "X", "name": "X", "sector": "S", "ret": {"1D": 1}, "price": 1}],
+                                          "updated": 0, "universe": "N500"})
+    store.put_company(movers._key("IN"), store.get_company(movers._key("IN"))[1])     # fresh timestamp
+    movers._NO_SCAN_TRIED.clear()
+    started = []
+    old = movers.refresh
+    movers.refresh = lambda m, block=False, which="": started.append(m)
+    try:
+        movers.get("IN", "1D", "")
+        movers.get("IN", "1D", "")
+    finally:
+        movers.refresh = old
+    assert started == ["IN"]                      # once, not on every page load
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

@@ -339,6 +339,9 @@ def snapshot_row(x: dict) -> dict:
             "mcap_nasdaq": x.get("market_cap")}
 
 
+_NO_SCAN_TRIED: dict = {}
+
+
 def get(market: str, tf: str = "1D", which: str = "") -> dict:
     market = market.upper()
     tf = tf if tf in TF else "1D"
@@ -348,8 +351,12 @@ def get(market: str, tf: str = "1D", which: str = "") -> dict:
     us_mkt = market == "US"
     stale = (not hit) or (now - hit[0] > TTL) or technicals._last_close_after(hit[0], now, us_mkt) \
         or ((not us_mkt) and technicals._market_open(now) and now - hit[0] > OPEN_TTL)\
-        or (us_mkt and data is not None and data.get("universe") != "SP500+NDX")   # saved before Nasdaq-100 joined
+        or (us_mkt and data is not None and data.get("universe") != "SP500+NDX")\
+        or (data is not None and bool(data.get("rows")) and not any("scan" in r for r in data["rows"][:20])
+            and now - _NO_SCAN_TRIED.get(market, 0) > 6 * 3600)          # saved before scanners existed: reload once
     if stale and not STATE[market]["running"]:
+        if data and data.get("rows") and not any("scan" in r for r in data["rows"][:20]):
+            _NO_SCAN_TRIED[market] = now
         refresh(market)
     rows = data["rows"] if data else []
     loaded = (data or {}).get("universe") or ("N500" if market == "IN" else "SP500")

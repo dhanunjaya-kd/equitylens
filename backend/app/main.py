@@ -712,6 +712,7 @@ def ipo_get(market: str = "IN", refresh: bool = False):
 @app.get("/api/ipo/history")
 def ipo_history(market: str = "IN", refresh: bool = False):
     """Listings of the last 2 years: listing-day and since-listing moves, IPO-base status and (India) lock-in dates."""
+    from . import ipo
     return ipo.history(market, refresh)
 
 

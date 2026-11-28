@@ -2,3 +2,5 @@
 *.vbs text eol=crlf
 *.ps1 text eol=crlf
 *.sh  text eol=lf
+# built web page: never convert line endings (stops Windows from showing these files as changed and blocking git pull)
+backend/static/** -text
