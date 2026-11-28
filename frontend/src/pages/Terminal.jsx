@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, createChart, createTextWatermark } from 'lightweight-charts'
+import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, createChart, createSeriesMarkers, createTextWatermark } from 'lightweight-charts'
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api, getMarket, num, ok, saveLocal, signed } from '../util'
 import { chime } from '../components/BreakingBar'
+import { INDICATORS, BY_ID, calc as icalc } from '../indicators'
+import IndicatorPicker, { addRecent } from '../components/IndicatorPicker'
+import { TOOL, TOOL_GROUPS, drawShapes, hitTest } from '../components/drawing'
 
 // Live terminal: a screen, no orders. NSE stocks, index options, stock F&O, US stocks.
 // Every panel shows the time its source stamped. A figure that fails a check is left out with the reason.
@@ -42,100 +45,6 @@ function usePoll(fn, ms, deps) {
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-// ---------------------------------------------------------------- indicators (worked out here from the candles)
-const sma = (v, n) => v.map((_, i) => (i >= n - 1 ? v.slice(i - n + 1, i + 1).reduce((a, b) => a + b, 0) / n : null))
-const ema = (v, n) => { const k = 2 / (n + 1); let e = null; return v.map((x, i) => { e = e === null ? x : x * k + e * (1 - k); return i >= n - 1 ? e : null }) }
-function boll(v, n = 20, m = 2) {
-  const mid = sma(v, n)
-  return v.map((_, i) => { if (mid[i] === null) return [null, null, null]; const w = v.slice(i - n + 1, i + 1); const sd = Math.sqrt(w.reduce((a, b) => a + (b - mid[i]) ** 2, 0) / n); return [mid[i] + m * sd, mid[i], mid[i] - m * sd] })
-}
-function atr(b, n) { const tr = b.map((x, i) => (i ? Math.max(x.h - x.l, Math.abs(x.h - b[i - 1].c), Math.abs(x.l - b[i - 1].c)) : x.h - x.l)); let a = null; return tr.map((t, i) => { a = i < n ? (i === n - 1 ? tr.slice(0, n).reduce((p, q) => p + q, 0) / n : null) : (a * (n - 1) + t) / n; return a }) }
-function supertrend(b, n = 10, m = 3) {
-  const a = atr(b, n), out = []
-  let up = null, dn = null, trend = 1
-  b.forEach((x, i) => {
-    if (a[i] === null) { out.push([null, 0]); return }
-    const mid = (x.h + x.l) / 2, bu = mid - m * a[i], bd = mid + m * a[i]
-    up = up === null || b[i - 1].c < up ? bu : Math.max(bu, up)
-    dn = dn === null || b[i - 1].c > dn ? bd : Math.min(bd, dn)
-    if (trend === 1 && x.c < up) trend = -1; else if (trend === -1 && x.c > dn) trend = 1
-    out.push([trend === 1 ? up : dn, trend])
-  })
-  return out
-}
-function rsi(v, n = 14) { let g = 0, l = 0; return v.map((x, i) => { if (!i) return null; const d = x - v[i - 1]; if (i <= n) { g += Math.max(d, 0); l += Math.max(-d, 0); if (i < n) return null; g /= n; l /= n } else { g = (g * (n - 1) + Math.max(d, 0)) / n; l = (l * (n - 1) + Math.max(-d, 0)) / n } return l === 0 ? 100 : 100 - 100 / (1 + g / l) }) }
-function macd(v) { const f = ema(v, 12), s = ema(v, 26); const m = v.map((_, i) => (f[i] !== null && s[i] !== null ? f[i] - s[i] : null)); const start = m.findIndex((x) => x !== null); const sig = start < 0 ? m.map(() => null) : [...m.slice(0, start).map(() => null), ...ema(m.slice(start), 9)]; return m.map((x, i) => [x, sig[i], x !== null && sig[i] !== null ? x - sig[i] : null]) }
-
-const IND = [
-  ['vol', 'Volume'], ['vwap', 'VWAP (intraday)'], ['ema9', 'EMA 9'], ['ema20', 'EMA 20'], ['ema50', 'EMA 50'], ['ema200', 'EMA 200'],
-  ['sma20', 'SMA 20'], ['sma50', 'SMA 50'], ['bb', 'Bollinger Bands (20, 2)'], ['st', 'Supertrend (10, 3)'], ['rsi', 'RSI (14) · own pane'], ['macd', 'MACD (12, 26, 9) · own pane'],
-]
-const IND_COLOR = { vwap: '#ff9800', ema9: '#00bcd4', ema20: '#2962ff', ema50: '#e040fb', ema200: '#ffeb3b', sma20: '#26a69a', sma50: '#ef5350', bb: '#787b86' }
-
-// ---------------------------------------------------------------- drawing tools (kept per symbol in this browser)
-const TOOLS = [
-  ['cursor', 'Crosshair', <path key="a" d="M12 3v18M3 12h18" />],
-  ['trend', 'Trend line (2 clicks)', <><path key="a" d="M4 19L20 5" /><circle key="b" cx="4" cy="19" r="1.6" /><circle key="c" cx="20" cy="5" r="1.6" /></>],
-  ['ray', 'Ray (2 clicks)', <><path key="a" d="M4 18L21 6" /><circle key="b" cx="4" cy="18" r="1.6" /></>],
-  ['hline', 'Horizontal line (1 click)', <path key="a" d="M3 12h18" />],
-  ['vline', 'Vertical line (1 click)', <path key="a" d="M12 3v18" />],
-  ['rect', 'Rectangle (2 clicks)', <rect key="a" x="4" y="6" width="16" height="12" rx="1" />],
-  ['fib', 'Fib retracement (2 clicks)', <><path key="a" d="M3 5h18M3 9.5h18M3 14h18M3 19h18" /></>],
-  ['measure', 'Measure (2 clicks)', <><path key="a" d="M4 20L20 4M7 20l-3-3M20 7l-3-3" /></>],
-]
-const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
-const DRAW_C = '#2962ff'
-
-function drawShapes(ctx, w, h, chart, series, shapes, temp, dark) {
-  ctx.clearRect(0, 0, w, h)
-  const X = (t) => chart.timeScale().timeToCoordinate(t)
-  const Y = (p) => series.priceToCoordinate(p)
-  const txt = dark ? '#d1d4dc' : '#131722'
-  const all = temp ? [...shapes, temp] : shapes
-  ctx.lineWidth = 1.5
-  ctx.font = '11px -apple-system, Segoe UI, sans-serif'
-  for (const s of all) {
-    const [a, b] = s.p
-    const xa = a && X(a.t), ya = a && Y(a.v), xb = b && X(b.t), yb = b && Y(b.v)
-    ctx.strokeStyle = DRAW_C; ctx.fillStyle = DRAW_C; ctx.setLineDash(s === temp ? [4, 3] : [])
-    if (s.k === 'hline' && ya !== null) {
-      ctx.beginPath(); ctx.moveTo(0, ya); ctx.lineTo(w, ya); ctx.stroke()
-      ctx.fillText(num(a.v, 2), 6, ya - 4)
-    } else if (s.k === 'vline' && xa !== null) {
-      ctx.beginPath(); ctx.moveTo(xa, 0); ctx.lineTo(xa, h); ctx.stroke()
-    } else if (b && xa !== null && xb !== null && ya !== null && yb !== null) {
-      if (s.k === 'trend') { ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(xb, yb); ctx.stroke() }
-      if (s.k === 'ray') {
-        const dx = xb - xa, dy = yb - ya, k = dx === 0 ? 0 : (w - xa) / dx
-        ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(dx === 0 ? xb : w, dx === 0 ? (dy > 0 ? h : 0) : ya + dy * k); ctx.stroke()
-      }
-      if (s.k === 'rect') { ctx.globalAlpha = 0.12; ctx.fillRect(Math.min(xa, xb), Math.min(ya, yb), Math.abs(xb - xa), Math.abs(yb - ya)); ctx.globalAlpha = 1; ctx.strokeRect(Math.min(xa, xb), Math.min(ya, yb), Math.abs(xb - xa), Math.abs(yb - ya)) }
-      if (s.k === 'fib') {
-        FIB.forEach((f) => {
-          const p = b.v + (a.v - b.v) * f, y = Y(p)
-          if (y === null) return
-          ctx.globalAlpha = f === 0.5 || f === 0.618 ? 1 : 0.7
-          ctx.beginPath(); ctx.moveTo(Math.min(xa, xb), y); ctx.lineTo(w, y); ctx.stroke()
-          ctx.fillStyle = txt; ctx.fillText(`${f} (${num(p, 2)})`, Math.min(xa, xb) + 4, y - 3); ctx.fillStyle = DRAW_C
-        })
-        ctx.globalAlpha = 1
-      }
-      if (s.k === 'measure') {
-        const up = b.v >= a.v
-        ctx.globalAlpha = 0.16; ctx.fillStyle = up ? '#089981' : '#f23645'; ctx.fillRect(Math.min(xa, xb), Math.min(ya, yb), Math.abs(xb - xa), Math.abs(yb - ya)); ctx.globalAlpha = 1
-        const lab = `${signed(b.v - a.v, 2)} (${signed(((b.v - a.v) / a.v) * 100, 2, '%')})${s.bars ? ` · ${s.bars} bars` : ''}`
-        ctx.fillStyle = up ? '#089981' : '#f23645'
-        const tw = ctx.measureText(lab).width + 10
-        ctx.fillRect((xa + xb) / 2 - tw / 2, Math.min(ya, yb) - 20, tw, 17)
-        ctx.fillStyle = '#fff'; ctx.fillText(lab, (xa + xb) / 2 - tw / 2 + 5, Math.min(ya, yb) - 8)
-      }
-    } else if (a && xa !== null && ya !== null && s === temp) {
-      ctx.beginPath(); ctx.arc(xa, ya, 3, 0, 7); ctx.fill()
-    }
-  }
-  ctx.setLineDash([])
-}
-
 // ---------------------------------------------------------------- chart (TradingView-style)
 const UP = '#089981', DOWN = '#f23645'
 const FRAME_LABEL = { '1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h', '4h': '4h', '1D': 'D', '1W': 'W' }
@@ -171,6 +80,9 @@ function pivotCaption(data) {
     : ' · Daily pivot data unavailable'
 }
 
+const IND_KEY = (ind) => INDICATORS.filter((x) => ind[x.id]).map((x) => x.id).join(',')
+const perYearOf = (frame, us) => ({ '1D': 252, '1W': 52 }[frame] || Math.round(252 * ((us ? 390 : 375) / ({ '1m': 1, '3m': 3, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '4h': 240 }[frame] || 5))))
+
 export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded, setExpanded }) {
   const box = useRef(), cv = useRef(), wrap = useRef()
   const ref = useRef(null)
@@ -178,17 +90,28 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
   const [err, setErr] = useState('')
   const [ind, setInd] = useState(() => ({ vol: true, vwap: true, ...loadJ('eql_term_ind', {}) }))
   const [line, setLine] = useState(() => loadJ('eql_term_line', false))
-  const [menu, setMenu] = useState(false)
+  const [picker, setPicker] = useState(false)
   const [leg, setLeg] = useState(null)
   const [tool, setTool] = useState('cursor')
+  const [fly, setFly] = useState(null)                        // open tool group
+  const [lastOf, setLastOf] = useState(() => loadJ('eql_tool_last', {}))
+  const [magnet, setMagnet] = useState(() => loadJ('eql_magnet', false))
   const [shapes, setShapesRaw] = useState(() => loadDraw(sym))
   const [hideDraw, setHideDraw] = useState(false)
   const [temp, setTemp] = useState(null)
+  const [sel, setSel] = useState(-1)
+  const [textAt, setTextAt] = useState(null)                  // { x, y, p } while typing a text drawing
   const [lab, setLab] = useState(null)
   const dark = document.documentElement.dataset.theme !== 'light'
+  const daily = ['1D', '1W'].includes(frame)
   const setShapes = (s) => { setShapesRaw(s); saveDraw(sym, s) }
-  useEffect(() => { setShapesRaw(loadDraw(sym)); setTemp(null) }, [sym])
-  const flip = (k) => { const o = { ...ind, [k]: !ind[k] }; setInd(o); saveJ('eql_term_ind', o) }
+  useEffect(() => { setShapesRaw(loadDraw(sym)); setTemp(null); setSel(-1) }, [sym])
+  const toggleInd = (k) => { const o = { ...ind, [k]: !ind[k] }; setInd(o); saveJ('eql_term_ind', o); if (o[k]) addRecent(k) }
+  const pickTool = (k) => {
+    setTool(k); setTemp(null); setFly(null); setSel(-1)
+    if (k !== 'cursor') { const g = TOOL[k].group; const o = { ...lastOf, [g]: k }; setLastOf(o); saveJ('eql_tool_last', o) }
+  }
+  const ikey = IND_KEY(ind)
   useEffect(() => {
     let active = true
     const update = async () => {
@@ -198,11 +121,11 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
       } catch (error) { if (active) setErr(error.message) }
     }
     setD(null); setErr(''); setLeg(null); update()
-    const timer = setInterval(() => { if (!document.hidden) update() }, ['1D','1W'].includes(frame) ? 300000 : 30000)
+    const timer = setInterval(() => { if (!document.hidden) update() }, daily ? 300000 : 30000)
     return () => { active = false; clearInterval(timer) }
-  }, [sym, frame])
+  }, [sym, frame]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // build the chart
+  // build the chart with one series per indicator line (price pane, or a pane of its own)
   useEffect(() => {
     if (!box.current) return undefined
     const bg = dark ? '#0f1216' : '#ffffff', txt = dark ? '#b2b5be' : '#131722', border = dark ? '#2a2e39' : '#e0e3eb'
@@ -221,30 +144,34 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
     const main = line
       ? chart.addSeries(LineSeries, { color: '#2962ff', lineWidth: 2, lastValueVisible: false, priceLineStyle: LineStyle.Dotted })
       : chart.addSeries(CandlestickSeries, { upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, lastValueVisible: false, priceLineStyle: LineStyle.Dotted })
-    const L = (color, title, pane = 0, extra = {}) => chart.addSeries(LineSeries, { color, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, title, ...extra }, pane)
+    const L = (ln, pane, own) => chart.addSeries(LineSeries, {
+      color: ln.color, lineWidth: ln.width || 1.5, priceLineVisible: false, lastValueVisible: own, crosshairMarkerVisible: false, title: ln.label,
+      lineStyle: ln.dash ? LineStyle.Dashed : LineStyle.Solid, ...(ln.dots ? { lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 1.6 } : {}),
+    }, pane)
     const s = {}
-    if (ind.vol) { s.vol = chart.addSeries(HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false }); s.vol.priceScale().applyOptions({ scaleMargins: { top: 0.86, bottom: 0 } }) }
-    ;['vwap', 'ema9', 'ema20', 'ema50', 'ema200', 'sma20', 'sma50'].forEach((k) => { if (ind[k]) s[k] = L(IND_COLOR[k], IND.find((x) => x[0] === k)[1].split(' (')[0]) })
-    if (ind.bb) { s.bbu = L(IND_COLOR.bb, '', 0, { lineStyle: LineStyle.Dashed }); s.bbm = L(IND_COLOR.bb, 'BB'); s.bbl = L(IND_COLOR.bb, '', 0, { lineStyle: LineStyle.Dashed }) }
-    if (ind.st) { s.stu = L(UP, 'ST', 0, { lineWidth: 2 }); s.std = L(DOWN, '', 0, { lineWidth: 2 }) }
     let pane = 1
-    if (ind.rsi) {
-      s.rsi = L('#7e57c2', 'RSI 14', pane, { lastValueVisible: true })
-      ;[70, 30].forEach((p) => s.rsi.createPriceLine({ price: p, color: '#787b8688', lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false }))
-      pane++
-    }
-    if (ind.macd) {
-      s.mh = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, pane)
-      s.mm = L('#2962ff', 'MACD', pane); s.ms = L('#ff6d00', 'Signal', pane); pane++
+    for (const x of INDICATORS) {
+      if (!ind[x.id]) continue
+      if (x.intraday && daily) continue
+      if (x.special === 'vol') { s.vol = chart.addSeries(HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false }); s.vol.priceScale().applyOptions({ scaleMargins: { top: 0.86, bottom: 0 } }); continue }
+      if (x.special === 'swings') { s.swings = createSeriesMarkers(main, []); continue }
+      const own = x.pane === 'own'
+      const p = own ? pane++ : 0
+      const se = { lines: {}, hist: null }
+      if (x.hist) se.hist = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: !x.lines.length, title: x.lines.length ? '' : x.short }, p)
+      for (const ln of x.lines) se.lines[ln.k] = L(ln, p, own)
+      const first = Object.values(se.lines)[0] || se.hist
+      for (const lv of x.levels || []) first?.createPriceLine({ price: lv, color: '#787b8688', lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false })
+      s[x.id] = se
     }
     ref.current = { chart, main, s, fitted: false }
-    chart.subscribeCrosshairMove((p) => {
+    chart.subscribeCrosshairMove((pt) => {
       const r = ref.current
-      if (!r || !p || !p.time || !r.byTime) { setLeg(null); return }
-      setLeg(r.byTime.get(p.time) || null)
+      if (!r || !pt || !pt.time || !r.byTime) { setLeg(null); return }
+      setLeg(r.byTime.get(pt.time) || null)
     })
     return () => { chart.remove(); ref.current = null }
-  }, [sym, frame, line, dark, ...IND.map(([k]) => ind[k])]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sym, frame, line, dark, ikey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // data
   useEffect(() => {
@@ -253,26 +180,31 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
     const off = d.offset || 0
     const bars = d.bars
     const T = (b) => b.t + off                                   // exchange local time on the axis
-    const daily = ['1D', '1W'].includes(frame)
     r.main.setData(bars.map((b) => (line ? { time: T(b), value: b.c } : { time: T(b), open: b.o, high: b.h, low: b.l, close: b.c })))
     drawSessionPivots(r, d, LineSeries)
-    const closes = bars.map((b) => b.c)
     const put = (se, vals) => { if (se) se.setData(bars.map((b, i) => (ok(vals[i]) ? { time: T(b), value: vals[i] } : { time: T(b) }))) }
     const s = r.s
     const hasVol = bars.some((b) => b.v > 0)
     if (s.vol) s.vol.setData(hasVol ? bars.map((b) => ({ time: T(b), value: b.v, color: b.c >= b.o ? 'rgba(8,153,129,0.45)' : 'rgba(242,54,69,0.45)' })) : [])
-    put(s.vwap, daily ? [] : d.vwap)
-    ;[['ema9', 9], ['ema20', 20], ['ema50', 50], ['ema200', 200]].forEach(([k, n]) => put(s[k], ema(closes, n)))
-    ;[['sma20', 20], ['sma50', 50]].forEach(([k, n]) => put(s[k], sma(closes, n)))
-    if (s.bbu) { const b = boll(closes); put(s.bbu, b.map((x) => x[0])); put(s.bbm, b.map((x) => x[1])); put(s.bbl, b.map((x) => x[2])) }
-    if (s.stu) { const st = supertrend(bars); put(s.stu, st.map(([v, t]) => (t === 1 ? v : null))); put(s.std, st.map(([v, t]) => (t === -1 ? v : null))) }
-    put(s.rsi, rsi(closes))
-    if (s.mh) { const m = macd(closes); put(s.mm, m.map((x) => x[0])); put(s.ms, m.map((x) => x[1])); s.mh.setData(bars.map((b, i) => (ok(m[i][2]) ? { time: T(b), value: m[i][2], color: m[i][2] >= 0 ? 'rgba(8,153,129,0.6)' : 'rgba(242,54,69,0.6)' } : { time: T(b) }))) }
+    const ctx = { perYear: perYearOf(frame, isUSs(sym)), dayOf: (b) => new Date((b.t + off) * 1000).toISOString().slice(0, 10) }
+    for (const x of INDICATORS) {
+      const se = s[x.id]
+      if (!se || x.special === 'vol') continue
+      if (x.special === 'swings') {
+        se.setMarkers(icalc.swings(bars).map((p) => ({ time: T(bars[p.i]), position: p.kind === 'H' ? 'aboveBar' : 'belowBar', color: p.kind === 'H' ? DOWN : UP, shape: p.kind === 'H' ? 'arrowDown' : 'arrowUp', size: 0.6 })))
+        continue
+      }
+      if (x.special === 'vwap') { put(se.lines.v, daily ? [] : (d.vwap || [])); continue }
+      if (x.special === 'zigzag') { const zz = icalc.zigzag(bars); se.lines.v.setData(zz.map((p) => ({ time: T(bars[p.i]), value: p.p }))); continue }
+      const out = x.run(bars, ctx)
+      for (const ln of x.lines) put(se.lines[ln.k], out[ln.k])
+      if (se.hist) { const hv = out[x.hist]; se.hist.setData(bars.map((b, i) => (ok(hv[i]) ? { time: T(b), value: hv[i], color: x.id === 'rvol' ? (hv[i] >= 1 ? 'rgba(8,153,129,0.6)' : 'rgba(120,123,134,0.5)') : hv[i] >= 0 ? 'rgba(8,153,129,0.6)' : 'rgba(242,54,69,0.6)' } : { time: T(b) }))) }
+    }
     const ps = r.chart.panes()
     if (ps.length > 1 && box.current) {
-      const H = box.current.clientHeight - 30, extra = ps.length - 1
-      ps[0].setHeight(Math.max(220, H - 120 * extra))
-      ps.slice(1).forEach((p) => p.setHeight(120))
+      const H = box.current.clientHeight - 30, extra = ps.length - 1, each = extra > 2 ? 95 : 120
+      ps[0].setHeight(Math.max(200, H - each * extra))
+      ps.slice(1).forEach((p) => p.setHeight(each))
     }
     r.byTime = new Map(bars.map((b, i) => [T(b), { ...b, prev: i ? bars[i - 1].c : (d.prev ?? b.o), i }]))
     r.bars = bars; r.off = off
@@ -281,7 +213,7 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
       if (n > 160) r.chart.timeScale().setVisibleLogicalRange({ from: n - 150, to: n + 8 }); else r.chart.timeScale().fitContent()
       r.fitted = true
     }
-  }, [d, frame, line, expanded, ...IND.map(([k]) => ind[k])]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [d, frame, line, expanded, ikey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // live: NSE's last price moves the current candle (only while that candle's period is running)
   useEffect(() => {
@@ -294,7 +226,14 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
     r.main.update(line ? { time: b.t + r.off, value: ltp } : { time: b.t + r.off, open: nb.o, high: nb.h, low: nb.l, close: nb.c })
   }, [ltp]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // the chart does not pan or zoom while a drawing tool is in use (a finger drag draws instead)
+  useEffect(() => {
+    const r = ref.current
+    if (r) r.chart.applyOptions({ handleScroll: tool === 'cursor', handleScale: tool === 'cursor' })
+  }, [tool, d])
+
   // price label with the countdown to the candle close, and the drawings (redrawn every second and on every move)
+  const redraw = useRef(() => {})
   useEffect(() => {
     const tick = () => {
       const r = ref.current, c = cv.current
@@ -313,8 +252,9 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
       const w = rect.width - r.chart.priceScale('right').width(), h = r.chart.panes()[0].getHeight()
       if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); c.style.width = `${w}px`; c.style.height = `${h}px` }
       const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      drawShapes(ctx, w, h, r.chart, r.main, hideDraw ? [] : shapes, temp, dark)
+      drawShapes(ctx, w, h, r.chart, r.main, hideDraw ? [] : shapes, temp, dark, sel)
     }
+    redraw.current = tick
     tick()
     const t = setInterval(tick, 1000)
     const r = ref.current
@@ -322,47 +262,90 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
     r?.chart.timeScale().subscribeVisibleLogicalRangeChange(onMove)
     r?.chart.subscribeCrosshairMove(onMove)
     return () => { clearInterval(t); try { r?.chart.timeScale().unsubscribeVisibleLogicalRangeChange(onMove); r?.chart.unsubscribeCrosshairMove(onMove) } catch { /* chart gone */ } }
-  }, [d, shapes, temp, hideDraw, frame, line, live, dark, ...IND.map(([k]) => ind[k])]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [d, shapes, temp, hideDraw, frame, line, live, dark, ikey, sel]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // drawing clicks: read straight from the mouse on the chart (state kept in refs so no click is lost between renders)
+  // drawing with mouse, pen or finger (pointer events), state kept in refs so no tap is lost between renders
   const st = useRef({})
-  st.current = { tool, temp, shapes }
+  st.current = { tool, temp, shapes, magnet, sel, hideDraw }
   useEffect(() => {
     const el = box.current
     if (!el) return undefined
-    const need = { trend: 2, ray: 2, rect: 2, fib: 2, measure: 2, hline: 1, vline: 1 }
+    const local = (e) => { const rc = el.getBoundingClientRect(); return [e.clientX - rc.left, e.clientY - rc.top, rc] }
     const at = (e) => {
       const r = ref.current
-      if (!r) return null
-      const rc = el.getBoundingClientRect(), x = e.clientX - rc.left, y = e.clientY - rc.top
+      if (!r || !r.bars?.length) return null
+      const [x, y, rc] = local(e)
       if (y > r.chart.panes()[0].getHeight() || x > rc.width - r.chart.priceScale('right').width()) return null
       const lg = r.chart.timeScale().coordinateToLogical(x)
-      const v = r.main.coordinateToPrice(y)
-      if (lg === null || v === null || !r.bars?.length) return null
+      let v = r.main.coordinateToPrice(y)
+      if (lg === null || v === null) return null
       const i = Math.max(0, Math.min(r.bars.length - 1, Math.round(lg)))
-      return { t: r.bars[i].t + (r.off || 0), v: +(+v).toFixed(2), i }
+      const f = Math.max(-0.5, Math.min(0.5, lg - i))
+      if (st.current.magnet) { const b = r.bars[i]; v = [b.o, b.h, b.l, b.c].reduce((a, q) => (Math.abs(q - v) < Math.abs(a - v) ? q : a), b.c) }
+      return { t: r.bars[i].t + (r.off || 0), f: +f.toFixed(3), v: +(+v).toFixed(2), i }
     }
+    let drag = null
+    const finish = (sh) => { setShapes(sh); setTemp(null); setTool('cursor') }
     const down = (e) => {
       const { tool: tl, temp: tp, shapes: sh } = st.current
-      if (tl === 'cursor' || e.button !== 0) return
+      if (e.button !== undefined && e.button !== 0) return
+      if (tl === 'cursor') {                                  // tap a drawing to select it
+        const r = ref.current, c = cv.current
+        if (!r || !c || st.current.hideDraw) return
+        const [x, y, rc] = local(e)
+        const i = hitTest(x, y, rc.width - r.chart.priceScale('right').width(), r.chart, r.main, sh, c.getContext('2d'))
+        setSel(i)
+        return
+      }
       const pt = at(e)
       if (!pt) return
       e.preventDefault(); e.stopPropagation()
-      if (need[tl] === 1) { setShapes([...sh, { k: tl, p: [{ t: pt.t, v: pt.v }] }]); setTool('cursor'); return }
-      if (!tp) { setTemp({ k: tl, p: [{ t: pt.t, v: pt.v }], i0: pt.i }); return }
-      setShapes([...sh, { k: tl, p: [tp.p[0], { t: pt.t, v: pt.v }], bars: Math.abs(pt.i - (tp.i0 ?? pt.i)) }]); setTemp(null); setTool('cursor')
+      const need = TOOL[tl].need
+      const P = { t: pt.t, f: pt.f, v: pt.v }
+      if (need === -1) { drag = { k: tl, p: [P] }; setTemp(drag); el.setPointerCapture?.(e.pointerId); return }
+      if (tl === 'text') { const [x, y] = local(e); setTextAt({ x, y, p: P }); return }
+      if (need === 1) { finish([...sh, { k: tl, p: [P] }]); return }
+      if (need === 0) {                                       // path: tap point after point; tap the last point again (or Enter) to finish
+        const fx = tp?.fixed || []
+        if (fx.length >= 2) {
+          const last = fx[fx.length - 1]
+          if (last.t === P.t && Math.abs(last.v - P.v) / Math.max(1, Math.abs(P.v)) < 0.004) { finish([...sh, { k: 'path', p: fx }]); return }
+        }
+        setTemp({ k: 'path', fixed: [...fx, P], p: [...fx, P] }); return
+      }
+      if (!tp) { setTemp({ k: tl, fixed: [P], p: [P], i0: pt.i }); return }
+      const pts = [...tp.fixed, P]
+      if (pts.length >= need) finish([...sh, { k: tl, p: pts.slice(0, need), bars: Math.abs(pt.i - (tp.i0 ?? pt.i)) }])
+      else setTemp({ ...tp, fixed: pts, p: pts })
     }
     const move = (e) => {
-      const { temp: tp } = st.current
-      if (!tp) return
+      const { temp: tp, tool: tl } = st.current
+      if (drag) { const pt = at(e); if (pt) { drag = { ...drag, p: [...drag.p, { t: pt.t, f: pt.f, v: pt.v }] }; setTemp(drag) } e.preventDefault(); e.stopPropagation(); return }
+      if (!tp || tl === 'cursor' || !tp.fixed) return
       const pt = at(e)
-      if (pt) setTemp({ ...tp, p: [tp.p[0], { t: pt.t, v: pt.v }] })
+      if (pt) setTemp({ ...tp, p: [...tp.fixed, { t: pt.t, f: pt.f, v: pt.v }] })
     }
-    el.addEventListener('mousedown', down, true)
-    el.addEventListener('mousemove', move)
-    return () => { el.removeEventListener('mousedown', down, true); el.removeEventListener('mousemove', move) }
+    const up = () => {
+      if (!drag) return
+      const done = drag; drag = null
+      if (done.p.length > 1) finish([...st.current.shapes, done]); else { setTemp(null) }
+    }
+    el.addEventListener('pointerdown', down, true)
+    el.addEventListener('pointermove', move, true)
+    el.addEventListener('pointerup', up, true)
+    el.addEventListener('pointercancel', up, true)
+    return () => { el.removeEventListener('pointerdown', down, true); el.removeEventListener('pointermove', move, true); el.removeEventListener('pointerup', up, true); el.removeEventListener('pointercancel', up, true) }
   }, [sym, frame]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { const k = (e) => { if (e.key === 'Escape') { setTemp(null); setTool('cursor') } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
+  useEffect(() => {
+    const k = (e) => {
+      if (e.target.tagName === 'INPUT') return
+      const { temp: tp, sel: sl, shapes: sh } = st.current
+      if (e.key === 'Escape') { setTemp(null); setTool('cursor'); setSel(-1); setFly(null) }
+      if (e.key === 'Enter' && tp?.k === 'path' && tp.fixed?.length >= 2) { setShapes([...sh, { k: 'path', p: tp.fixed }]); setTemp(null); setTool('cursor') }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && sl >= 0) { setShapes(sh.filter((_, i) => i !== sl)); setSel(-1) }
+    }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shot = () => {
     const c = ref.current?.chart.takeScreenshot(true)
@@ -370,11 +353,15 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
     const a = document.createElement('a'); a.href = c.toDataURL('image/png'); a.download = `${sym.replace('US:', '')}_${frame}.png`; a.click()
   }
   const last = d?.bars?.length ? { ...d.bars[d.bars.length - 1], prev: d.bars.length > 1 ? d.bars[d.bars.length - 2].c : d.prev } : null
-  const L = leg || last
-  const ch = L && ok(L.prev) ? L.c - L.prev : null
+  const Lg = leg || last
+  const ch = Lg && ok(Lg.prev) ? Lg.c - Lg.prev : null
   const exch = isUSs(sym) ? (isIdx(sym) ? 'US index' : 'US') : isIdx(sym) ? 'NSE index' : 'NSE'
   const f2 = (v) => (ok(v) ? num(v, 2) : '—')
-  const active = IND.filter(([k]) => ind[k] && !['vol'].includes(k))
+  const active = INDICATORS.filter((x) => ind[x.id] && x.id !== 'vol' && !(x.intraday && daily))
+  const hint = tool === 'cursor' ? null : TOOL[tool].need === -1 ? `${TOOL[tool].label} · drag on the chart · Esc to cancel`
+    : tool === 'path' ? `Path · tap each point; tap the last point again (or Enter) to finish · Esc to cancel`
+      : temp ? `Tap point ${(temp.fixed?.length || 0) + 1} of ${TOOL[tool].need} · Esc to cancel` : `${TOOL[tool].label} · tap the chart · Esc to cancel`
+  const commitText = (t) => { if (t && textAt) setShapes([...shapes, { k: 'text', p: [textAt.p], text: t }]); setTextAt(null); setTool('cursor') }
   return (
     <div className="tv" ref={wrap}>
       <div className="tv-bar">
@@ -385,18 +372,8 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
         <button className={`tv-btn ${line ? 'on' : ''}`} onClick={() => { setLine(true); saveJ('eql_term_line', true) }} title="Line">
           <svg viewBox="0 0 24 24" className="tv-ic"><path d="M3 17l5-6 4 3 5-7 4 4" /></svg></button>
         <span className="tv-sep" />
-        <div className="tv-menu-wrap">
-          <button className={`tv-btn ${menu ? 'on' : ''}`} onClick={() => setMenu(!menu)}>
-            <svg viewBox="0 0 24 24" className="tv-ic"><path d="M3 18l5-7 4 4 6-9M17 6h3v3" /></svg> Indicators{active.length ? ` · ${active.length}` : ''}</button>
-          {menu && (
-            <div className="tv-menu" onMouseLeave={() => setMenu(false)}>
-              {IND.map(([k, l]) => (
-                <label key={k}><input type="checkbox" checked={!!ind[k]} onChange={() => flip(k)} /><i style={{ background: IND_COLOR[k] || (k === 'st' ? UP : k === 'rsi' ? '#7e57c2' : k === 'macd' ? '#2962ff' : '#787b86') }} />{l}</label>
-              ))}
-              <div className="small muted" style={{ padding: '6px 10px 2px' }}>Worked out here from the candles shown.</div>
-            </div>
-          )}
-        </div>
+        <button className={`tv-btn ${picker ? 'on' : ''}`} onClick={() => setPicker(true)}>
+          <svg viewBox="0 0 24 24" className="tv-ic"><path d="M3 18l5-7 4 4 6-9M17 6h3v3" /></svg> Indicators{active.length ? ` · ${active.length}` : ''}</button>
         <button hidden={!onAlert} className="tv-btn" onClick={onAlert} title="Price alert"><svg viewBox="0 0 24 24" className="tv-ic"><path d="M6 17h12l-1.5-2V11a4.5 4.5 0 0 0-9 0v4zM10 20h4" /></svg> Alert</button>
         <span className="grow" />
         <button className="tv-btn" title="Fit all candles" onClick={() => ref.current?.chart.timeScale().fitContent()}><svg viewBox="0 0 24 24" className="tv-ic"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg></button>
@@ -405,15 +382,38 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
       </div>
       <div className="tv-body">
         <div className="tv-tools">
-          {TOOLS.map(([k, label, icon]) => <button key={k} title={label} className={tool === k ? 'on' : ''} onClick={() => { setTool(k); setTemp(null) }}><svg viewBox="0 0 24 24">{icon}</svg></button>)}
+          <button title="Crosshair · tap a drawing to select it" className={tool === 'cursor' ? 'on' : ''} onClick={() => pickTool('cursor')}><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" /></svg></button>
+          {TOOL_GROUPS.map((g) => {
+            const cur = TOOL[lastOf[g.key]] || TOOL[g.tools[0][0]]
+            const on = TOOL[tool]?.group === g.key
+            return (
+              <div key={g.key} className="tv-grp">
+                <button title={`${g.label} · ${cur.label}`} className={on ? 'on' : ''} onClick={() => (g.tools.length === 1 ? pickTool(cur.k) : setFly(fly === g.key ? null : g.key))}>
+                  <svg viewBox="0 0 24 24">{(on ? TOOL[tool] : cur).icon}</svg>{g.tools.length > 1 && <i className="tv-more" />}
+                </button>
+                {fly === g.key && (
+                  <div className="tv-fly">
+                    <div className="small muted" style={{ padding: '2px 8px 6px' }}>{g.label}</div>
+                    {g.tools.map(([k, label, , icon]) => <button key={k} className={tool === k ? 'on' : ''} onClick={() => pickTool(k)}><svg viewBox="0 0 24 24">{icon}</svg><span>{label}</span></button>)}
+                  </div>
+                )}
+              </div>
+            )
+          })}
           <span className="tv-tsep" />
+          <button title={magnet ? 'Magnet on: points snap to the candle open, high, low or close' : 'Magnet off'} className={magnet ? 'on' : ''} onClick={() => { setMagnet(!magnet); saveJ('eql_magnet', !magnet) }}><svg viewBox="0 0 24 24"><path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4zM6 8h4M14 8h4" /></svg></button>
           <button title="Undo last drawing" onClick={() => setShapes(shapes.slice(0, -1))} disabled={!shapes.length}><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" /></svg></button>
           <button title={hideDraw ? 'Show drawings' : 'Hide drawings'} className={hideDraw ? 'on' : ''} onClick={() => setHideDraw(!hideDraw)}><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="2.5" />{hideDraw && <path d="M4 4l16 16" />}</svg></button>
-          <button title="Remove all drawings on this symbol" onClick={() => setShapes([])} disabled={!shapes.length}><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /></svg></button>
+          <button title={sel >= 0 ? 'Delete the selected drawing' : 'Remove all drawings on this symbol'} className={sel >= 0 ? 'on' : ''} onClick={() => { if (sel >= 0) { setShapes(shapes.filter((_, i) => i !== sel)); setSel(-1) } else if (shapes.length && window.confirm?.('Remove every drawing on this symbol?') !== false) setShapes([]) }} disabled={!shapes.length}><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /></svg></button>
         </div>
-        <div className="tv-wrap" style={{ cursor: tool === 'cursor' ? 'default' : 'crosshair' }}>
+        <div className="tv-wrap" style={{ cursor: tool === 'cursor' ? 'default' : 'crosshair', touchAction: tool === 'cursor' ? 'auto' : 'none' }} onClick={() => fly && setFly(null)}>
           <div ref={box} className={`tv-chart ${expanded ? 'big' : ''}`} />
           <canvas ref={cv} className="tv-draw" />
+          {textAt && (
+            <input className="tv-textin" autoFocus placeholder="Type, then Enter" style={{ left: textAt.x, top: textAt.y - 14 }}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitText(e.currentTarget.value.trim()); if (e.key === 'Escape') { setTextAt(null); setTool('cursor') } }}
+              onBlur={(e) => commitText(e.currentTarget.value.trim())} />
+          )}
           {lab && (
             <div className="tv-last" style={{ top: lab.y - (lab.left ? 17 : 10), width: lab.w, background: lab.up ? UP : DOWN }}>
               <b>{num(lab.price, 2)}</b>{lab.left ? <span>{mmss(lab.left)}</span> : null}
@@ -421,15 +421,17 @@ export function Chart({ sym, frame, setFrame, name, live, ltp, onAlert, expanded
           )}
           <div className="tv-legend">
             <div className="t1"><b>{US_NAMES[sym] || name || sym.replace('US:', '')}</b> · {FRAME_LABEL[frame]} · {exch}</div>
-            {L && <div className="t2">O<span style={{ color: tone(L.c - L.o) }}>{f2(L.o)}</span> H<span style={{ color: tone(L.c - L.o) }}>{f2(L.h)}</span> L<span style={{ color: tone(L.c - L.o) }}>{f2(L.l)}</span> C<span style={{ color: tone(L.c - L.o) }}>{f2(L.c)}</span>
-              {ok(ch) && <span style={{ color: tone(ch) }}> {signed(ch, 2)} ({signed((ch / L.prev) * 100, 2, '%')})</span>}
-              {L.v > 0 && ind.vol && <span className="muted"> · Vol {big(L.v)}</span>}</div>}
-            {active.length > 0 && <div className="t3">{active.map(([k, l]) => <span key={k} style={{ color: IND_COLOR[k] || 'var(--muted)' }}>{l.split(' ·')[0]}</span>)}</div>}
-            {tool !== 'cursor' && <div className="t4">{temp ? 'Click the second point · Esc to cancel' : `${TOOLS.find((x) => x[0] === tool)[1]} · Esc to cancel`}</div>}
+            {Lg && <div className="t2">O<span style={{ color: tone(Lg.c - Lg.o) }}>{f2(Lg.o)}</span> H<span style={{ color: tone(Lg.c - Lg.o) }}>{f2(Lg.h)}</span> L<span style={{ color: tone(Lg.c - Lg.o) }}>{f2(Lg.l)}</span> C<span style={{ color: tone(Lg.c - Lg.o) }}>{f2(Lg.c)}</span>
+              {ok(ch) && <span style={{ color: tone(ch) }}> {signed(ch, 2)} ({signed((ch / Lg.prev) * 100, 2, '%')})</span>}
+              {Lg.v > 0 && ind.vol && <span className="muted"> · Vol {big(Lg.v)}</span>}</div>}
+            {active.length > 0 && <div className="t3">{active.map((x) => <span key={x.id} className="tv-ichip" style={{ color: x.lines[0]?.color || 'var(--muted)' }}>{x.short}<button onClick={() => toggleInd(x.id)} title={`Remove ${x.name}`}>✕</button></span>)}</div>}
+            {hint && <div className="t4">{hint}{tool === 'path' && temp?.fixed?.length >= 2 && <button className="tv-done" onClick={() => { setShapes([...shapes, { k: 'path', p: temp.fixed }]); setTemp(null); setTool('cursor') }}>Done</button>}</div>}
+            {sel >= 0 && tool === 'cursor' && <div className="t4">Drawing selected · <button className="tv-done" onClick={() => { setShapes(shapes.filter((_, i) => i !== sel)); setSel(-1) }}>Delete it</button></div>}
           </div>
         </div>
       </div>
-      <div className="small muted term-src src-note">{err ? <span style={{ color: 'var(--bad)' }}>{err}</span> : d ? `${d.source} · ${d.yahoo}${pivotCaption(d)}${ind.vwap && !['1D', '1W'].includes(frame) ? ' · VWAP from these candles' : ''}` : 'Loading candles…'}</div>
+      {picker && <IndicatorPicker on={ind} onToggle={toggleInd} onClose={() => setPicker(false)} intraday={!daily} />}
+      <div className="small muted term-src src-note">{err ? <span style={{ color: 'var(--bad)' }}>{err}</span> : d ? `${d.source} · ${d.yahoo}${pivotCaption(d)}${ind.vwap && !daily ? ' · VWAP from these candles' : ''}${ind.ichimoku ? ' · Ichimoku spans are not drawn beyond the last candle' : ''}` : 'Loading candles…'}</div>
       {err && <div className="small" style={{ color: 'var(--bad)', padding: '0 10px 8px' }}>{err}</div>}
     </div>
   )
