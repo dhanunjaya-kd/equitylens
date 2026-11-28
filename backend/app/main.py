@@ -709,6 +709,12 @@ def ipo_get(market: str = "IN", refresh: bool = False):
     return ipo.us(refresh) if market.upper() == "US" else ipo.india(refresh)
 
 
+@app.get("/api/ipo/history")
+def ipo_history(market: str = "IN", refresh: bool = False):
+    """Listings of the last 2 years: listing-day and since-listing moves, IPO-base status and (India) lock-in dates."""
+    return ipo.history(market, refresh)
+
+
 @app.get("/api/ipo/detail/{symbol}")
 def ipo_detail(symbol: str, series: str = "EQ", refresh: bool = False):
     from . import ipo

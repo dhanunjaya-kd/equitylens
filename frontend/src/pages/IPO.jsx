@@ -254,7 +254,7 @@ function Sources({ rows }) {
   )
 }
 
-const TABS = [['open', 'Open now'], ['upcoming', 'Upcoming'], ['listed', 'Recently listed'], ['drhp', 'Filed with SEBI']]
+const TABS = [['open', 'Open now'], ['upcoming', 'Upcoming'], ['listed', 'Recently listed'], ['history', 'Last 2 years'], ['lockins', 'Lock-in calendar'], ['drhp', 'Filed with SEBI']]
 const BOARDS = [['all', 'All'], ['main', 'Mainboard'], ['sme', 'SME']]
 
 function IPOPage({ tab }) {
@@ -294,7 +294,7 @@ function IPOPage({ tab }) {
       )}
       <div className="row between wrapflex ipo-bar-top">
         <div className="tabs" style={{ position: 'static', padding: 0 }}>
-          {TABS.map(([k, label]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`ipo/${k}`)}>{label}{page ? ` · ${(k === 'drhp' ? page.drhp : pick(page[k])).length}` : ''}</button>)}
+          {TABS.map(([k, label]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`ipo/${k}`)}>{label}{page && page[k] ? ` · ${(k === 'drhp' ? page.drhp : pick(page[k])).length}` : ''}</button>)}
         </div>
         {t !== 'drhp' && <div className="ipo-seg">{BOARDS.map(([k, label]) => <button key={k} className={board === k ? 'on' : ''} onClick={() => setBoard(k)}>{label}</button>)}</div>}
       </div>
@@ -303,8 +303,126 @@ function IPOPage({ tab }) {
       {page && t === 'upcoming' && <IssueList rows={pick(page.upcoming)} today={today} upcoming />}
       {page && t === 'listed' && <ListedTab rows={pick(page.listed)} stats={page.stats || {}} board={board} />}
       {page && t === 'drhp' && <DrhpTab rows={page.drhp} />}
+      {t === 'history' && <IpoHistory market="IN" board={board} />}
+      {t === 'lockins' && <LockinCalendar board={board} />}
       {page && <div style={{ marginTop: 14 }}><Sources rows={page.sources} /></div>}
     </div>
+  )
+}
+
+// ------------------------------------------------------------------ listings of the last 2 years · IPO base · lock-ins
+const RANGES = [['3m', '3 months', 92], ['6m', '6 months', 183], ['1y', '1 year', 365], ['2y', '2 years', 730]]
+const BASE_TONE = { breakout: 'var(--good)', tight: '#a78bfa', near_high: 'var(--good)', pullback: 'var(--warn)', deep: 'var(--bad)', below_issue: 'var(--bad)', too_new: 'var(--muted)' }
+
+function useHistory(market) {
+  const [h, setH] = useState(null)
+  const [err, setErr] = useState('')
+  const load = () => api(`/api/ipo/history?market=${market}`).then((x) => { setH(x); setErr('') }).catch((e) => setErr(e.message))
+  useEffect(() => { load() }, [market])
+  useEffect(() => { if (!h?.status?.running) return undefined; const t = setTimeout(load, 8000); return () => clearTimeout(t) }, [h])
+  return [h, err]
+}
+
+function HistoryProgress({ h }) {
+  if (!h?.status?.running) return null
+  return <div className="card small">Building the 2-year list from daily prices: {h.status.done}/{h.status.total || '…'} listings{h.rows?.length ? ' (showing the last saved list meanwhile)' : ''}. It refreshes itself.</div>
+}
+
+export function IpoHistory({ market, board = 'all' }) {
+  const [h, err] = useHistory(market)
+  const [range, setRange] = useState('3m')
+  const [base, setBase] = useState('')
+  const [sort, setSort] = useState(['listing', -1])
+  const today = h?.today
+  const days = (RANGES.find((r) => r[0] === range) || RANGES[0])[2]
+  const rows = useMemo(() => {
+    let r = (h?.rows || []).filter((x) => daysTo(x.listing, today) >= -days)
+    if (board !== 'all') r = r.filter((x) => (board === 'sme' ? x.sme : !x.sme))
+    if (base) r = r.filter((x) => x.base?.key === base)
+    const val = (x, k) => (k === 'listing' ? x.listing : k === 'from_high' ? x.base?.from_high : k === 'adr' ? x.base?.adr : x.perf?.[k])
+    const [k, dir] = sort
+    return [...r].sort((a, b) => { const va = val(a, k), vb = val(b, k); if (va == null) return 1; if (vb == null) return -1; return (va > vb ? 1 : va < vb ? -1 : 0) * dir })
+  }, [h, days, board, base, sort, today])
+  const m = rows.filter((x) => x.perf)
+  const med = (k) => { const v = m.map((x) => x.perf[k]).filter(ok).sort((a, b) => a - b); return v.length ? v[v.length >> 1] : null }
+  const counts = {}
+  for (const x of (h?.rows || []).filter((y) => daysTo(y.listing, today) >= -days)) if (x.base) counts[x.base.key] = (counts[x.base.key] || 0) + 1
+  const money = market === 'US' ? (x) => usSize(x.value_m) : (x) => crore(x.size_cr)
+  const px = market === 'US' ? (v) => usd(v) : (v) => rupees(v)
+  const th = (k, l) => <th onClick={() => setSort([k, sort[0] === k ? -sort[1] : -1])} style={{ cursor: 'pointer' }}>{l}{sort[0] === k ? (sort[1] < 0 ? ' ▾' : ' ▴') : ''}</th>
+  if (err) return <div className="card" style={{ color: 'var(--bad)' }}>{err}</div>
+  if (!h) return <div className="card small muted">Loading listings…</div>
+  return (
+    <>
+      <HistoryProgress h={h} />
+      <div className="ipo-kpis" style={{ marginBottom: 10 }}>
+        <KPI k={`Listed in the last ${(RANGES.find((r) => r[0] === range) || RANGES[0])[1]}`} v={rows.length} s={`${m.length} measured with daily prices`} />
+        <KPI k="Above issue price now" v={m.length ? `${m.filter((x) => x.perf.now_vs_issue > 0).length} of ${m.length}` : '—'} s={m.length ? `median ${signed(med('now_vs_issue'), 1, '%')}` : null} />
+        <KPI k="Median day-1 close" v={m.length ? <Pct v={med('close_vs_issue')} /> : '—'} s="vs issue price" />
+        <KPI k="Breaking out of IPO base" v={counts.breakout || 0} s={`${counts.tight || 0} forming a base`} />
+      </div>
+      <div className="row wrapflex" style={{ gap: 6, marginBottom: 8 }}>
+        {RANGES.map(([k, l]) => <button key={k} className={`chip ${range === k ? 'ipo-on' : ''}`} onClick={() => setRange(k)}>{l}</button>)}
+        <span className="small muted" style={{ marginLeft: 8 }}>IPO base</span>
+        <button className={`chip ${!base ? 'ipo-on' : ''}`} onClick={() => setBase('')}>All</button>
+        {Object.entries(h.base_rules || {}).map(([k, r]) => <button key={k} title={r.rule} className={`chip ${base === k ? 'ipo-on' : ''}`} onClick={() => setBase(base === k ? '' : k)}>{r.label} · {counts[k] || 0}</button>)}
+      </div>
+      <div className="tbl-wrap"><table className="tbl ipo-tbl"><thead><tr>
+        <th style={{ textAlign: 'left' }}>Company</th>{th('listing', 'Listed')}<th>Issue price</th><th>Size</th>{th('close_vs_issue', 'Day-1 close')}{th('now_vs_issue', 'Now vs issue')}{th('from_high', 'From high')}<th>IPO base</th>{th('adr', 'ADR')}{market === 'IN' && <th>Next lock-in</th>}
+      </tr></thead><tbody>
+        {rows.map((x) => {
+          const nxt = (x.lockins || []).find((l) => !l.past)
+          const sym = market === 'US' ? (x.symbol ? `US:${x.symbol}` : null) : x.symbol
+          return (
+            <tr key={`${x.symbol}-${x.listing}`} style={{ cursor: sym ? 'pointer' : 'default' }} onClick={() => sym && go(`stock/${sym}`)}>
+              <td style={{ textAlign: 'left', whiteSpace: 'normal' }}><span className="co"><Initials name={x.company} /><span className="nm"><b>{x.company}</b><small>{x.symbol || '—'}{market === 'IN' ? <> · <Board sme={x.sme} /></> : x.exchange ? ` · ${x.exchange}` : ''}</small></span></span>{x.note && <div className="small muted">{x.note}</div>}</td>
+              <td>{fmtDateY(x.listing)}</td><td>{px(x.final_price)}</td><td>{money(x)}</td>
+              <td><Pct v={x.perf?.close_vs_issue} /></td><td><Pct v={x.perf?.now_vs_issue} /></td>
+              <td><Pct v={x.base?.from_high} /></td>
+              <td>{x.base ? <b style={{ color: BASE_TONE[x.base.key] }} title={h.base_rules?.[x.base.key]?.rule}>{x.base.label}</b> : '—'}</td>
+              <td>{ok(x.base?.adr) ? `${num(x.base.adr, 1)}%` : '—'}</td>
+              {market === 'IN' && <td className="small">{nxt ? <>{fmtDateY(nxt.date)}<div className="muted">{nxt.who === 'anchor' ? `anchor ${nxt.days} days` : nxt.who === 'pre' ? 'pre-IPO, 6 months' : 'promoters, 18 months'}</div></> : '—'}</td>}
+            </tr>
+          )
+        })}
+      </tbody></table></div>
+      <div className="small muted" style={{ marginTop: 6, lineHeight: 1.6 }}>
+        Moves are against the issue price from daily prices (first trading day on or after the listing date). From high = last close vs the highest price since listing. ADR = average daily range of the last 20 sessions.
+        {Object.values(h.base_rules || {}).map((r) => <div key={r.label}><b>{r.label}:</b> {r.rule}</div>)}
+      </div>
+    </>
+  )
+}
+
+export function LockinCalendar({ board = 'all' }) {
+  const [h, err] = useHistory('IN')
+  const today = h?.today
+  const ev = useMemo(() => {
+    const out = []
+    for (const x of h?.rows || []) {
+      if (board !== 'all' && (board === 'sme' ? !x.sme : x.sme)) continue
+      for (const l of x.lockins || []) { const d = daysTo(l.date, today); if (d !== null && d >= -7 && d <= 120) out.push({ ...l, x, d }) }
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date))
+  }, [h, board, today])
+  if (err) return <div className="card" style={{ color: 'var(--bad)' }}>{err}</div>
+  if (!h) return <div className="card small muted">Loading listings…</div>
+  return (
+    <>
+      <HistoryProgress h={h} />
+      <div className="card small">{h.lockin_note}</div>
+      {!ev.length ? <div className="card small muted">No lock-in ends in the next 120 days for listings of the last 2 years.</div> : (
+        <div className="tbl-wrap"><table className="tbl ipo-tbl"><thead><tr><th style={{ textAlign: 'left' }}>Date</th><th style={{ textAlign: 'left' }}>Company</th><th style={{ textAlign: 'left' }}>Who can sell</th><th>Now vs issue</th><th>From high</th></tr></thead>
+          <tbody>{ev.map((e) => (
+            <tr key={`${e.x.symbol}-${e.date}-${e.who}-${e.days}`} onClick={() => e.x.symbol && go(`stock/${e.x.symbol}`)} style={{ cursor: 'pointer', opacity: e.d < 0 ? 0.6 : 1 }}>
+              <td style={{ textAlign: 'left' }}><b>{fmtDateY(e.date)}</b><div className="small muted">{e.d < 0 ? `${-e.d} days ago` : e.d === 0 ? 'today' : `in ${e.d} days`}</div></td>
+              <td style={{ textAlign: 'left', whiteSpace: 'normal' }}><b>{e.x.company}</b> <span className="small muted">{e.x.symbol}</span> <Board sme={e.x.sme} /></td>
+              <td style={{ textAlign: 'left', whiteSpace: 'normal' }} className="small">{e.what}</td>
+              <td><Pct v={e.x.perf?.now_vs_issue} /></td><td><Pct v={e.x.base?.from_high} /></td>
+            </tr>
+          ))}</tbody></table></div>
+      )}
+    </>
   )
 }
 
@@ -402,7 +520,7 @@ function UsFiled({ rows, withdrawn }) {
   )
 }
 
-const US_TABS = [['upcoming', 'Upcoming'], ['priced', 'Recently priced'], ['filed', 'Filed with SEC'], ['withdrawn', 'Withdrawn']]
+const US_TABS = [['upcoming', 'Upcoming'], ['priced', 'Recently priced'], ['history', 'Last 2 years'], ['filed', 'Filed with SEC'], ['withdrawn', 'Withdrawn']]
 
 function UsIPOPage({ tab }) {
   const [page, setPage] = useState(null)
@@ -435,7 +553,7 @@ function UsIPOPage({ tab }) {
       )}
       <div className="row between wrapflex ipo-bar-top">
         <div className="tabs" style={{ position: 'static', padding: 0 }}>
-          {US_TABS.map(([k, label]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`ipo/${k}`)}>{label}{page ? ` · ${(page[k] || []).length}` : ''}</button>)}
+          {US_TABS.map(([k, label]) => <button key={k} className={`tab ${t === k ? 'on' : ''}`} onClick={() => go(`ipo/${k}`)}>{label}{page && page[k] ? ` · ${page[k].length}` : ''}</button>)}
         </div>
       </div>
       {!page && !err && <div className="card small muted">Reading Nasdaq's IPO calendar…</div>}
@@ -443,6 +561,7 @@ function UsIPOPage({ tab }) {
       {page && t === 'priced' && <UsPriced rows={page.priced || []} stats={page.stats} />}
       {page && t === 'filed' && <UsFiled rows={page.filed || []} />}
       {page && t === 'withdrawn' && <UsFiled rows={page.withdrawn || []} withdrawn />}
+      {t === 'history' && <IpoHistory market="US" />}
       {page && <div style={{ marginTop: 14 }}><Sources rows={page.sources} /></div>}
     </div>
   )

@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-257_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-259_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -413,6 +413,13 @@ Sidebar → **Scanners** (phone: More → Scanners). On the daily prices Market 
 - **Any company opens**: US GAAP filers as before; **foreign filers (20-F / 40-F, IFRS)** in their own accounts, converted to US$ at one stated Yahoo rate (shown with its date, so growth stays in the home currency), with per-share figures per US-traded share (Nasdaq market cap ÷ US price — an ADS can stand for several home shares); **fresh IPOs, SPACs and funds** get a profile page: IPO price, deal size, day-1 and since-IPO moves, price chart, insiders, any quarterly figures and the prospectus, with scores waiting for the first annual report.
 - **Top Picks scans**: S&P 500, Nasdaq-100, or all US stocks above $10 B / $2 B / $300 M / $50 M market cap (biggest first; about 8 seconds a company).
 
+### 🚀 IPO history, IPO base and lock-ins
+
+IPO research → **Last 2 years** (India and US) and **Lock-in calendar** (India):
+
+- Every listing of the last 2 years (NSE past issues; Nasdaq's IPO calendar month by month), built in the background from daily prices and saved: day-1 close and now vs the issue price, distance from the high since listing, ADR, and an **IPO-base status** from written rules — breaking out (highest close since listing, previous one 10+ sessions ago), base forming, near its high, pulling back, far below its high, below issue price, too new (under 15 sessions). Filter by 3 months / 6 months / 1 year / 2 years and by status.
+- **Lock-in calendar**: SEBI ICDR unlock dates for issues opening from 1 April 2022 — anchor investors 50% at 30 days and 50% at 90 days; pre-IPO shareholders and promoters above the minimum at 6 months; promoters' minimum 20% at 18 months (mainboard). Counted from the listing date; allotment is about one working day earlier under T+3, which the page says.
+
 ### 🚀 IPO research — US
 
 Switch to the 🇺🇸 US view and open **IPO research**. Read from Nasdaq's public IPO calendar (the last 4 months and the next one), with four tabs: **Upcoming** (expected pricing date, price range, shares, deal size) · **Recently priced** (IPO price, deal size, day-1 open and close, now, and the range since, against the IPO price) · **Filed with SEC** · **Withdrawn**.
@@ -765,7 +772,7 @@ cd backend
 python run_tests.py
 ```
 
-257 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+259 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|

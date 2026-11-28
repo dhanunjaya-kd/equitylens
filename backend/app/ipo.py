@@ -739,3 +739,191 @@ def us(refresh: bool = False) -> dict:
     withdrawn = sorted(merged["withdrawn"].values(), key=lambda x: x.get("withdrawn") or "", reverse=True)[:100]
     return {"market": "US", "today": t, "upcoming": upcoming, "priced": rows, "filed": filed, "withdrawn": withdrawn,
             "stats": listed_stats(rows), "sources": sources}
+
+
+# ================================================================== IPO history: last 2 years, IPO base, lock-ins
+# Built in the background (one daily-price download per listing, ~0.5 s each; India ~450 listings, US ~600 deals)
+# and saved; the page shows progress until it is ready. Refreshed after 12 hours.
+HIST_TTL = 12 * 3600
+HIST_STATE = {m: {"running": False, "done": 0, "total": 0, "started": None, "error": None} for m in ("IN", "US")}
+BASE_RULES = {
+    "too_new": "Listed fewer than 15 sessions ago: too early to read a base.",
+    "below_issue": "Last close below the issue price.",
+    "breakout": "Last close is the highest close since listing, and the previous highest close was at least 10 sessions ago (it is breaking out of its IPO base).",
+    "tight": "Its high since listing was made at least 10 sessions ago, it is within 25% of that high and the last 10 sessions trade within 15% (high to low): a base is forming.",
+    "near_high": "Within 5% of its high since listing.",
+    "pullback": "5-25% below its high since listing.",
+    "deep": "More than 25% below its high since listing.",
+}
+BASE_LABEL = {"too_new": "Too new", "below_issue": "Below issue price", "breakout": "Breaking out", "tight": "Base forming",
+              "near_high": "Near its high", "pullback": "Pulling back", "deep": "Far below its high"}
+# SEBI ICDR lock-ins (issues opening on or after 1 Apr 2022), counted from the date of allotment
+LOCKINS_MAIN = [(30, "Anchor investors: first 50% free (30 days)", "anchor"), (90, "Anchor investors: other 50% free (90 days)", "anchor"),
+                ("6m", "Pre-IPO shareholders and promoters' holding above the minimum: free (6 months)", "pre"),
+                ("18m", "Promoters' minimum 20% contribution: free (18 months)", "promoter")]
+LOCKINS_SME = [(30, "Anchor investors: first 50% free (30 days)", "anchor"), (90, "Anchor investors: other 50% free (90 days)", "anchor")]
+
+
+def ipo_base(bars: list[dict], listing: str, issue_price: Optional[float]) -> Optional[dict]:
+    after = [b for b in bars if b["t"][:10] >= listing]
+    if not after:
+        return None
+    n, c = len(after), after[-1]["c"]
+    hh = max(b.get("h") or b["c"] for b in after)
+    closes = [b["c"] for b in after]
+    from_high = round((c / hh - 1) * 100, 2) if hh else None
+    if n < 15:
+        k = "too_new"
+    elif issue_price and c < issue_price:
+        k = "below_issue"
+    else:
+        prev_max = max(closes[:-1])
+        at = max(range(n - 1), key=lambda j: closes[j])
+        last10 = after[-10:]
+        hi10, lo10 = max(b.get("h") or b["c"] for b in last10), min(b.get("l") or b["c"] for b in last10)
+        if c > prev_max and (n - 1) - at >= 10:
+            k = "breakout"
+        elif c >= 0.75 * hh and hi10 and (hi10 - lo10) / hi10 <= 0.15 and max(b.get("h") or b["c"] for b in after[-10:]) < hh:
+            k = "tight"
+        elif c >= 0.95 * hh:
+            k = "near_high"
+        elif c >= 0.75 * hh:
+            k = "pullback"
+        else:
+            k = "deep"
+    adr = None
+    if n >= 5:
+        xs = [(b["h"] / b["l"] - 1) for b in after[-20:] if b.get("l")]
+        adr = round(sum(xs) / len(xs) * 100, 2) if xs else None
+    return {"key": k, "label": BASE_LABEL[k], "from_high": from_high, "sessions": n, "adr": adr, "high": round(hh, 2)}
+
+
+def lockins(listing: str, sme: bool, today: Optional[date] = None) -> list[dict]:
+    """Unlock dates counted from the listing date (allotment is about one working day before listing under
+    SEBI's T+3 timetable, so shares can be free a day earlier than shown)."""
+    import calendar as _cal
+    d0 = date.fromisoformat(listing)
+
+    def plus(p):
+        if isinstance(p, int):
+            return d0 + timedelta(days=p)
+        m = int(p[:-1])                                   # calendar months; a day past the month's end -> its last day
+        y, mo = d0.year + (d0.month - 1 + m) // 12, (d0.month - 1 + m) % 12 + 1
+        return date(y, mo, min(d0.day, _cal.monthrange(y, mo)[1]))
+    out = []
+    for p, w, who in (LOCKINS_SME if sme else LOCKINS_MAIN):
+        d = plus(p)
+        out.append({"days": p, "date": d.isoformat(), "what": w, "who": who, "past": today is not None and d < today})
+    return out
+
+
+def _hist_rows_in(today: date) -> list[dict]:
+    past = _list("past", False).get("items") or []
+    cut = (today - timedelta(days=730)).isoformat()
+    def fresh(x):
+        return not x.get("end") or (date.fromisoformat(x["listing"]) - date.fromisoformat(x["end"])).days <= 30
+    return sorted([x for x in past if x.get("listing") and cut <= x["listing"] <= today.isoformat() and fresh(x)
+                   and x.get("symbol")], key=lambda x: x["listing"], reverse=True)
+
+
+def _us_months_back(today: date, n: int = 24) -> list[str]:
+    out, y, m = [], today.year, today.month
+    for _ in range(n + 1):
+        out.append(f"{y}-{m:02d}")
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    return out[::-1]
+
+
+def _hist_rows_us(today: date) -> list[dict]:
+    rows, seen = [], set()
+    for mon in _us_months_back(today):
+        def fetch(mon=mon):
+            calendars._pace()
+            r = requests.get(NASDAQ_IPO, params={"date": mon}, headers=calendars._NQ_HEADERS, timeout=config.REQUEST_TIMEOUT)
+            if r.status_code != 200:
+                raise IpoError(f"Nasdaq answered {r.status_code}")
+            _save_raw(f"nasdaq_ipo_{mon}.json", r.text)
+            got = parse_us_month(r.json())
+            return {"items": got, "count": sum(len(v) for v in got.values()), "found": [], "missing": []}
+        recent = mon >= _us_months(today)[0]
+        try:
+            res = _cached(f"IPO::US::{mon}", TTL["upcoming"] if recent else 7 * 86400, False, fetch)
+        except Exception:  # noqa: BLE001
+            continue
+        for x in res["items"].get("priced", []):
+            k = x.get("deal") or (x.get("symbol"), x.get("priced"))
+            if k in seen or not x.get("priced") or x["priced"] > today.isoformat():
+                continue
+            seen.add(k)
+            rows.append(dict(x, listing=x["priced"], sme=False, end=None))
+    return sorted(rows, key=lambda x: x["listing"], reverse=True)
+
+
+def _build_history(market: str) -> None:
+    st = HIST_STATE[market]
+    try:
+        if market == "US":
+            today = calendars.us_eastern_now().date()
+            rows = _hist_rows_us(today)
+        else:
+            today = datetime.now(IST).date()
+            rows = _hist_rows_in(today)
+        st.update(total=len(rows), done=0)
+        out = []
+        for x in rows:
+            y = {k: x.get(k) for k in ("symbol", "company", "sme", "listing", "end", "final_price", "range_text", "size_cr", "value_m",
+                                       "times", "exchange")}
+            px = x.get("final_price")
+            try:
+                if market == "US":
+                    bars = _us_bars(x["symbol"]) if x.get("symbol") else []
+                    if bars and (date.fromisoformat(x["listing"]) - date.fromisoformat(bars[0]["t"][:10])).days > 3:
+                        bars, y["note"] = [], "this ticker traded before the pricing date (uplisting or reused ticker)"
+                else:
+                    bars = _bars_2y(x["symbol"])
+                y["perf"] = listing_move(bars, x["listing"], px) if bars and px else None
+                y["base"] = ipo_base(bars, x["listing"], px) if bars else None
+                if not bars and not y.get("note"):
+                    y["note"] = "daily prices not available"
+                elif bars and not y["perf"] and not y.get("note"):
+                    y["note"] = "no single issue price" if not px else "first price bar does not match the listing date"
+            except Exception:  # noqa: BLE001
+                y["perf"], y["base"], y["note"] = None, None, "daily prices not available"
+            if market == "IN":
+                y["lockins"] = lockins(x["listing"], bool(x.get("sme")), today)
+            out.append(y)
+            st["done"] += 1
+        store.put_company(f"IPO::HIST::{market}", {"rows": out, "today": today.isoformat(), "built": time.time()})
+    except Exception as e:  # noqa: BLE001
+        st["error"] = str(e)[:200]
+    finally:
+        st["running"] = False
+
+
+def _bars_2y(symbol: str) -> list[dict]:
+    from . import technicals
+    key = f"IPO::BARS2::{symbol}"
+    hit = store.get_company(key)
+    if hit and time.time() - hit[0] < TTL["bars"]:
+        return hit[1]["bars"]
+    bars = technicals._yahoo(f"{symbol}.NS", "2y")
+    store.put_company(key, {"bars": bars})
+    return bars
+
+
+def history(market: str = "IN", refresh: bool = False) -> dict:
+    mk = market.upper() if market.upper() in HIST_STATE else "IN"
+    hit = store.get_company(f"IPO::HIST::{mk}")
+    st = HIST_STATE[mk]
+    stale = not hit or time.time() - hit[0] > HIST_TTL or refresh
+    if stale and not st["running"] and not config.DEMO:
+        st.update(running=True, done=0, total=0, started=time.time(), error=None)
+        threading.Thread(target=_build_history, args=(mk,), daemon=True).start()
+    data = hit[1] if hit else {"rows": [], "today": None, "built": None}
+    return dict(data, market=mk, status=dict(st), base_rules={k: {"label": BASE_LABEL[k], "rule": v} for k, v in BASE_RULES.items()},
+                lockin_note=("SEBI ICDR lock-ins for issues opening from 1 April 2022, counted from the date of allotment. Shown from "
+                             "the listing date: under the T+3 timetable allotment is about one working day earlier, so shares can be free "
+                             "a day before the date shown. Anchor dates apply only if the IPO had anchor investors; promoter and pre-IPO "
+                             "dates are for mainboard IPOs.") if mk == "IN" else None)

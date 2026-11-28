@@ -185,6 +185,40 @@ def test_us_months_window():
     assert ipo._us_months(date(2026, 1, 15)) == ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]
 
 
+
+def _days(n, start="2026-01-05"):
+    from datetime import date as _d, timedelta as _t
+    d, out = _d.fromisoformat(start), []
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d.isoformat())
+        d += _t(days=1)
+    return out
+
+
+def test_ipo_base_rules():
+    t = _days(60)
+    rise = [{"t": x, "o": 100 + k, "h": 101 + k, "l": 99 + k, "c": 100 + k} for k, x in enumerate(t)]
+    assert ipo.ipo_base(rise[:10], t[0], 90)["key"] == "too_new"
+    assert ipo.ipo_base(rise, t[0], 90)["key"] == "near_high"                      # new highs every day: not a base
+    assert ipo.ipo_base(rise, t[0], 200)["key"] == "below_issue"
+    flat = rise[:30] + [{"t": x, "o": 125, "h": 127, "l": 123, "c": 125} for x in t[30:]]
+    b = ipo.ipo_base(flat, t[0], 90)
+    assert b["key"] == "tight" and b["sessions"] == 60                             # high made 30 sessions ago, quiet since
+    brk = flat + [{"t": "2026-04-01", "o": 128, "h": 131, "l": 127, "c": 130}]
+    assert ipo.ipo_base(brk, t[0], 90)["key"] == "breakout"
+    deep = flat[:-1] + [{"t": t[-1], "o": 90, "h": 95, "l": 89, "c": 95}]
+    assert ipo.ipo_base(deep, t[0], 80)["key"] == "deep"
+
+
+def test_lockin_dates_follow_sebi_days():
+    from datetime import date as _d
+    main = ipo.lockins("2026-11-27", False, _d(2026, 12, 30))
+    assert [(x["days"], x["date"], x["past"]) for x in main] == [(30, "2026-12-27", True), (90, "2027-02-25", False),
+                                                                  ("6m", "2027-05-27", False), ("18m", "2028-05-27", False)]
+    assert [x["who"] for x in ipo.lockins("2026-11-27", True)] == ["anchor", "anchor"]          # SME: anchors only
+
+
 if __name__ == "__main__":
     for k, f in list(globals().items()):
         if k.startswith("test_"):

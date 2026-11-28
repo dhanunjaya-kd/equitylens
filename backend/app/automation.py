@@ -95,7 +95,8 @@ def tick(now: Optional[datetime] = None, ts: Optional[float] = None) -> list[str
 
 def _ipo_refresh() -> None:
     from . import ipo
-    for fn in (lambda: ipo.india(refresh=True), lambda: ipo.us()):    # US months keep their own 30-min / 6-hour cache
+    for fn in (lambda: ipo.india(refresh=True), lambda: ipo.us(),   # US months keep their own 30-min / 6-hour cache
+               lambda: ipo.history("IN"), lambda: ipo.history("US")):  # 2-year lists rebuild in the background after 12 h
         try:
             fn()
         except Exception:  # noqa: BLE001
