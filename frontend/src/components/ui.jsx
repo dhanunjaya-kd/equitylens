@@ -124,17 +124,49 @@ export function Logo({ sym, name = '', size = 28 }) {
   return <img className="logo" src={logoUrl(sym, name)} width={size} height={size} loading="lazy" alt="" onError={() => setBad(true)} style={{ width: size, height: size }} />
 }
 
+// Every page, for the side panel (desktop) and the "More" sheet (phone / tablet): one list, so both show the same pages
+export function navItems(market) {
+  return [['home', '', 'Search', I.search], ['premarket', 'premarket', 'Pre-market', I.sun], ['movers', 'movers', 'Market Movers', I.fire], ['news', 'news', 'News', I.news], ['terminal', 'terminal', 'Terminal', I.term], ['ipo', 'ipo', 'IPO research', I.rocket], ['heatmap', 'heatmap', 'Heatmap', I.grid], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['fiidii', 'fiidii', 'FII / DII', I.bank], ['portfolio', 'portfolio', 'My Portfolio', I.brief], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
+    ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare], ['guide', 'guide', 'Beginner guide', I.book]]
+    .filter(([k]) => market !== 'US' || !IN_ONLY.includes(k))
+    .map(([k, path, label, icon]) => [k, path, market === 'US' && k === 'fiidii' ? 'Institutions' : label, icon])
+}
+const MORE_ICON = <g fill="currentColor"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></g>
+
 export function BottomNav({ page }) {
-  // Search lives in the top bar (logo = home), so the bar keeps 6 tabs
-  const items = [['movers', 'movers', 'Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Money', I.money], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter], ['portfolio', 'portfolio', 'Portfolio', I.brief]]
+  // Search lives in the top bar (logo = home); 5 favourite tabs + "More", which opens every page
+  const [open, setOpen] = useState(false)
+  const items = [['movers', 'movers', 'Movers', I.fire], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Money', I.money], ['rankings', 'rankings', 'Top Picks', I.rank], ['portfolio', 'portfolio', 'Portfolio', I.brief]]
+  const all = navItems(getMarket())
+  const inMore = !items.some(([k]) => k === page) && all.some(([k]) => k === page)
+  const nav = (path) => { setOpen(false); go(path) }
+  useEffect(() => { if (!open) return undefined; const k = (e) => e.key === 'Escape' && setOpen(false); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [open])
   return (
-    <nav className="bottomnav">
-      {items.map(([k, path, label, icon]) => (
-        <button key={k} className={page === k ? 'on' : ''} onClick={() => go(path)}>
-          <svg viewBox="0 0 24 24">{icon}</svg>{label}
+    <>
+      {open && (
+        <div className="more-sheet" onClick={() => setOpen(false)}>
+          <div className="more-box" onClick={(e) => e.stopPropagation()}>
+            <div className="row between" style={{ marginBottom: 10 }}><b>All pages</b><button className="btn small" onClick={() => setOpen(false)}>Close</button></div>
+            <div className="more-grid">
+              {all.map(([k, path, label, icon]) => (
+                <button key={k} className={page === k ? 'on' : ''} onClick={() => nav(path)}><svg viewBox="0 0 24 24">{icon}</svg><span>{label}</span></button>
+              ))}
+              <button className={page === 'settings' ? 'on' : ''} onClick={() => nav('settings')}><span style={{ fontSize: 20 }}>⚙️</span><span>Settings</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+      <nav className="bottomnav">
+        {items.map(([k, path, label, icon]) => (
+          <button key={k} className={page === k ? 'on' : ''} onClick={() => nav(path)}>
+            <svg viewBox="0 0 24 24">{icon}</svg>{label}
+          </button>
+        ))}
+        <button className={open || inMore ? 'on' : ''} onClick={() => setOpen(!open)} aria-label="All pages">
+          <svg viewBox="0 0 24 24">{MORE_ICON}</svg>More
         </button>
-      ))}
-    </nav>
+      </nav>
+    </>
   )
 }
 
@@ -226,10 +258,7 @@ export function MarketOnly({ market, what }) {
 const IN_ONLY = ['premarket']
 
 export function SideNav({ page, market, onMarket, theme, onTheme }) {
-  const items = [['home', '', 'Search', I.search], ['premarket', 'premarket', 'Pre-market', I.sun], ['movers', 'movers', 'Market Movers', I.fire], ['news', 'news', 'News', I.news], ['terminal', 'terminal', 'Terminal', I.term], ['ipo', 'ipo', 'IPO research', I.rocket], ['heatmap', 'heatmap', 'Heatmap', I.grid], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['fiidii', 'fiidii', 'FII / DII', I.bank], ['portfolio', 'portfolio', 'My Portfolio', I.brief], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
-    ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare], ['guide', 'guide', 'Beginner guide', I.book]]
-    .filter(([k]) => market !== 'US' || !IN_ONLY.includes(k))
-    .map(([k, path, label, icon]) => [k, path, market === 'US' && k === 'fiidii' ? 'Institutions' : label, icon])
+  const items = navItems(market)
   // Icons only until the mouse rests on the panel; then it opens over the page. The pin keeps it open (remembered).
   const [pinned, setPinned] = useState(() => { try { return localStorage.getItem('eql_nav_pin') === '1' } catch { return false } })
   const [hover, setHover] = useState(false)
