@@ -24,9 +24,14 @@ GROUPS = [
     ("price", "Price patterns", ["vcp", "inside_bar", "nr7", "mini_coil", "wtc", "flag", "double_bottom", "cup_handle", "flat_base"]),
     ("volume", "Volume", ["lowest_volume", "highest_volume", "pocket_pivot", "bull_snort"]),
     ("trend", "Trend and strength", ["minervini", "stage2", "ti65", "rs_first", "leader"]),
+    ("breakout", "Breakouts", ["nh_3m", "nh_52w", "nh_5y"]),
     ("results", "Results", ["gap_up"]),
 ]
 RULES = {
+    "nh_3m": ("New 3-month high", "Closed above the 3-month high", "Today's close is above the highest high of the 63 sessions before today."),
+    "nh_52w": ("New 52-week high", "Closed above the 52-week high", "Today's close is above the highest high of the 252 sessions before today."),
+    "nh_5y": ("New 5-year high", "Highest in 5 years of data", "Today's close is above the highest high of every earlier session in the 5 years of prices loaded "
+              "(the app does not have older prices, so it does not call this an all-time high)."),
     "vcp": ("VCP", "Tightening into a pivot",
             "Close above its 50-day average, which is above the 200-day; the high-low depth of the last three 15-session "
             "windows shrinks each time (oldest deepest) and the latest is 8% or less; 10-day average volume below the "
@@ -216,6 +221,10 @@ def check(s: Series, i: int) -> set[str]:
         w = s.weekly(i, 3)
         if len(w) == 3 and max(w) / min(w) - 1 <= 0.015:
             out.add("wtc")
+    if i >= 63 and c[i] > s.hi.val(i - 63, i - 1):
+        out.add("nh_3m")
+    if i >= 252 and c[i] > s.hi.val(i - 252, i - 1):
+        out.add("nh_52w")
     hi252 = s.hi.val(i - 251, i) if i >= 251 else None
     lo252 = s.lo.val(i - 251, i) if i >= 251 else None
     # VCP

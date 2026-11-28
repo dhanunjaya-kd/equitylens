@@ -686,7 +686,8 @@ def analyse(bars: list[dict]) -> dict:
     w = scan(weekly(bars), "W")
     g = gaps(bars)
     k = candles(bars)
-    return {"now": d["now"] + w["now"], "events": [dict(e, tf="D") for e in d["events"]] + [dict(e, tf="W") for e in w["events"]],
+    S = _bseries(bars)
+    return {"brk": breakout(bars, S), "brk_events": breakout_events(bars, S), "now": d["now"] + w["now"], "events": [dict(e, tf="D") for e in d["events"]] + [dict(e, tf="W") for e in w["events"]],
             "gaps_now": g["now"], "gap_events": g["events"], "candles_now": k["now"], "candle_events": k["events"],
             "fwd": {k: _fwd(bars, k) for k in (5, 10, 20)}}
 
@@ -704,6 +705,7 @@ class Record:
         self.g: dict = {}
         self.k: dict = {}
         self.base: dict = {5: [], 10: [], 20: []}
+        self.b: dict = {"strong": [], "fair": [], "weak": []}
         self.stocks = 0
         self.first: Optional[str] = None
         self.last: Optional[str] = None
@@ -745,6 +747,8 @@ class Record:
             r["w10"] += e["r10"] > 0
             r["r5"].append(e["r5"])
             r["r10"].append(e["r10"])
+        for e in a.get("brk_events", []):
+            self.b[e["band"]].append(e["r20"])
         for k, xs in (a.get("fwd") or {}).items():
             self.base[int(k)] += xs
 
@@ -772,4 +776,129 @@ class Record:
             base[f"median_r{k}"] = med(b)
             base[f"up_r{k}"] = round(sum(1 for x in b if x > 0) / len(b) * 100, 1) if b else None
         base["n"] = len(self.base[20])
-        return {"patterns": pats, "gaps": gp, "candles": kd, "stocks": self.stocks, "from": self.first, "to": self.last, "base": base}
+        brk = {k: {"n": len(xs), "median_r20": med(xs), "up_r20": round(sum(1 for x in xs if x > 0) / len(xs) * 100, 1) if xs else None}
+               for k, xs in self.b.items()}
+        return {"patterns": pats, "gaps": gp, "candles": kd, "stocks": self.stocks, "from": self.first, "to": self.last, "base": base, "breakouts": brk}
+
+
+# ------------------------------------------------------------------ breakout cards (new 3-month / 52-week / 5-year highs)
+SCORE_PARTS = [("close_pos", "Close near the day's high", 25), ("rvol", "Volume vs its 50-day average (2x = full)", 25),
+               ("emas", "Above the 20, 50 and 200-day EMAs", 20), ("held", "Closed above the old high (not just touched it)", 15),
+               ("wick", "Small upper wick (little selling at the high)", 15)]
+
+
+def _ema(xs: list, n: int) -> list:
+    k, out, e = 2 / (n + 1), [], None
+    for i, x in enumerate(xs):
+        e = x if e is None else x * k + e * (1 - k)
+        out.append(e if i >= n - 1 else None)
+    return out
+
+
+def _rsi(c: list, n: int = 14) -> list:
+    out, ag, al = [None] * len(c), 0.0, 0.0
+    for i in range(1, len(c)):
+        ch = c[i] - c[i - 1]
+        g, ls = max(ch, 0), max(-ch, 0)
+        if i <= n:
+            ag += g / n
+            al += ls / n
+            if i == n:
+                out[i] = 100 - 100 / (1 + ag / al) if al else 100.0
+        else:
+            ag = (ag * (n - 1) + g) / n
+            al = (al * (n - 1) + ls) / n
+            out[i] = 100 - 100 / (1 + ag / al) if al else 100.0
+    return out
+
+
+def _score(i: int, level: float, S: dict) -> tuple[int, dict]:
+    o, h, l, c, v = S["o"][i], S["h"][i], S["l"][i], S["c"][i], S["v"][i]
+    rng = h - l
+    cp = (c - l) / rng if rng > 0 else 1.0
+    wick = (h - max(o, c)) / rng if rng > 0 else 0.0
+    av = S["av"][i]
+    rv = v / av if av else None
+    emas = [S[f"e{k}"][i] for k in (20, 50, 200)]
+    above = sum(1 for e in emas if e is not None and c > e)
+    parts = {"close_pos": 25 * cp, "rvol": 25 * min(1.0, (rv or 0) / 2), "emas": 20 * above / 3,
+             "held": 15.0 if c > level else 0.0, "wick": 15 * max(0.0, 1 - wick / 0.5)}
+    return int(round(sum(parts.values()))), {k: round(x, 1) for k, x in parts.items()} | {"_cp": cp, "_wick": wick, "_rv": rv, "_above": above}
+
+
+def _bseries(bars: list[dict]) -> dict:
+    c = [b["c"] for b in bars]
+    v = [b.get("v") or 0 for b in bars]
+    return {"o": [b["o"] for b in bars], "h": [b["h"] for b in bars], "l": [b["l"] for b in bars], "c": c, "v": v,
+            "av": _avg_vol(v, 50), "e20": _ema(c, 20), "e50": _ema(c, 50), "e200": _ema(c, 200), "rsi": _rsi(c)}
+
+
+def _prior_high(h: list, i: int, n: int) -> Optional[float]:
+    return max(h[i - n:i]) if i >= n else None
+
+
+def breakout(bars: list[dict], S: Optional[dict] = None) -> Optional[dict]:
+    """Today's new-high breakout card, or None. Levels: the highest high of the 63 / 252 sessions before today, or of
+    every earlier session loaded (5 years when the stock has them)."""
+    n = len(bars)
+    if n < 70:
+        return None
+    S = S or _bseries(bars)
+    h, c = S["h"], S["c"]
+    i = n - 1
+    span_years = (date.fromisoformat(bars[-1]["t"][:10]) - date.fromisoformat(bars[0]["t"][:10])).days / 365.25
+    levels = [("3m", "3-month", _prior_high(h, i, 63)), ("52w", "52-week", _prior_high(h, i, 252))]
+    all_hi = max(h[:i])
+    if span_years >= 4.9:
+        levels.append(("5y", "5-year", all_hi))
+    hit = [(k, lab, lv) for k, lab, lv in levels if lv is not None and h[i] > lv]
+    if not hit:
+        return None
+    kind, label, level = hit[-1]
+    score, parts = _score(i, level, S)
+    cp, wick, rv, above = parts.pop("_cp"), parts.pop("_wick"), parts.pop("_rv"), parts.pop("_above")
+    held = c[i] > level
+    nxt = [(lab, lv) for k, lab, lv in levels if lv is not None and lv > h[i]]
+    bullets = []
+    if nxt:
+        lab, lv = min(nxt, key=lambda x: x[1])
+        bullets.append(f"{(lv / c[i] - 1) * 100:.1f}% to the {lab} high")
+    elif kind == "5y" or (span_years < 4.9 and h[i] >= all_hi):
+        bullets.append(f"Highest price in the {min(span_years, 5):.1f} years of data loaded")
+    if rv and rv >= 1.5:
+        bullets.append(f"Strong volume ({rv:.1f}x)")
+    elif rv and rv < 0.8:
+        bullets.append(f"Light volume ({rv:.1f}x)")
+    if above == 3:
+        bullets.append("Above the 20, 50 and 200-day EMAs")
+    if cp >= 0.8:
+        bullets.append("Closed near the high")
+    if wick >= 0.4:
+        bullets.append("Long upper wick: selling at the highs")
+    if not held:
+        bullets.append(f"Closed back below the {label} high")
+    e20, e50, e200 = S["e20"][i], S["e50"][i], S["e200"][i]
+    rsi = S["rsi"][i]
+    trend = bool(e20 and e50 and e200 and c[i] > e20 > e50 > e200)
+    tags = (["Momentum"] if rsi and rsi >= 60 else []) + (["Bullish trend"] if trend else [])
+    band = "strong" if score >= 75 else "fair" if score >= 55 else "weak"
+    return {"kind": kind, "label": f"New {label} high", "level": round(level, 2), "score": score, "band": band, "held": held,
+            "status": "held" if held else "failed", "parts": parts, "close_pos": round(cp * 100), "upper_wick": round(wick * 100),
+            "rvol": round(rv, 2) if rv else None, "rsi": round(rsi, 1) if rsi else None, "above_emas": above, "trend": trend,
+            "bullets": bullets, "tags": tags, "chg20": round((c[i] / c[i - 20] - 1) * 100, 2) if i >= 20 else None,
+            "spark": [round(x, 2) for x in c[-20:]], "last5": [[round(S["o"][j], 2), round(h[j], 2), round(S["l"][j], 2), round(c[j], 2)]
+                                                                for j in range(n - 5, n)],
+            "vol": S["v"][i], "traded": c[i] * S["v"][i]}
+
+
+def breakout_events(bars: list[dict], S: dict) -> list[dict]:
+    """Every past day that closed above its 52-week high, with its score (candles up to that day only) and the
+    return 20 sessions later: does a higher score actually mean anything?"""
+    h, c = S["h"], S["c"]
+    out = []
+    for i in range(252, len(bars) - 20):
+        lv = max(h[i - 252:i])
+        if c[i] > lv:
+            sc, _ = _score(i, lv, S)
+            out.append({"band": "strong" if sc >= 75 else "fair" if sc >= 55 else "weak", "r20": (c[i + 20] / c[i] - 1) * 100})
+    return out

@@ -1085,3 +1085,19 @@ html[data-src="off"] .src-note, html[data-src="off"] .src { display: none !impor
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--accent); color: var(--on-accent); font-weight: 700; }
 .pat-card .co .nm small { display: block; }
+
+/* Breakout cards (Scanners → Cards) */
+.brk-card .brk-score { display: inline-flex; align-items: center; gap: 6px; }
+.brk-bars { display: inline-flex; gap: 2px; }
+.brk-bars i { width: 4px; height: 12px; border-radius: 1px; background: var(--line); }
+.brk-bars i.on { background: var(--good); }
+.brk-spark .lvl { stroke: var(--muted); stroke-width: 1; }
+.brk-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.brk-stats > div { display: flex; flex-direction: column; gap: 2px; }
+.brk-meter { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.brk-meter i { display: block; height: 100%; }
+.brk-why { display: flex; gap: 10px; align-items: center; background: var(--card2); border-radius: 10px; padding: 8px; margin-top: 8px; }
+.brk-why ul { margin: 0; padding-left: 16px; line-height: 1.5; }
+.brk-last5 { text-align: center; flex: none; }
+.brk-last5 .cu line, .brk-last5 .cu rect { stroke: var(--good); fill: var(--good); }
+.brk-last5 .cd line, .brk-last5 .cd rect { stroke: var(--bad); fill: var(--bad); }

@@ -213,6 +213,8 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
                     if r:
                         try:                       # chart patterns, gaps, candlesticks on the full 5 years
                             pa = patterns.analyse(full)
+                            if pa.get("brk"):
+                                r["brk"] = pa["brk"]
                             with rec_lock:
                                 prec.add(pa, full[0]["t"][:10] if full else None, full[-1]["t"][:10] if full else None)
                             if pa["now"] or pa["gaps_now"] or pa["candles_now"]:

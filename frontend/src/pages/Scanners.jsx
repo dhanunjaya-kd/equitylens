@@ -57,6 +57,104 @@ function Record({ rec, keys, rules, horizons }) {
   )
 }
 
+
+function Spark20({ data, level, w = 120, h = 36 }) {
+  if (!data || data.length < 2) return null
+  const ys = level ? [...data, level] : data
+  const lo = Math.min(...ys), hi = Math.max(...ys)
+  const X = (i) => (i / (data.length - 1)) * w
+  const Y = (v) => 2 + (1 - (v - lo) / (hi - lo || 1)) * (h - 4)
+  const up = data[data.length - 1] >= data[0]
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="brk-spark">
+      {level && <line x1="0" x2={w} y1={Y(level)} y2={Y(level)} strokeDasharray="3 3" className="lvl" />}
+      <polyline points={data.map((v, i) => `${X(i)},${Y(v)}`).join(' ')} fill="none" stroke={up ? 'var(--good)' : 'var(--bad)'} strokeWidth="1.6" />
+      <circle cx={X(data.length - 1)} cy={Y(data[data.length - 1])} r="2.4" fill={up ? 'var(--good)' : 'var(--bad)'} />
+    </svg>
+  )
+}
+
+function Last5({ bars, cp }) {
+  const lo = Math.min(...bars.map((b) => b[2])), hi = Math.max(...bars.map((b) => b[1]))
+  const Y = (v) => 2 + (1 - (v - lo) / (hi - lo || 1)) * 40
+  return (
+    <div className="brk-last5">
+      <svg viewBox="0 0 60 44" width="60" height="44">
+        {bars.map((b, i) => <g key={i} className={b[3] >= b[0] ? 'cu' : 'cd'}><line x1={6 + i * 12} x2={6 + i * 12} y1={Y(b[1])} y2={Y(b[2])} /><rect x={3 + i * 12} width="6" y={Y(Math.max(b[0], b[3]))} height={Math.max(1, Math.abs(Y(b[0]) - Y(b[3])))} /></g>)}
+      </svg>
+      <div className="small muted">Close {cp}%</div>
+    </div>
+  )
+}
+
+function Meter({ value, max, good }) {
+  const p = Math.max(0, Math.min(1, (value ?? 0) / max))
+  return <div className="brk-meter"><i style={{ width: `${p * 100}%`, background: good ? 'var(--good)' : 'var(--accent)' }} /></div>
+}
+
+function ScanCard({ r, mk, unit, unitL, rec, parts }) {
+  const b = r.brk
+  const [why, setWhy] = useState(false)
+  const cur = mk === 'US' ? '$' : '₹'
+  const head = (
+    <div className="row between">
+      <span className="co" style={{ cursor: 'pointer' }} onClick={() => go(`stock/${r.symbol}`)}><Logo sym={r.symbol} name={r.name} size={28} />
+        <span className="nm"><b>{ticker(r.symbol)}</b>{r.fno && <FnoBadge />}<small style={{ display: 'block' }}>{r.name}</small></span></span>
+      {r.rs != null && <span className="small muted" title="RS rating 1-99 vs every stock in the list">RS <b>{r.rs}</b></span>}
+    </div>
+  )
+  if (!b) {
+    return (
+      <div className="card pat-card">
+        {head}
+        <div className="row between" style={{ marginTop: 6 }}><b style={{ fontSize: 22 }}>{cur}{num(r.price, 2)}</b><span style={{ color: tone(r.chg) }}>{ok(r.chg) ? signed(r.chg, 2, '%') : ''}</span></div>
+        <ScanBadges tags={r.tags} results={r.results} />
+        <div className="small muted">ADR {ok(r.adr) ? `${num(r.adr, 1)}%` : '—'} · TI65 {ok(r.ti65) ? num(r.ti65, 2) : '—'} · {num((r.turn20 || 0) / unit, 1)} {unitL}/day</div>
+        <button className="btn small" style={{ marginTop: 6 }} onClick={() => go(`stock/${r.symbol}/chart`)}>Open chart</button>
+      </div>
+    )
+  }
+  const bandL = b.status === 'failed' ? ['Failed', 'bad'] : b.band === 'strong' ? ['Strong', 'good'] : b.band === 'fair' ? ['Fair', 'warn'] : ['Weak', '']
+  const br = rec?.[b.band]
+  return (
+    <div className="card pat-card brk-card">
+      <div className="row between">
+        <span className={`chip-s ${b.held ? 'good' : 'bad'}`}>{b.held ? '▲' : '↩'} {b.label}</span>
+        <span className="brk-score" title="Score out of 100 from the parts below"><span className={`chip-s ${bandL[1]}`}>{bandL[0]} {b.score}</span>
+          <span className="brk-bars">{Array.from({ length: 10 }, (_, i) => <i key={i} className={i < Math.round(b.score / 10) ? 'on' : ''} />)}</span></span>
+      </div>
+      {head}
+      <div className="row between" style={{ alignItems: 'flex-end', marginTop: 4 }}>
+        <div><b style={{ fontSize: 24 }}>{cur}{num(r.price, 2)}</b><div style={{ color: tone(r.chg) }} className="small">{ok(r.chg) ? signed(r.chg, 2, '%') : ''}</div></div>
+        <div style={{ textAlign: 'right' }}><Spark20 data={b.spark} level={b.level} /><div className="small muted">--- {num(b.level, 2)} · 20 sessions {ok(b.chg20) ? signed(b.chg20, 1, '%') : ''}</div></div>
+      </div>
+      <div className="brk-stats small">
+        <div><span className="muted">Volume</span><b>{num(b.vol, 0)}</b></div>
+        <div><span className="muted">Traded</span><b>{num(b.traded / unit, 1)} {mk === 'US' ? 'M' : 'Cr'}</b></div>
+        <div><span className="muted">Rel. vol</span><b>{b.rvol ? `${num(b.rvol, 1)}x` : '—'}</b><Meter value={b.rvol} max={3} good={b.rvol >= 1.5} /></div>
+        <div><span className="muted">RSI</span><b>{b.rsi ?? '—'}</b><Meter value={b.rsi} max={100} good={b.rsi >= 60} /></div>
+      </div>
+      <div className="brk-why">
+        <Last5 bars={b.last5} cp={b.close_pos} />
+        <ul className="small">{b.bullets.map((x) => <li key={x}>{x}</li>)}</ul>
+      </div>
+      <div className="row between small" style={{ marginTop: 4 }}>
+        <span>{b.tags.map((t) => <span key={t} className="chip-s" style={{ marginRight: 4 }}>{t}</span>)}</span>
+        <button className="btn small" onClick={() => setWhy(!why)}>{why ? 'Hide score' : 'How the score is made'}</button>
+      </div>
+      {why && (
+        <div className="small pat-learn">
+          {parts.map((p) => <div key={p.key} className="row between"><span>{p.label}</span><b>{num(b.parts[p.key], 1)} / {p.max}</b></div>)}
+          <div className="muted" style={{ marginTop: 4 }}>Strong = 75+, Fair = 55–74, Weak = below 55.</div>
+          {br?.n ? <div style={{ marginTop: 4 }}>Past 52-week-high closes scored {b.band}: up 20 sessions later {num(br.up_r20, 0)}% of {num(br.n, 0)} times, median {signed(br.median_r20, 1, '%')}.
+            {rec.strong?.n >= 30 && rec.weak?.n >= 30 ? ` Strong ${signed(rec.strong.median_r20, 1, '%')} vs Weak ${signed(rec.weak.median_r20, 1, '%')}: that is how much the score has mattered.` : ' Too few Strong or Weak cases yet to say whether the score matters.'}</div> : null}
+        </div>
+      )}
+      <button className="btn small" style={{ marginTop: 6 }} onClick={() => go(`stock/${r.symbol}/chart`)}>Open chart</button>
+    </div>
+  )
+}
+
 export default function Scanners() {
   const mk = getMarket()
   const [univ] = useUniv()
@@ -68,11 +166,16 @@ export default function Scanners() {
   const [sort, setSort] = useState(['rs', -1])
   const [f, setF] = useState({ adr: '', turn: '', rs: '' })
   const [copied, setCopied] = useState(false)
+  const [view, setView] = useState(() => { try { return localStorage.getItem('eql_scan_view') || 'table' } catch { return 'table' } })
+  const [showFailed, setShowFailed] = useState(false)
+  const [limit, setLimit] = useState(40)
   const which = mk === 'IN' ? univ : uu
   const load = () => api(`/api/scanners?market=${mk}&universe=${which}`).then((x) => { setD(x); setErr(null) }).catch((e) => setErr(e.message))
   useEffect(() => { setD(null); load() }, [mk, which])
   useEffect(() => { const r = d?.status?.running; if (!r) return undefined; const t = setTimeout(load, 8000); return () => clearTimeout(t) }, [d])
   useEffect(() => { try { localStorage.setItem('eql_scan_sel', JSON.stringify(sel)) } catch { /* ignore */ } }, [sel])
+  useEffect(() => { try { localStorage.setItem('eql_scan_view', view) } catch { /* ignore */ } }, [view])
+  useEffect(() => setLimit(40), [sel, view, which])
 
   const counts = useMemo(() => {
     const c = {}
@@ -90,6 +193,13 @@ export default function Scanners() {
     const [k, dir] = sort
     return [...r].sort((a, b) => ((a[k] ?? -1e18) - (b[k] ?? -1e18)) * dir)
   }, [d, sel, fno, f, sort, mk, unit])
+  // touched a new high but closed back below it (only for the new-high scanners)
+  const nhSel = sel.filter((k) => k.startsWith('nh_'))
+  const failed = useMemo(() => {
+    if (!nhSel.length || !d) return []
+    const kinds = nhSel.map((k) => k.slice(3))
+    return (d.rows || []).filter((x) => x.brk && !x.brk.held && kinds.includes(x.brk.kind) && (!fno || mk !== 'IN' || x.fno))
+  }, [d, nhSel.join(), fno, mk])
   const toggle = (k) => setSel(sel.includes(k) ? sel.filter((x) => x !== k) : [...sel, k])
   const copyTV = () => {
     const txt = rows.map((r) => (mk === 'US' ? ticker(r.symbol) : `NSE:${r.symbol}`)).join(',\n')
@@ -143,9 +253,18 @@ export default function Scanners() {
               <label className="small">Turnover ≥ <input style={{ width: 64 }} value={f.turn} onChange={(e) => setF({ ...f, turn: e.target.value })} placeholder={unitL} /></label>
               <label className="small">RS ≥ <input style={{ width: 48 }} value={f.rs} onChange={(e) => setF({ ...f, rs: e.target.value })} placeholder="1-99" /></label>
               <button className="btn small" onClick={copyTV} disabled={!rows.length}>{copied ? 'Copied ✓' : '📋 Copy TradingView list'}</button>
+              <div className="seg">{[['table', 'Table'], ['cards', 'Cards']].map(([k, l]) => <button key={k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{l}</button>)}</div>
             </div>
           </div>
-          {!rows.length ? <div className="small muted">No stock meets {sel.length > 1 ? 'all of these rules' : 'this rule'} today.</div> : (
+          {failed.length > 0 && <div className="small" style={{ marginBottom: 8 }}><button className={`tab ${showFailed ? 'on' : ''}`} onClick={() => setShowFailed(!showFailed)}>{showFailed ? 'Hide' : 'Show'} {failed.length} that touched the high but closed back below it</button></div>}
+          {view === 'cards' && (rows.length > 0 || (showFailed && failed.length > 0)) ? (
+            <>
+              <div className="pat-grid">
+                {[...rows, ...(showFailed ? failed : [])].slice(0, limit).map((r) => <ScanCard key={r.symbol} r={r} mk={mk} unit={unit} unitL={unitL} rec={d.brk_record} parts={d.score_parts} />)}
+              </div>
+              {rows.length + (showFailed ? failed.length : 0) > limit && <div style={{ textAlign: 'center', marginTop: 10 }}><button className="btn" onClick={() => setLimit(limit + 40)}>Show more</button></div>}
+            </>
+          ) : !rows.length ? <div className="small muted">No stock meets {sel.length > 1 ? 'all of these rules' : 'this rule'} today.</div> : (
             <div className="tbl-wrap">
               <table className="tbl scan-tbl">
                 <thead><tr><th style={{ textAlign: 'left' }}>Stock</th>

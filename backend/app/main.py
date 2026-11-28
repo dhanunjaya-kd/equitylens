@@ -743,6 +743,11 @@ def patterns_get(market: str = "IN", universe: str = ""):
             "status": {"running": st.get("running", False), "done": st.get("done"), "total": st.get("total")}}
 
 
+def _score_parts():
+    from . import patterns
+    return [{"key": k, "label": l, "max": m} for k, l, m in patterns.SCORE_PARTS]
+
+
 @app.get("/api/scanners")
 def scanners_get(market: str = "IN", universe: str = ""):
     """Every stock with its indicators and the scanners it meets today, the written rules and each scanner's tested record."""
@@ -758,7 +763,9 @@ def scanners_get(market: str = "IN", universe: str = ""):
         rows.append({"symbol": r["symbol"], "name": r["name"], "sector": r["sector"], "price": r["price"],
                      "chg": r["ret"].get("1D"), "from_hi": r.get("from_hi"), "from_lo": r.get("from_lo"),
                      "mcap": f.get("market_cap") or r.get("mcap_nasdaq"), "fno": r.get("fno"),
-                     "score": f.get("overall"), "tags": sc["tags"], "results": sc.get("results", False), "date": sc.get("date"),
+                     "score": f.get("overall"), "results": sc.get("results", False), "date": sc.get("date"),
+                     "tags": sc["tags"] + (["nh_5y"] if (r.get("brk") or {}).get("kind") == "5y" and r["brk"].get("held") else []),
+                     "brk": r.get("brk"),
                      **{k: sc["ind"].get(k) for k in ("adr", "rs", "ti65", "lin", "turn20", "vol_x50")}})
     which = d.get("universe")
     rec = store.get_company(f"SCANTEST::{mk}::{which if mk == 'IN' else 'US'}")
@@ -766,6 +773,8 @@ def scanners_get(market: str = "IN", universe: str = ""):
             "rows": rows, "groups": [{"key": k, "label": l, "items": items} for k, l, items in scanners.GROUPS],
             "rules": {k: {"name": a, "short": b, "rule": c} for k, (a, b, c) in scanners.RULES.items()},
             "indicators": scanners.INDICATORS, "record": rec[1] if rec else None,
+            "brk_record": ((store.get_company(f"PATTERNS::{mk}") or (0, {}))[1].get("record") or {}).get("breakouts"),
+            "score_parts": _score_parts(),
             "horizons": list(scanners.HORIZONS)}
 
 
