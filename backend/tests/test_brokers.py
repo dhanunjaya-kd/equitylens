@@ -110,6 +110,46 @@ def test_funds_are_not_scored():
     assert not is_fund("TCS", "Tata Consultancy Services") and not is_fund("ETERNAL", "Eternal Ltd")
 
 
+def test_check_keys_catches_autofilled_email_and_spaces():
+    B.configure("zerodha", {"api_key": "someone@gmail.com", "api_secret": "abc def"})
+    r = B.check("zerodha", "http://192.168.31.21:8600")
+    got = {x["what"]: x for x in r["checks"]}
+    assert not r["ok"] and "e-mail" in got["API key"]["msg"] and "spaces" in got["API secret"]["msg"]
+    assert "http://192.168.31.21:8600/api/broker/zerodha/callback" in got["Redirect URL"]["msg"]
+    B.configure("zerodha", {"api_key": "kitekey123", "api_secret": "secret456"})
+    assert B.check("zerodha", "http://x")["ok"]
+    r = B.check("dhan", "http://x")                      # token broker: keys missing, so it is not asked
+    assert not r["ok"] and not any(x["what"].startswith("Asked") for x in r["checks"])
+    B.forget("zerodha")
+
+
+def test_login_valid_until_uses_the_brokers_stated_time():
+    from datetime import datetime
+    from app import calendars
+    t = datetime(2026, 11, 28, 9, 15, tzinfo=calendars.IST).timestamp()
+    assert B.valid_until("zerodha", t) == "2026-11-29T06:00+05:30"
+    assert B.valid_until("upstox", t) == "2026-11-29T03:30+05:30"
+    early = datetime(2026, 11, 28, 2, 0, tzinfo=calendars.IST).timestamp()
+    assert B.valid_until("upstox", early) == "2026-11-28T03:30+05:30"
+    assert B.valid_until("fyers", t) is None               # no exact time published: none shown
+
+
+def test_file_preview_shows_columns_without_saving():
+    csv = b"Instrument,Qty.,Avg. cost,LTP\nTESTCO,10,100,120\nTESTBANK,5,50,55\n"
+    store.put_company("PORTFOLIO::file", {"rows": [], "broker": "File", "filename": "old.csv"})
+    p = B.preview_file(csv, "h.csv", "IN")
+    assert p["count"] == 2 and p["columns"]["symbol"] == "Instrument" and p["columns"]["quantity"] == "Qty."
+    assert p["sample"][0]["symbol"] == "TESTCO" and store.get_company("PORTFOLIO::file")[1]["filename"] == "old.csv"
+
+
+def test_portfolio_history_is_saved_once_a_day():
+    store.put_company("PFHIST::IN", {"days": {"2026-11-20": {"value": 1000.0, "invested": 900.0}}})
+    h = portfolio._history("IN", 1100.0, 950.0)
+    assert h["since"] == "2026-11-20" and h["points"][-1]["value"] == 1100.0 and len(h["points"]) == 2
+    h = portfolio._history("IN", 1200.0, 950.0)            # same day again: replaced, not added
+    assert len(h["points"]) == 2 and h["points"][-1]["value"] == 1200.0
+
+
 if __name__ == "__main__":
     bad = 0
     for n, f in list(globals().items()):

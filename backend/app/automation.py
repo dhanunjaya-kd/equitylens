@@ -281,8 +281,30 @@ def tick(now: Optional[datetime] = None, ts: Optional[float] = None) -> list[str
             pass
         if asked:
             s["requested"].remove(job)
+    try:
+        broker_reminder(now, s)
+    except Exception:  # noqa: BLE001
+        pass
     _save(s)
     return started
+
+
+def broker_reminder(now: datetime, s: dict) -> Optional[str]:
+    """Weekdays 08:45-10:00 IST, once a day: Telegram note for broker logins that have ended (when Telegram is set up)."""
+    from . import alerts, brokers
+    day = now.date().isoformat()
+    if now.weekday() >= 5 or not ((8, 45) <= (now.hour, now.minute) <= (10, 0)) or s["last"].get("broker_remind") == day:
+        return None
+    ended = [b["name"] for b in brokers.status("") if b.get("token_time") and
+             (b.get("error") or (b.get("valid_until") and b["valid_until"] < now.isoformat(timespec="minutes")))]
+    s["last"]["broker_remind"] = day
+    if not ended:
+        return None
+    try:
+        alerts.send(f"🔗 <b>Broker login ended</b>: {', '.join(ended)}.\nOpen EquityLens → My Portfolio → Reconnect to keep holdings up to date.")
+        return ", ".join(ended)
+    except Exception:  # noqa: BLE001 - Telegram not set up: nothing to send
+        return None
 
 
 def run_now(job: str) -> dict:

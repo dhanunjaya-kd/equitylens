@@ -1,109 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { FnoBadge, Logo, ScoreRing } from '../components/ui'
 import { ago, api, getMarket, go, isDesktop, ok, parseHash, signed } from '../util'
 import { Md } from './AI'
 import Watch from './Watch'
+import PortfolioConnect from './PortfolioConnect'
+import { ScanBadges } from './Scanners'
 
 // money in full (not crores): ₹1,65,714 / $12,340
 const money = (v, mk, d = 0) => (ok(v) ? (v < 0 ? '-' : '') + (mk === 'US' ? '$' : '₹') + Math.abs(v).toLocaleString(mk === 'US' ? 'en-US' : 'en-IN', { maximumFractionDigits: d }) : '—')
 const tone = (v) => (v > 0 ? 't-good' : v < 0 ? 't-bad' : '')
-
-function BrokerCard({ b, onChange, mk }) {
-  const [open, setOpen] = useState(false), [vals, setVals] = useState({}), [busy, setBusy] = useState(''), [msg, setMsg] = useState(null), [paste, setPaste] = useState(false), [url, setUrl] = useState('')
-  const save = async () => {
-    setBusy('save'); setMsg(null)
-    try { await api(`/api/brokers/${b.id}/config`, { method: 'POST', body: JSON.stringify(vals), headers: { 'Content-Type': 'application/json' } }); setVals({}); setMsg({ ok: 'Saved on this computer.' }); onChange() } catch (e) { setMsg({ err: e.message }) } finally { setBusy('') }
-  }
-  const connect = async () => {
-    setBusy('connect'); setMsg(null)
-    try {
-      const r = await api(`/api/brokers/${b.id}/connect`, { method: 'POST' })
-      if (r.url) {
-        if (b.auth === 'paste') { window.open(r.url, '_blank'); setPaste(true) } else window.location.href = r.url
-      } else { setMsg({ ok: `Connected · ${r.holdings} holdings imported.` }); onChange() }
-    } catch (e) { setMsg({ err: e.message }) } finally { setBusy('') }
-  }
-  const sendPaste = async () => {
-    setBusy('paste'); setMsg(null)
-    try { const r = await api('/api/brokers/schwab/paste', { method: 'POST', body: JSON.stringify({ url }), headers: { 'Content-Type': 'application/json' } }); setPaste(false); setMsg({ ok: `Connected · ${r.holdings} holdings imported.` }); onChange() } catch (e) { setMsg({ err: e.message }) } finally { setBusy('') }
-  }
-  const sync = async () => { setBusy('sync'); setMsg(null); try { const r = await api(`/api/brokers/${b.id}/sync`, { method: 'POST' }); setMsg({ ok: `${r.holdings} holdings updated.` }); onChange() } catch (e) { setMsg({ err: e.message }); onChange() } finally { setBusy('') } }
-  const remove = async () => { if (!window.confirm(`Remove ${b.name}? Its saved keys and holdings are deleted from this computer.`)) return; await api(`/api/brokers/${b.id}`, { method: 'DELETE' }); onChange() }
-  const state = b.error ? ['warn', b.error.startsWith('Session expired') ? 'Session expired' : 'Needs attention'] : b.connected ? ['good', 'Connected'] : b.configured ? ['ok', 'Ready to connect'] : ['neutral', 'Not set up']
-  return (
-    <div className={`brk ${b.connected ? 'on' : ''}`}>
-      <div className="row between">
-        <div><b>{b.name}</b><div className="small muted">{b.holdings ? `${b.holdings} holdings · synced ${ago(b.last_sync)}` : b.expires}</div></div>
-        <span className={`badge sm t-${state[0]} bg-${state[0]}`}>{state[1]}</span>
-      </div>
-      <div className="row wrapflex" style={{ gap: 6, marginTop: 10 }}>
-        {b.configured && <button className="btn small primary" disabled={!!busy} onClick={connect}>{busy === 'connect' ? 'Connecting…' : b.connected ? '↻ Reconnect' : '🔗 Connect'}</button>}
-        {b.connected && <button className="btn small" disabled={!!busy} onClick={sync}>{busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>}
-        <button className="btn small" onClick={() => setOpen(!open)}>{open ? 'Close' : b.configured ? '⚙️ Keys' : '⚙️ Set up'}</button>
-        {(b.configured || b.holdings > 0) && <button className="btn small" onClick={remove}>Remove</button>}
-      </div>
-      {msg && <div className={`small ${msg.err ? 't-bad' : 't-good'}`} style={{ marginTop: 8 }}>{msg.err ? '⚠️ ' : '✓ '}{msg.err || msg.ok}</div>}
-      {b.error && !msg && <div className="small t-warn" style={{ marginTop: 8 }}>{b.error}</div>}
-      {paste && (
-        <div className="brk-form">
-          <div className="small">After logging in to Schwab you land on a page that doesn't load. Copy that page's full address and paste it here:</div>
-          <input placeholder="https://127.0.0.1/?code=…" value={url} onChange={(e) => setUrl(e.target.value)} />
-          <button className="btn small primary" disabled={!url || !!busy} onClick={sendPaste}>Finish connecting</button>
-        </div>
-      )}
-      {open && (
-        <div className="brk-form">
-          <ol className="small brk-steps">{b.steps.map((s) => <li key={s} dangerouslySetInnerHTML={{ __html: s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') }} />)}</ol>
-          <a className="small" href={b.site} target="_blank" rel="noreferrer">Open {b.site.replace('https://', '')} ↗</a>
-          {b.redirect_uri && (
-            <div className="small">Redirect URL to paste in the broker's app:
-              <div className="copy-row"><code>{b.redirect_uri}</code><button className="btn small" onClick={() => navigator.clipboard?.writeText(b.redirect_uri)}>Copy</button></div>
-              <span className="muted">Open EquityLens with this same address when you connect.</span>
-            </div>
-          )}
-          {b.fields.map((f) => (
-            <label key={f.key} className="small">{f.label}
-              <input type={f.secret ? 'password' : 'text'} autoComplete="off" placeholder={f.set ? (f.secret ? f.value : f.value) : ''} value={vals[f.key] ?? ''} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} />
-            </label>
-          ))}
-          <button className="btn small primary" disabled={busy === 'save'} onClick={save}>Save keys</button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function FileCard({ b, mk, onChange }) {
-  const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null)
-  const pick = (e) => {
-    const f = e.target.files?.[0]
-    if (!f) return
-    setBusy(true); setMsg(null)
-    const rd = new FileReader()
-    rd.onload = async () => {
-      try {
-        const data = String(rd.result).split(',')[1]
-        const r = await api('/api/portfolio/upload', { method: 'POST', body: JSON.stringify({ filename: f.name, market: mk, data }), headers: { 'Content-Type': 'application/json' } })
-        setMsg({ ok: `${r.holdings} holdings imported from ${r.file}.` }); onChange()
-      } catch (er) { setMsg({ err: er.message }) } finally { setBusy(false); e.target.value = '' }
-    }
-    rd.readAsDataURL(f)
-  }
-  return (
-    <div className={`brk ${b?.connected ? 'on' : ''}`}>
-      <div className="row between"><div><b>📄 Any broker: upload holdings</b>
-        <div className="small muted">{b?.holdings ? `${b.holdings} holdings from ${b.file} · ${ago(b.last_sync)}` : mk === 'US' ? 'CSV / Excel export from Robinhood, Fidelity, IBKR, Schwab…' : 'CSV / Excel from Groww, Zerodha Console, Kotak, ICICI, HDFC Sec…'}</div></div>
-        {b?.holdings ? <span className="badge sm t-good bg-good">Imported</span> : null}</div>
-      <div className="row wrapflex" style={{ gap: 6, marginTop: 10 }}>
-        <label className="btn small primary">{busy ? 'Reading…' : '⬆️ Upload file'}<input type="file" accept=".csv,.xlsx,.xlsm" hidden onChange={pick} /></label>
-        {b?.holdings ? <button className="btn small" onClick={async () => { await api('/api/brokers/file', { method: 'DELETE' }); onChange() }}>Remove</button> : null}
-      </div>
-      <div className="small muted" style={{ marginTop: 6 }}>The file needs a symbol (or ISIN) column and a quantity column; average price and LTP are used if present.</div>
-      {msg && <div className={`small ${msg.err ? 't-bad' : 't-good'}`} style={{ marginTop: 8 }}>{msg.err ? '⚠️ ' : '✓ '}{msg.err || msg.ok}</div>}
-    </div>
-  )
-}
 
 function Bars({ items, label, value }) {
   const max = Math.max(...items.map((i) => i[value]), 1)
@@ -116,40 +22,84 @@ function Bars({ items, label, value }) {
   )
 }
 
+// money flowing into / out of each stock's industry over 5 sessions (same rule as Smart Money → Money flow)
+function industryFlows(mf) {
+  const by = {}
+  for (const st of mf?.stocks || []) {
+    const g = st.g?.industry
+    if (!g || !st.flow) continue
+    by[g] = (by[g] || 0) + st.flow.flow5
+  }
+  return { ind: Object.fromEntries((mf?.stocks || []).map((st) => [st.symbol, st.g?.industry])), net: by }
+}
+
+const SORTS = { value: (r) => r.value, pnl: (r) => r.pnl_pct, weight: (r) => r.weight, score: (r) => r.overall, rs: (r) => r._rs, results: (r) => r.next_results || '9999' }
+
 function Holdings({ x, mk }) {
   const desk = isDesktop()
+  const [sc, setSc] = useState(null), [mf, setMf] = useState(null)
+  const [broker, setBroker] = useState(''), [sort, setSort] = useState(['value', -1]), [flt, setFlt] = useState('')
+  useEffect(() => { api(`/api/scanners?market=${mk}`).then(setSc).catch(() => {}); api(`/api/moneyflow?market=${mk}`).then(setMf).catch(() => {}) }, [mk])
+  const scan = useMemo(() => Object.fromEntries((sc?.rows || []).map((r) => [r.symbol, r])), [sc])
+  const flows = useMemo(() => industryFlows(mf), [mf])
+  const brokers = [...new Set(x.rows.flatMap((r) => r.brokers))]
+  const rows = useMemo(() => {
+    let r = x.rows.map((h) => ({ ...h, _rs: scan[h.symbol]?.rs, _tags: scan[h.symbol]?.tags || [], _ind: flows.ind[h.symbol], _flow: flows.net[flows.ind[h.symbol]] }))
+    if (broker) r = r.filter((h) => h.brokers.includes(broker))
+    if (flt === 'watch') r = r.filter((h) => h.surveillance || h.high_flags > 0 || (h.pledged || 0) >= 10)
+    if (flt === 'loss') r = r.filter((h) => (h.pnl || 0) < 0)
+    if (flt === 'results') r = r.filter((h) => h.next_results)
+    const [k, dir] = sort
+    const f = SORTS[k]
+    return [...r].sort((a, b) => { const va = f(a), vb = f(b); if (va == null) return 1; if (vb == null) return -1; return (va > vb ? 1 : va < vb ? -1 : 0) * dir })
+  }, [x, scan, flows, broker, flt, sort])
+  const th = (k, l) => <th onClick={() => setSort([k, sort[0] === k ? -sort[1] : -1])} style={{ cursor: 'pointer' }}>{l}{sort[0] === k ? (sort[1] < 0 ? ' ▾' : ' ▴') : ''}</th>
+  const unit = mk === 'US' ? '$ M' : '₹ Cr'
+  const bar = (
+    <div className="row wrapflex" style={{ gap: 6, padding: '10px 12px' }}>
+      <b style={{ marginRight: 6 }}>Holdings · {rows.length}</b>
+      {brokers.length > 1 && <>{['', ...brokers].map((k) => <button key={k || 'all'} className={`chip ${broker === k ? 'ipo-on' : ''}`} onClick={() => setBroker(k)}>{k || 'All brokers'}</button>)}<span className="muted">|</span></>}
+      {[['', 'All'], ['loss', 'In loss'], ['watch', 'Watch-outs'], ['results', 'Results coming']].map(([k, l]) => <button key={k || 'a'} className={`chip ${flt === k ? 'ipo-on' : ''}`} onClick={() => setFlt(k)}>{l}</button>)}
+    </div>
+  )
   if (desk) {
     return (
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+        {bar}
         <table className="ptable">
-          <thead><tr><th>Company</th><th>Qty</th><th>Avg</th><th>LTP</th><th>Value</th><th>P&L</th><th>Weight</th><th>Score</th><th>Entry</th><th>Div Yield</th><th>Verdict</th><th>Watch-outs</th></tr></thead>
+          <thead><tr><th>Company</th><th>Qty</th><th>Avg</th><th>LTP</th>{th('value', 'Value')}{th('pnl', 'P&L')}{th('weight', 'Weight')}{th('score', 'Score')}{th('rs', 'RS')}<th>Industry money (5D)</th>{th('results', 'Next results')}<th>Verdict</th><th>Watch-outs</th></tr></thead>
           <tbody>
-            {x.rows.map((r) => (
+            {rows.map((r) => (
               <tr key={r.symbol} onClick={() => go(`stock/${r.symbol}`)}>
-                <td><div className="row" style={{ gap: 10 }}><Logo sym={r.symbol} name={r.name} size={28} /><div><b>{r.name}</b>{r.fno && <FnoBadge lot={r.lot} />}<div className="small muted">{r.symbol.replace('US:', '')} · {r.brokers.join(', ')}</div></div></div></td>
+                <td><div className="row" style={{ gap: 10 }}><Logo sym={r.symbol} name={r.name} size={28} /><div><b>{r.name}</b>{r.fno && <FnoBadge lot={r.lot} />}<div className="small muted">{r.symbol.replace('US:', '')} · {r.brokers.join(', ')}</div>
+                  <ScanBadges tags={r._tags} only={['leader', 'vcp', 'flag', 'cup_handle', 'pocket_pivot', 'bull_snort', 'minervini', 'rs_first', 'gap_up']} /></div></div></td>
                 <td>{r.qty}</td><td>{money(r.avg, mk, 2)}</td><td>{money(r.ltp, mk, 2)}</td><td><b>{money(r.value, mk)}</b></td>
                 <td className={tone(r.pnl)}>{money(r.pnl, mk)}<div className="small">{signed(r.pnl_pct, 1, '%')}</div></td>
                 <td><div className="wbar"><div style={{ width: `${Math.min(r.weight || 0, 100)}%` }} /></div><span className="small">{r.weight}%</span></td>
                 <td>{r.scored ? <ScoreRing value={r.overall} size={38} /> : <span className="small muted">{r.fund ? 'fund / ETF' : 'not scored'}</span>}</td>
-                <td>{r.entry_verdict && r.entry_verdict !== 'NA' ? <span className={`badge sm ${r.entry_verdict === 'ENTER' ? 't-good bg-good' : 't-warn bg-warn'}`}>{r.entry_verdict}</span> : '—'}</td>
-                <td className="small">{ok(r.dividend_yield) ? `${r.dividend_yield}%` : '—'}</td>
+                <td><b style={{ color: r._rs >= 80 ? 'var(--good)' : r._rs <= 30 ? 'var(--bad)' : undefined }}>{r._rs ?? '—'}</b></td>
+                <td className="small">{ok(r._flow) ? <><b className={tone(r._flow)}>{r._flow > 0 ? '▲ in' : r._flow < 0 ? '▼ out' : 'flat'} {Math.abs(r._flow).toLocaleString(undefined, { maximumFractionDigits: 0 })} {unit}</b><div className="muted ellip" style={{ maxWidth: 150 }}>{r._ind}</div></> : '—'}</td>
+                <td className="small">{r.next_results ? r.next_results : '—'}</td>
                 <td>{r.verdict ? <span className={`badge sm t-${r.tone} bg-${r.tone}`}>{r.verdict}</span> : '—'}</td>
-                <td className="small">{[r.surveillance && '🚨 surveillance', r.high_flags > 0 && `🚩 ${r.high_flags} red flag${r.high_flags > 1 ? 's' : ''}`, r.pledged >= 10 && `🔒 pledge ${r.pledged}%`, r.next_results && `📅 results ${r.next_results.slice(5)}`].filter(Boolean).join(' · ') || '—'}</td>
+                <td className="small">{[r.surveillance && '🚨 surveillance', r.high_flags > 0 && `🚩 ${r.high_flags} red flag${r.high_flags > 1 ? 's' : ''}`, r.pledged >= 10 && `🔒 pledge ${r.pledged}%`].filter(Boolean).join(' · ') || '—'}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        <div className="small muted" style={{ padding: '8px 12px' }}>RS and badges from Scanners; industry money from Smart Money → Money flow (estimate of direction, last 5 sessions). "—" when that page has no data for the stock yet.</div>
       </div>
     )
   }
   return (
     <div className="card" style={{ padding: 0 }}>
-      {x.rows.map((r) => (
+      {bar}
+      {rows.map((r) => (
         <div key={r.symbol} className="mv-row" onClick={() => go(`stock/${r.symbol}`)}>
           <Logo sym={r.symbol} name={r.name} size={32} />
           <div className="grow" style={{ minWidth: 0 }}>
             <div className="ellip"><b>{r.name}</b>{r.fno && <FnoBadge />}{r.surveillance && <span className="tagc bad">🚨</span>}{r.high_flags > 0 && <span className="tagc bad">🚩{r.high_flags}</span>}</div>
-            <div className="small muted ellip">{r.qty} × {money(r.avg, mk, 2)} · {r.weight}% · {r.scored ? `score ${r.overall ?? '—'}` : r.fund ? 'fund / ETF' : 'not scored'}</div>
+            <div className="small muted ellip">{r.qty} × {money(r.avg, mk, 2)} · {r.weight}% · {r.scored ? `score ${r.overall ?? '—'}` : r.fund ? 'fund / ETF' : 'not scored'}{r._rs ? ` · RS ${r._rs}` : ''}</div>
+            <ScanBadges tags={r._tags} only={['leader', 'vcp', 'flag', 'cup_handle', 'pocket_pivot', 'minervini']} />
           </div>
           <div className="cal-num"><b>{money(r.value, mk)}</b><div className={`small ${tone(r.pnl)}`}>{signed(r.pnl_pct, 1, '%')}</div></div>
         </div>
@@ -158,14 +108,38 @@ function Holdings({ x, mk }) {
   )
 }
 
+function History({ h, mk }) {
+  if (!h) return null
+  const pts = h.points || []
+  if (pts.length < 2) return <div className="card small muted">📆 Your portfolio's own history starts {h.since ? `on ${h.since}` : 'today'}: its value is saved once a day when you open or sync it, so this chart fills in day by day. Earlier days are never made up.</div>
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>📆 Your portfolio since {h.since}</h3>
+      <ResponsiveContainer width="100%" height={200}>
+        <AreaChart data={pts}>
+          <CartesianGrid stroke="var(--grid)" strokeDasharray="3 3" />
+          <XAxis dataKey="date" stroke="var(--muted)" fontSize={10} tickFormatter={(d) => d.slice(5)} />
+          <YAxis stroke="var(--muted)" fontSize={10} width={64} tickFormatter={(v) => money(v, mk)} domain={['auto', 'auto']} />
+          <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} formatter={(v) => money(v, mk)} />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Area type="monotone" dataKey="value" name="Value" stroke="#2dd4bf" fill="rgba(45,212,191,.16)" strokeWidth={2} />
+          <Line type="monotone" dataKey="invested" name="Invested" stroke="#8b98a5" strokeWidth={1.5} dot={false} />
+          {pts.some((p) => p.index) && <Line type="monotone" dataKey="index" name={`${h.index}, same start`} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.5} dot={false} />}
+        </AreaChart>
+      </ResponsiveContainer>
+      <div className="small muted">Saved once a day. The {h.index} line starts at your first saved value and moves with the index; money you added or took out later moves your line but not the index line.</div>
+    </div>
+  )
+}
+
 export default function Portfolio() {
   const mk = getMarket()
   const q = new URLSearchParams((window.location.hash.split('?')[1]) || '')
   const [tab, setTab] = useState(q.get('tab') === 'watch' ? 'watch' : 'holdings')
-  const [b, setB] = useState(null), [x, setX] = useState(null), [ai, setAi] = useState(null), [aiBusy, setAiBusy] = useState(false), [aiErr, setAiErr] = useState(null)
+  const [b, setB] = useState(null), [keys, setKeys] = useState(null), [x, setX] = useState(null), [ai, setAi] = useState(null), [aiBusy, setAiBusy] = useState(false), [aiErr, setAiErr] = useState(null)
   const [scan, setScan] = useState(null), [syncing, setSyncing] = useState(false)
   const [note, setNote] = useState(q.get('connected') ? { ok: `Connected to ${q.get('connected')} — holdings imported.` } : q.get('error') ? { err: q.get('error') } : null)
-  const load = () => { api('/api/brokers').then((r) => setB(r.brokers)).catch(() => setB([])); api(`/api/portfolio?market=${mk}`).then(setX).catch(() => setX({ rows: [] })) }
+  const load = () => { api('/api/brokers').then((r) => { setB(r.brokers); setKeys(r.keys) }).catch(() => setB([])); api(`/api/portfolio?market=${mk}`).then(setX).catch(() => setX({ rows: [] })) }
   useEffect(load, [mk])
   useEffect(() => {
     if (!scan?.running) return
@@ -208,23 +182,14 @@ export default function Portfolio() {
       {tab === 'watch' && <Watch />}
 
       {tab === 'holdings' && (
-        <div className="movers-grid">
-          <div className="movers-side">
-            <div className="card">
-              <h3>🔗 Connect your broker</h3>
-              <div className="brk-list">
-                {mine.map((k) => <BrokerCard key={k.id} b={k} mk={mk} onChange={load} />)}
-                <FileCard b={file} mk={mk} onChange={load} />
-              </div>
-            </div>
-          </div>
-
-          <div className="movers-main">
+        <>
+          <PortfolioConnect brokers={b} keys={keys} mk={mk} onChange={load} />
+          <div>
             {x && !x.rows.length && (
               <div className="card empty">
                 <div style={{ fontSize: 34 }}>💼</div>
                 <b>No holdings yet</b>
-                <div className="small muted" style={{ marginTop: 6 }}>Connect {mk === 'US' ? 'Alpaca, Tradier or Schwab' : 'Zerodha, Upstox, Fyers, Angel One or Dhan'}, or upload your broker's holdings file. EquityLens then scores every stock you own, flags risks, shows results dates and checks how balanced the portfolio is.</div>
+                <div className="small muted" style={{ marginTop: 6 }}>Connect a broker or upload a holdings file above. EquityLens then scores every stock you own, flags risks, shows results dates, money flow and scanner signals, and checks how balanced the portfolio is.</div>
               </div>
             )}
             {s && (
@@ -294,6 +259,7 @@ export default function Portfolio() {
                   </div>
                 )}
                 <Holdings x={x} mk={mk} />
+                <History h={s.history} mk={mk} />
                 <div className="card">
                   <div className="row between"><h3 style={{ margin: 0 }}>✨ Review my portfolio</h3><button className="btn small primary" disabled={aiBusy} onClick={review}>{ai ? '↻ Again' : 'Review'}</button></div>
                   {aiBusy && <div className="small muted" style={{ marginTop: 8 }}>Reading your holdings…</div>}
@@ -303,7 +269,7 @@ export default function Portfolio() {
               </>
             )}
           </div>
-        </div>
+        </>
       )}
     </div>
   )

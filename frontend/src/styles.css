@@ -1015,3 +1015,25 @@ html[data-src="off"] .src-note, html[data-src="off"] .src { display: none !impor
 .scan-ind:hover { border-color: var(--accent); }
 .scan-ind svg.spin { animation: scanspin 1s linear infinite; }
 .running-card { border-color: var(--accent); }
+
+/* ---------- portfolio connect ---------- */
+.pc-choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
+.pc-choice button { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card2); color: var(--text); }
+.pc-choice button.on { border: 2px solid var(--accent); }
+.pc-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 12px; }
+.pc-tiles button { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+.pc-tiles button.on { border: 2px solid var(--accent); background: var(--card2); }
+.pc-setup { margin-top: 12px; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card2); }
+.pc-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+.pc-step { position: relative; padding: 12px 12px 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); display: flex; flex-direction: column; gap: 6px; }
+.pc-step ol { margin: 0; padding-left: 18px; line-height: 1.5; }
+.pc-n { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--on-accent, #fff); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+.pc-url { display: block; padding: 8px; border-radius: 8px; background: var(--card2); border: 1px solid var(--line); font-size: 12px; word-break: break-all; user-select: all; }
+.pc-field { display: flex; flex-direction: column; gap: 3px; color: var(--muted); } .pc-field input { width: 100%; }
+.pc-check { margin-top: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); display: grid; gap: 4px; }
+.pc-drop { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; margin-top: 12px; padding: 24px 16px; border: 2px dashed var(--line); border-radius: 14px; cursor: pointer; background: var(--card); }
+.pc-drop.on, .pc-drop:hover { border-color: var(--accent); }
+.pc-health { display: grid; gap: 6px; margin-top: 10px; }
+.pc-hrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); }
+.pc-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.pc-privacy { margin-top: 12px; } .pc-privacy summary { cursor: pointer; color: var(--muted); }

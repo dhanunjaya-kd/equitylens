@@ -134,6 +134,25 @@ def redirect_uri(base: str, bid: str) -> str:
     return f"{base.rstrip('/')}/api/broker/{bid}/callback"
 
 
+# When a login stops working, by the broker's own published rule (only where the broker states an exact time).
+VALID_RULE = {"zerodha": ((6, 0), "Zerodha logins end at 6:00 AM the next day"),
+              "upstox": ((3, 30), "Upstox logins end at 3:30 AM the next day")}
+
+
+def valid_until(bid: str, token_time: Optional[float]) -> Optional[str]:
+    """ISO time (IST) when this login ends, for brokers that publish an exact time; None otherwise."""
+    if not token_time or bid not in VALID_RULE:
+        return None
+    from datetime import datetime, timedelta
+    from . import calendars
+    t = datetime.fromtimestamp(token_time, calendars.IST)
+    (h, m), _ = VALID_RULE[bid]
+    end = t.replace(hour=h, minute=m, second=0, microsecond=0)
+    if end <= t:
+        end += timedelta(days=1)
+    return end.isoformat(timespec="minutes")
+
+
 def status(base: str) -> list[dict]:
     d = _load()
     out = []
@@ -148,13 +167,53 @@ def status(base: str) -> list[dict]:
             "configured": all(c.get(k) for k, _, _ in b["fields"] if k != "paper"),
             "connected": bool(c.get("token")) and not c.get("error"),
             "last_sync": snap[0] if snap else None, "holdings": len(snap[1]["rows"]) if snap else 0,
-            "error": c.get("error"),
+            "error": c.get("error"), "token_time": c.get("token_time") if c.get("token") else None,
+            "valid_until": valid_until(bid, c.get("token_time")) if c.get("token") else None,
+            "valid_rule": VALID_RULE.get(bid, (None, None))[1],
         })
     f = store.get_company("PORTFOLIO::file")
     out.append({"id": "file", "name": "Holdings file (any broker)", "market": "ANY", "auth": "file", "fields": [], "steps": [],
                 "last_sync": f[0] if f else None, "holdings": len(f[1]["rows"]) if f else 0, "file": f[1].get("filename") if f else None,
                 "connected": bool(f), "configured": True})
     return out
+
+
+_EMAILISH = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.I)
+
+
+def check(bid: str, base: str) -> dict:
+    """Check the saved keys before the broker's sign-in page. Brokers with a plain token / key are asked for real
+    (one holdings call); browser-login brokers can only be checked here (filled, no spaces, not an e-mail address
+    the browser auto-filled, and the redirect URL matches this address)."""
+    if bid not in BROKERS:
+        raise BrokerError("Unknown broker")
+    b, c = BROKERS[bid], _cfg(bid)
+    out = []
+    for k, lab, sec in b["fields"]:
+        v = str(c.get(k) or "")
+        if k == "paper":
+            continue
+        if not v:
+            out.append({"ok": False, "what": lab, "msg": "not filled in"})
+        elif v != v.strip() or " " in v:
+            out.append({"ok": False, "what": lab, "msg": "has spaces in it: copy it again from the broker's site"})
+        elif _EMAILISH.match(v):
+            out.append({"ok": False, "what": lab, "msg": "looks like an e-mail address (the browser may have filled it in): paste the key from the broker's site"})
+        else:
+            out.append({"ok": True, "what": lab, "msg": "filled in"})
+    if b["auth"] == "oauth":
+        out.append({"ok": None, "what": "Redirect URL", "msg": f"must be exactly {redirect_uri(base, bid)} in your app on the broker's site, "
+                                                             "and EquityLens must be opened at this same address when you press Connect"})
+        out.append({"ok": None, "what": "Key and secret", "msg": f"{b['name']} only checks them on its sign-in page; any error it gives is shown here after you come back"})
+    elif all(x["ok"] for x in out) and b["auth"] in ("token", "direct"):
+        try:
+            if b["auth"] == "direct":
+                direct_login(bid)
+            n = len(fetch(bid))
+            out.append({"ok": True, "what": f"Asked {b['name']}", "msg": f"keys accepted · {n} holdings visible"})
+        except Exception as e:  # noqa: BLE001
+            out.append({"ok": False, "what": f"Asked {b['name']}", "msg": f"{b['name']} said: {str(e)[:200]}"})
+    return {"broker": bid, "checks": out, "ok": all(x["ok"] is not False for x in out)}
 
 
 def configure(bid: str, values: dict) -> dict:
@@ -486,7 +545,7 @@ def _isin_map() -> dict:
     return out
 
 
-def parse_file(data: bytes, filename: str, market: str = "IN") -> list[dict]:
+def parse_file(data: bytes, filename: str, market: str = "IN", info: Optional[dict] = None) -> list[dict]:
     rows = _rows_from_bytes(data, filename)
     norm = lambda s: re.sub(r"\s+", " ", str(s or "").strip().lower())
     hi = None
@@ -505,6 +564,10 @@ def parse_file(data: bytes, filename: str, market: str = "IN") -> list[dict]:
                 return head.index(k)
         return None
     cs, cq, ca, cl, ci = col(SYM_KEYS), col(QTY_KEYS), col(AVG_KEYS), col(LTP_KEYS), col(ISIN_KEYS)
+    if info is not None:
+        raw = rows[hi]
+        info.update(header_row=hi + 1, columns={k: (str(raw[i]).strip() if i is not None else None) for k, i in
+                                                (("symbol", cs), ("quantity", cq), ("average price", ca), ("last price", cl), ("ISIN", ci))})
     isin_sym = _isin_map() if market == "IN" else {}
     out = []
     for r in rows[hi + 1:]:
@@ -522,6 +585,13 @@ def parse_file(data: bytes, filename: str, market: str = "IN") -> list[dict]:
     if not out:
         raise BrokerError("No holdings found in the file")
     return out
+
+
+def preview_file(data: bytes, filename: str, market: str) -> dict:
+    """What the file would import, without saving: the columns read and the first rows."""
+    info: dict = {}
+    rows = parse_file(data, filename, market, info)
+    return {"file": filename, "count": len(rows), "sample": rows[:8], **info}
 
 
 def import_file(data: bytes, filename: str, market: str) -> dict:

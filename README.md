@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-262_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-267_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -388,6 +388,16 @@ Sidebar → **IPO research** (on the phone: Market Movers → 🚀 IPOs). A dash
 **Checks before anything is shown** (a figure that fails is left out, with the reason): times = bids ÷ shares offered and must agree with NSE's figure · the main categories must add up to NSE's total bids · bids at each price must add up to the total · fresh + OFS must add up to the issue size · ₹ issue size only when NSE's figure is confirmed to be a share count · NSE's past "issue price" is used only when it lies inside its own price range · a row that listed more than 30 days after the issue closed (bonds, migrations) is not counted as an IPO listing.
 
 **Source check:** every source's latest raw answer is saved in `backend/data/ipo_raw/`; the *Data sources* bar at the bottom shows each source and any field it stopped carrying.
+
+### 💼 My Portfolio — connecting (India and US, same layout)
+
+- **Two ways in**: connect a broker (live, read-only) or upload a holdings file (any broker, CSV / Excel). Broker tiles show each one's state (not set up, ready, connected, reconnect needed today).
+- **Setup across the full page in numbered steps**: create the app (link to the broker's site) · copy the redirect URL (shown in full) · enter the keys (boxes the browser cannot auto-fill) · **Check keys** · Save and connect. Check keys catches empty keys, spaces and an e-mail address auto-filled into a key box; brokers that use a plain token or key (Dhan, Angel One, Alpaca, Tradier) are asked for real and their answer is shown.
+- **Connections bar** once connected: holdings, last sync, how long the login stays valid (Zerodha: until 6:00 AM, Upstox: until 3:30 AM the next day, by their stated rules), Sync / Reconnect. With Telegram set up, a weekday-morning message names any broker whose login has ended.
+- **File upload with a preview**: drag and drop; the columns read and the first rows are shown before anything is imported.
+- **Holdings table**: all brokers merged (same stock at two brokers = one row), broker and watch-out filters, sortable; scanner badges and RS rating (Scanners), money flowing into or out of the stock's industry (Money flow), next results date.
+- **Your portfolio's own history**: its value is saved once a day when you open or sync it and drawn with the amount invested and the index from the same start; it begins on the first saved day (earlier days are never filled in).
+- **Where your keys are kept**: only on this laptop in `backend/data/brokers.json`, encrypted, never in git; Remove keys per broker.
 
 ### 💰 Money flow
 
@@ -772,7 +782,7 @@ cd backend
 python run_tests.py
 ```
 
-262 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+267 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|

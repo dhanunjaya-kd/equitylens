@@ -32,7 +32,8 @@ def merged(market: str) -> list[dict]:
 
 
 def _price_maps(market: str) -> dict:
-    mv = store.get_company(f"MOVERS::{market}")
+    from . import movers
+    mv = store.get_company(movers._key(market))
     return {r["symbol"]: (r.get("spark") or [None])[-1] for r in (mv[1]["rows"] if mv else [])}
 
 
@@ -157,7 +158,34 @@ def xray(market: str) -> dict:
         "brokers": sorted({b for r in rows for b in r["brokers"]}),
         "synced": max((r.get("synced") or 0) for r in rows),
     }
+    summary["history"] = _history(market, total, invested)
     return {"market": market, "rows": rows, "summary": summary}
+
+
+def _history(market: str, total: float, invested: float) -> dict:
+    """Your portfolio's own value, saved once a day when the portfolio is opened or synced (the latest of the day
+    wins). It starts on the first day it was saved; earlier days are never filled in. The index line is the
+    market index's close on the same dates, rebased to the portfolio's first saved value."""
+    key = f"PFHIST::{market}"
+    hit = store.get_company(key)
+    days = dict(hit[1]["days"]) if hit else {}
+    day = (calendars.us_eastern_now().date() if market == "US" else datetime.now(calendars.IST).date()).isoformat()
+    if total:
+        days[day] = {"value": round(total, 2), "invested": round(invested or 0, 2)}
+        store.put_company(key, {"days": days})
+    pts = [{"date": d, **v} for d, v in sorted(days.items())]
+    idx_sym, idx_name = ("^GSPC", "S&P 500") if market == "US" else ("^NSEI", "NIFTY 50")
+    if len(pts) >= 2 and not config.DEMO:
+        try:
+            closes = {b["t"][:10]: b["c"] for b in technicals._yahoo(idx_sym, "2y")}
+            base = next((closes[p["date"]] for p in pts if p["date"] in closes), None)
+            if base:
+                for p in pts:
+                    if p["date"] in closes:
+                        p["index"] = round(pts[0]["value"] * closes[p["date"]] / base, 2)
+        except Exception:  # noqa: BLE001
+            pass
+    return {"points": pts, "since": pts[0]["date"] if pts else None, "index": idx_name}
 
 
 def _benchmark_series(market: str, rows: list[dict], total: float) -> dict | None:

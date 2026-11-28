@@ -1010,7 +1010,13 @@ def _brk(fn, *a):
 
 @app.get("/api/brokers")
 def brokers_list(request: Request):
-    return {"brokers": brokers.status(_base(request))}
+    return {"brokers": brokers.status(_base(request)), "address": _base(request),
+            "keys": {"file": "backend/data/brokers.json", "encrypted": True, "in_git": False}}
+
+
+@app.post("/api/brokers/{bid}/check")
+def brokers_check(bid: str, request: Request):
+    return _brk(brokers.check, bid, _base(request))
 
 
 @app.post("/api/brokers/{bid}/config")
@@ -1061,7 +1067,7 @@ def brokers_forget(bid: str):
 
 
 @app.post("/api/portfolio/upload")
-def portfolio_upload(body: dict = Body(...)):
+def portfolio_upload(body: dict = Body(...), preview: bool = False):
     import base64 as b64
     try:
         data = b64.b64decode(body.get("data", ""))
@@ -1069,7 +1075,8 @@ def portfolio_upload(body: dict = Body(...)):
         raise HTTPException(400, "Could not read the file")
     if len(data) > 5_000_000:
         raise HTTPException(400, "File too large (max 5 MB)")
-    return _brk(brokers.import_file, data, body.get("filename", "holdings.csv"), (body.get("market") or "IN").upper())
+    fn = brokers.preview_file if preview else brokers.import_file
+    return _brk(fn, data, body.get("filename", "holdings.csv"), (body.get("market") or "IN").upper())
 
 
 @app.get("/api/portfolio")

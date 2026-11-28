@@ -82,6 +82,24 @@ def test_manual_runs_only_what_is_asked():
         automation.set_mode("auto")
 
 
+def test_broker_reminder_once_a_weekday_morning_for_ended_logins():
+    from app import alerts, brokers
+    sent = []
+    real = (alerts.send, brokers.status)
+    alerts.send = lambda text, s=None: sent.append(text)
+    brokers.status = lambda base: [{"name": "Zerodha", "token_time": 1.0, "valid_until": "2026-11-27T06:00+05:30", "error": None},
+                                   {"name": "Fyers", "token_time": 1.0, "valid_until": None, "error": None}]
+    try:
+        s = {"last": {}}
+        assert automation.broker_reminder(at(2026, 11, 27, 8, 0), s) is None        # too early
+        assert automation.broker_reminder(at(2026, 11, 27, 9, 0), s) == "Zerodha"   # ended at 06:00; Fyers has no stated end
+        assert automation.broker_reminder(at(2026, 11, 27, 9, 30), s) is None       # once a day
+        assert automation.broker_reminder(at(2026, 11, 28, 9, 0), {"last": {}}) is None   # Saturday
+        assert len(sent) == 1 and "Zerodha" in sent[0]
+    finally:
+        alerts.send, brokers.status = real
+
+
 def test_old_settings_turn_the_us_scan_on_once():
     store.put_company(automation.KEY, {"enabled": {"scan_in": True, "scan_us": False, "ipo": True}, "last": {}})
     assert automation.settings()["enabled"]["scan_us"] is True                   # v1 default saved as a choice
