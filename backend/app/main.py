@@ -711,6 +711,38 @@ def movers_get(market: str = "IN", tf: str = "1D", universe: str = ""):
     return d
 
 
+@app.get("/api/patterns")
+def patterns_get(market: str = "IN", universe: str = ""):
+    """Chart patterns, gaps and candlesticks found on each stock's real candles, with the written rules and the tested record."""
+    from . import patterns
+    mk = market.upper()
+    hit = store.get_company(f"PATTERNS::{mk}")
+    st = movers.STATE.get(mk, {})
+    if not hit:
+        movers.get(mk)        # starts the price refresh when it is allowed and due; patterns are built with it
+        st = movers.STATE.get(mk, {})
+        return {"market": mk, "rows": [], "record": None, "updated": None, "names": patterns.NAMES, "rules": patterns.RULES,
+                "candles": {k: {"name": v[0], "dir": v[1], "rule": v[2]} for k, v in patterns.CANDLES.items()}, "cfg": patterns.CFG,
+                "status": {"running": st.get("running", False), "done": st.get("done"), "total": st.get("total")}}
+    d = hit[1]
+    rows = d.get("rows", [])
+    u = universe.upper()
+    if mk == "IN":
+        member = universe_mod.membership()
+        lots = enrich.fno()
+        for r in rows:
+            r["idx"] = member.get(r["symbol"], [])
+            r["fno"] = r["symbol"] in lots
+        if u in ("N50", "N100", "N500"):
+            rows = [r for r in rows if u in r["idx"]]
+    elif u in ("SP500", "NDX"):
+        rows = [r for r in rows if u in (r.get("idx") or [])]
+    return {"market": mk, "rows": rows, "record": d.get("record"), "updated": d.get("updated"), "stocks": d.get("stocks"),
+            "universe": d.get("universe"), "names": patterns.NAMES, "rules": patterns.RULES,
+            "candles": {k: {"name": v[0], "dir": v[1], "rule": v[2]} for k, v in patterns.CANDLES.items()}, "cfg": patterns.CFG,
+            "status": {"running": st.get("running", False), "done": st.get("done"), "total": st.get("total")}}
+
+
 @app.get("/api/scanners")
 def scanners_get(market: str = "IN", universe: str = ""):
     """Every stock with its indicators and the scanners it meets today, the written rules and each scanner's tested record."""

@@ -23,7 +23,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from . import config, scanners, store, technicals, universe, us, usuniverse
+from . import config, patterns, scanners, store, technicals, universe, us, usuniverse
 
 TF = {"1D": 1, "1W": 5, "1M": 21, "3M": 63, "1Y": 252}
 TTL = 6 * 3600
@@ -77,12 +77,21 @@ def _demo_bars(sym: str) -> list[dict]:
     return out
 
 
+def _last_2y(bars: list[dict]) -> list[dict]:
+    """Movers, scanners and their record keep using 2 years (as before the 5-year download)."""
+    if not bars:
+        return bars
+    from datetime import date as _d, timedelta as _td
+    cut = (_d.fromisoformat(bars[-1]["t"][:10]) - _td(days=730)).isoformat()
+    return [b for b in bars if b["t"][:10] >= cut]
+
+
 def _bars(sym: str) -> list[dict]:
     if config.DEMO:
         return _demo_bars(sym)
     for attempt in range(2):
         try:
-            bars, meta = technicals._yahoo(_yahoo_symbol(sym), "2y", with_meta=True)
+            bars, meta = technicals._yahoo(_yahoo_symbol(sym), "5y", with_meta=True)    # 5 years: weekly patterns + their record
             return technicals.apply_meta(bars, meta)     # long series can lag the latest session
         except Exception:  # noqa: BLE001
             if attempt:
@@ -179,9 +188,13 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
             rec = scanners.Record() if history else None
             rec_lock = threading.Lock()
 
+            prec = patterns.Record()
+            prows: list[dict] = []
+
             def one(u):
                 try:
-                    bars = _bars(u["symbol"])
+                    full = _bars(u["symbol"])
+                    bars = _last_2y(full)
                     r = compute_row(u["symbol"], u.get("name", ""), u.get("industry", ""), bars, market)
                     if r and u.get("idx"):
                         r["idx"] = u["idx"]
@@ -198,6 +211,17 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
                         except Exception:  # noqa: BLE001 - a scanner problem never loses the mover row
                             pass
                     if r:
+                        try:                       # chart patterns, gaps, candlesticks on the full 5 years
+                            pa = patterns.analyse(full)
+                            with rec_lock:
+                                prec.add(pa, full[0]["t"][:10] if full else None, full[-1]["t"][:10] if full else None)
+                            if pa["now"] or pa["gaps_now"] or pa["candles_now"]:
+                                prows.append({"symbol": u["symbol"], "name": r.get("name"), "sector": r.get("sector"),
+                                              "idx": u.get("idx") or [], "close": r.get("price"), "chg": (r.get("ret") or {}).get("1D"),
+                                              "date": r.get("date"), "patterns": pa["now"], "gaps": pa["gaps_now"],
+                                              "candles": pa["candles_now"], "rvol": r.get("rvol")})
+                        except Exception:  # noqa: BLE001 - a pattern problem never loses the mover row
+                            pass
                         rows.append(r)
                     else:
                         STATE[market]["failed"] += 1
@@ -214,6 +238,9 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
                 _finish_scans(rows, market)
                 if rec is not None and rec.stocks:
                     store.put_company(rec_key, dict(rec.finish(), updated=time.time(), index=bool(idx_close)))
+                if prec.stocks:
+                    store.put_company(f"PATTERNS::{market}", {"rows": prows, "record": prec.finish(), "updated": time.time(),
+                                                             "stocks": prec.stocks, "universe": which if market == "IN" else "SP500+NDX"})
                 store.put_company(_key(market), {"rows": rows, "updated": time.time(), "count": len(rows),
                                                  "universe": which if market == "IN" else "SP500+NDX"})
         finally:

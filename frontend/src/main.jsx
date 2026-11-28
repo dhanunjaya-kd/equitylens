@@ -40,6 +40,7 @@ const News = lazy(() => import('./pages/News'))
 const IPO = lazy(() => import('./pages/IPO'))
 const Terminal = lazy(() => import('./pages/Terminal'))
 const Scanners = lazy(() => import('./pages/Scanners'))
+const Patterns = lazy(() => import('./pages/Patterns'))
 const Guide = lazy(() => import('./pages/Guide'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
 const Settings = lazy(() => import('./pages/AI').then((m) => ({ default: m.Settings })))
@@ -68,6 +69,7 @@ function renderPage(r) {
     r.page === 'ipo' ? <IPO tab={r.tab} /> :
     r.page === 'terminal' ? <Terminal /> :
     r.page === 'scanners' ? <Scanners /> :
+    r.page === 'patterns' ? <Patterns /> :
     r.page === 'guide' ? <Guide /> :
     r.page === 'portfolio' ? <Portfolio /> :
     r.page === 'settings' ? <Settings /> :

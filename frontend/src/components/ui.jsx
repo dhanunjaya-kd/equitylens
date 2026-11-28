@@ -127,6 +127,7 @@ const I = {
   money: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8.5" /><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8z" /></g>,
   book: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" /><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5" /></g>,
   brief: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="7" width="18" height="13" rx="2.5" /><path d="M8.5 7V5.5A1.5 1.5 0 0 1 10 4h4a1.5 1.5 0 0 1 1.5 1.5V7M3 12.5h18" /></g>,
+  pattern: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l4-8 4 6 4-9 6 11" /><path d="M3 20h18" /></g>,
   radar: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><path d="M12 12l5.5-5.5" /></g>,
   cal: <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /><circle cx="8.5" cy="14.5" r=".6" fill="currentColor" /><circle cx="12" cy="14.5" r=".6" fill="currentColor" /></g>,
 }
@@ -141,7 +142,7 @@ export function Logo({ sym, name = '', size = 28 }) {
 
 // Every page, for the side panel (desktop) and the "More" sheet (phone / tablet): one list, so both show the same pages
 export function navItems(market) {
-  return [['home', '', 'Search', I.search], ['premarket', 'premarket', 'Pre-market', I.sun], ['movers', 'movers', 'Market Movers', I.fire], ['scanners', 'scanners', 'Scanners', I.radar], ['news', 'news', 'News', I.news], ['terminal', 'terminal', 'Terminal', I.term], ['ipo', 'ipo', 'IPO research', I.rocket], ['heatmap', 'heatmap', 'Heatmap', I.grid], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['fiidii', 'fiidii', 'FII / DII', I.bank], ['portfolio', 'portfolio', 'My Portfolio', I.brief], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
+  return [['home', '', 'Search', I.search], ['premarket', 'premarket', 'Pre-market', I.sun], ['movers', 'movers', 'Market Movers', I.fire], ['scanners', 'scanners', 'Scanners', I.radar], ['patterns', 'patterns', 'Chart patterns', I.pattern], ['news', 'news', 'News', I.news], ['terminal', 'terminal', 'Terminal', I.term], ['ipo', 'ipo', 'IPO research', I.rocket], ['heatmap', 'heatmap', 'Heatmap', I.grid], ['calendar', 'calendar', 'Calendar', I.cal], ['money', 'money', 'Smart Money', I.money], ['fiidii', 'fiidii', 'FII / DII', I.bank], ['portfolio', 'portfolio', 'My Portfolio', I.brief], ['rankings', 'rankings', 'Top Picks', I.rank], ['screener', 'screener', 'Screener', I.filter],
     ['watch', 'watch', 'Watchlist', I.star], ['compare', 'compare', 'Compare', I.compare], ['guide', 'guide', 'Beginner guide', I.book]]
     .filter(([k]) => market !== 'US' || !IN_ONLY.includes(k))
     .map(([k, path, label, icon]) => [k, path, market === 'US' && k === 'fiidii' ? 'Institutions' : label, icon])
