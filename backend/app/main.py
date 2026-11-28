@@ -663,6 +663,32 @@ def movers_get(market: str = "IN", tf: str = "1D", universe: str = ""):
     return movers.get(market, tf, universe.upper())
 
 
+@app.get("/api/scanners")
+def scanners_get(market: str = "IN", universe: str = ""):
+    """Every stock with its indicators and the scanners it meets today, the written rules and each scanner's tested record."""
+    from . import scanners
+    mk = market.upper()
+    d = movers.get(mk, "1D", universe.upper())
+    rows = []
+    for r in d.get("rows", []):
+        sc = r.get("scan")
+        if not sc:
+            continue
+        f = r.get("fund") or {}
+        rows.append({"symbol": r["symbol"], "name": r["name"], "sector": r["sector"], "price": r["price"],
+                     "chg": r["ret"].get("1D"), "from_hi": r.get("from_hi"), "from_lo": r.get("from_lo"),
+                     "mcap": f.get("market_cap") or r.get("mcap_nasdaq"), "fno": r.get("fno"),
+                     "score": f.get("overall"), "tags": sc["tags"], "results": sc.get("results", False), "date": sc.get("date"),
+                     **{k: sc["ind"].get(k) for k in ("adr", "rs", "ti65", "lin", "turn20", "vol_x50")}})
+    which = d.get("universe")
+    rec = store.get_company(f"SCANTEST::{mk}::{which if mk == 'IN' else 'US'}")
+    return {"market": mk, "universe": which, "session": d.get("session"), "updated": d.get("updated"), "status": d.get("status"),
+            "rows": rows, "groups": [{"key": k, "label": l, "items": items} for k, l, items in scanners.GROUPS],
+            "rules": {k: {"name": a, "short": b, "rule": c} for k, (a, b, c) in scanners.RULES.items()},
+            "indicators": scanners.INDICATORS, "record": rec[1] if rec else None,
+            "horizons": list(scanners.HORIZONS)}
+
+
 @app.get("/api/fiidii")
 def fiidii_get(market: str = "IN"):
     from . import fiidii

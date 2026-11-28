@@ -23,7 +23,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from . import config, store, technicals, universe, us, usuniverse
+from . import config, scanners, store, technicals, universe, us, usuniverse
 
 TF = {"1D": 1, "1W": 5, "1M": 21, "3M": 63, "1Y": 252}
 TTL = 6 * 3600
@@ -172,12 +172,29 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
             uni = _universe(market, which if market == "IN" else "N500")
             STATE[market]["total"] = len(uni)
             rows: list[dict] = []
+            idx_close = _index_closes(market)
+            rec_key = f"SCANTEST::{market}::{which if market == 'IN' else 'US'}"
+            old_rec = store.get_company(rec_key)
+            history = not old_rec or time.time() - old_rec[0] > 20 * 3600     # tested record: once a day is enough
+            rec = scanners.Record() if history else None
+            rec_lock = threading.Lock()
 
             def one(u):
                 try:
-                    r = compute_row(u["symbol"], u.get("name", ""), u.get("industry", ""), _bars(u["symbol"]), market)
+                    bars = _bars(u["symbol"])
+                    r = compute_row(u["symbol"], u.get("name", ""), u.get("industry", ""), bars, market)
                     if r and u.get("idx"):
                         r["idx"] = u["idx"]
+                    if r:
+                        try:
+                            a = scanners.analyse(bars, idx_close, history=history)
+                            if a:
+                                r["scan"] = {"tags": a["tags"], "ind": a["ind"], "date": a["date"]}
+                                if rec is not None:
+                                    with rec_lock:
+                                        rec.add(u["symbol"], a)
+                        except Exception:  # noqa: BLE001 - a scanner problem never loses the mover row
+                            pass
                     if r:
                         rows.append(r)
                     else:
@@ -192,6 +209,9 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
             with ThreadPoolExecutor(max_workers=1 if config.DEMO else 3) as ex:
                 list(ex.map(one, uni))
             if rows:
+                _finish_scans(rows, market)
+                if rec is not None and rec.stocks:
+                    store.put_company(rec_key, dict(rec.finish(), updated=time.time(), index=bool(idx_close)))
                 store.put_company(_key(market), {"rows": rows, "updated": time.time(), "count": len(rows),
                                                  "universe": which if market == "IN" else "SP500+NDX"})
         finally:
@@ -202,6 +222,51 @@ def refresh(market: str, block: bool = False, which: str = "") -> dict:
     else:
         threading.Thread(target=work, daemon=True).start()
     return status(market)
+
+
+INDEX_FOR = {"IN": ("^CRSLDX", "^NSEI"), "US": ("^GSPC",)}     # NIFTY 500 (NIFTY 50 if missing) / S&P 500
+
+
+def _index_closes(market: str) -> dict:
+    """date -> close of the market index, for the RS line. Empty when it cannot be loaded (then RS-line rules are off)."""
+    if config.DEMO:
+        return {}
+    for sym in INDEX_FOR.get(market, ()):
+        try:
+            bars = technicals._yahoo(sym, "2y")
+            if len(bars) > 200:
+                return {b["t"][:10]: b["c"] for b in bars}
+        except Exception:  # noqa: BLE001
+            continue
+    return {}
+
+
+def _finish_scans(rows: list[dict], market: str) -> None:
+    """Across the list: RS rating, then the RS-based tags (Minervini >= 70, Leader >= 90), and the results mark."""
+    rs = scanners.rs_ratings({r["symbol"]: (r.get("scan") or {}).get("ind", {}).get("wperf") for r in rows})
+    results: set = set()
+    try:
+        from datetime import date as _d, timedelta as _td
+        from . import calendars
+        day = calendars.us_eastern_now().date() if market == "US" else _d.today()
+        got = calendars.earnings(market, day - _td(days=3), 4)
+        results = {x["symbol"] for x in got.get("rows", [])}
+    except Exception:  # noqa: BLE001
+        pass
+    for r in rows:
+        sc = r.get("scan")
+        if not sc:
+            continue
+        rr = rs.get(r["symbol"])
+        sc["ind"]["rs"] = rr
+        tags = [t for t in sc["tags"] if not t.endswith("_pre")]
+        if "minervini_pre" in sc["tags"] and rr is not None and rr >= 70:
+            tags.append("minervini")
+        if "leader_pre" in sc["tags"] and rr is not None and rr >= 90:
+            tags.append("leader")
+        sc["tags"] = sorted(tags)
+        sc["results"] = "gap_up" in tags and r["symbol"] in results
+        sc["ind"].pop("wperf", None)
 
 
 def status(market: str) -> dict:

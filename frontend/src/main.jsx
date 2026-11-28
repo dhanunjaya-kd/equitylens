@@ -38,6 +38,7 @@ const FiiDii = lazy(() => import('./pages/FiiDii'))
 const News = lazy(() => import('./pages/News'))
 const IPO = lazy(() => import('./pages/IPO'))
 const Terminal = lazy(() => import('./pages/Terminal'))
+const Scanners = lazy(() => import('./pages/Scanners'))
 const Guide = lazy(() => import('./pages/Guide'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
 const Settings = lazy(() => import('./pages/AI').then((m) => ({ default: m.Settings })))
@@ -106,6 +107,7 @@ function App() {
           {route.page === 'news' && <News />}
           {route.page === 'ipo' && <IPO tab={route.tab} />}
           {route.page === 'terminal' && <Terminal />}
+          {route.page === 'scanners' && <Scanners />}
           {route.page === 'guide' && <Guide />}
           {route.page === 'portfolio' && <Portfolio />}
           {route.page === 'settings' && <Settings />}

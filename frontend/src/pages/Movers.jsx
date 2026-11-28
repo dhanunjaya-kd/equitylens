@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ScanBadges } from './Scanners'
 import { Badge, FnoBadge, FnoToggle, Logo, UniverseChips, UsUniverseChips, useFno, useUniv, useUsUniv } from '../components/ui'
 import { ago, api, cr, getMarket, go, isDesktop, num, ok, pct, rs, signed, ticker, watchlist } from '../util'
 import { Md } from './AI'
@@ -236,6 +237,7 @@ export default function Movers() {
                       <div className="ellip"><b>{x.name}</b> <span className="small muted">{ticker(x.symbol)}</span>{x.fno && <FnoBadge />}{x.closed_high && tf === '1D' && <span className="tagc good">only buyers</span>}{x.closed_low && tf === '1D' && <span className="tagc bad">only sellers</span>}{x.deliv && x.deliv.dq_x >= 1.5 && x.deliv.dp >= 50 && tf === '1D' && <span className="tagc good" title="Delivery % and delivery quantity well above normal">📦 {Math.round(x.deliv.dp)}% delivery</span>}{x.surv && <span className="tagc bad" title={x.surv.join(', ')}>🚨 surveillance</span>}</div>
                       <div className="small muted ellip">{x.sector} · {metric(x)}</div>
                       {x.fund && <span className={`badge sm t-${x.fund.tone} bg-${x.fund.tone}`} style={{ marginTop: 3 }}>{x.fund.overall ?? '—'} · {x.fund.verdict}</span>}
+                      {x.scan && <ScanBadges tags={x.scan.tags} only={['leader', 'vcp', 'flag', 'cup_handle', 'pocket_pivot', 'bull_snort', 'minervini', 'rs_first', 'gap_up']} results={x.scan.results} />}
                     </div>
                     <Spark data={x.spark?.slice(-({ '1D': 10, '1W': 10, '1M': 22, '3M': 40, '1Y': 40 }[tf]))} up={rv >= 0} />
                     <div style={{ textAlign: 'right', minWidth: 78 }}>

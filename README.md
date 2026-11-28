@@ -13,7 +13,7 @@
 ![Data](https://img.shields.io/badge/data-free_·_official_·_no_API_keys-22c55e?style=flat-square)
 ![Devices](https://img.shields.io/badge/📱🖥️_phone_+_desktop-2dd4bf?style=flat-square)
 ![AI](https://img.shields.io/badge/✨_AI-Claude·ChatGPT·Gemini·Ollama-d97757?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-242_passing-22c55e?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-256_passing-22c55e?style=flat-square)
 
 ### Stock research for 🇮🇳 Indian and 🇺🇸 US markets — explained in plain English
 
@@ -389,6 +389,15 @@ Sidebar → **IPO research** (on the phone: Market Movers → 🚀 IPOs). A dash
 
 **Source check:** every source's latest raw answer is saved in `backend/data/ipo_raw/`; the *Data sources* bar at the bottom shows each source and any field it stopped carrying.
 
+### 🔎 Scanners and indicators
+
+Sidebar → **Scanners** (phone: More → Scanners). On the daily prices Market Movers already loads (NIFTY 50/100/500 or all NSE; S&P 500 / Nasdaq-100):
+
+- **Price patterns**: VCP, inside bar, tight range (NR7), mini coil, 3 weeks tight, flag, W double bottom, cup and handle, flat base · **Volume**: lowest volume, highest volume, pocket pivot, bull snort · **Trend and strength**: Minervini trend template, Stage 2, TI65, RS high before price, leaders · **Results**: gap up on volume (marked "results" when the results calendar shows results in the 2 days before).
+- Every scanner is **one written rule**, shown word for word in the app. Tick several to combine them.
+- Columns: 1D, LTP, **ADR %**, **RS rating** (IBD-style 12-month rank within the list), **TI65**, **linearity** (R² of the last 65 closes), % from 52-week high / low, market cap, turnover; filters and a copy-to-TradingView list. Badges also show on Market Movers.
+- **Tested record** for every scanner: each past session's close is checked with the same rule and the stock's move 5, 20 and 60 sessions later is compared with "any stock, any day" (median, % up, number of signals; under 30 signals is marked too few). Limits are on the page: today's list only, about one year of signals, no costs.
+
 ### 🇺🇸 Every US stock
 
 - **The stock list**: every common stock and ADR on NYSE, Nasdaq and NYSE American from Nasdaq's public screener (warrants, rights, units and preferreds are dropped; a day move that disagrees with the price change is left out; market cap exactly as Nasdaq states it). Raw answers: `backend/data/us_raw/`.
@@ -747,7 +756,7 @@ cd backend
 python run_tests.py
 ```
 
-242 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
+256 offline tests run against saved copies of each source's real format, so they pass without internet. The entry engine has 11 more (`pip install pytest`, then `python -m pytest tests/test_entry.py`):
 
 | Suite | Covers |
 |---|---|
