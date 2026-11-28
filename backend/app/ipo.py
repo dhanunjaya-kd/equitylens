@@ -895,6 +895,8 @@ def _build_history(market: str) -> None:
                 y["lockins"] = lockins(x["listing"], bool(x.get("sme")), today)
             out.append(y)
             st["done"] += 1
+            if st["done"] % 25 == 0 and not store.get_company(f"IPO::HIST::{market}"):     # first build: show rows as they come
+                store.put_company(f"IPO::HIST::{market}::partial", {"rows": list(out), "today": today.isoformat(), "built": None})
         store.put_company(f"IPO::HIST::{market}", {"rows": out, "today": today.isoformat(), "built": time.time()})
     except Exception as e:  # noqa: BLE001
         st["error"] = str(e)[:200]
@@ -921,7 +923,8 @@ def history(market: str = "IN", refresh: bool = False) -> dict:
     if stale and not st["running"] and not config.DEMO:
         st.update(running=True, done=0, total=0, started=time.time(), error=None)
         threading.Thread(target=_build_history, args=(mk,), daemon=True).start()
-    data = hit[1] if hit else {"rows": [], "today": None, "built": None}
+    part = store.get_company(f"IPO::HIST::{mk}::partial") if not hit else None
+    data = hit[1] if hit else (dict(part[1], partial=True) if part else {"rows": [], "today": None, "built": None})
     return dict(data, market=mk, status=dict(st), base_rules={k: {"label": BASE_LABEL[k], "rule": v} for k, v in BASE_RULES.items()},
                 lockin_note=("SEBI ICDR lock-ins for issues opening from 1 April 2022, counted from the date of allotment. Shown from "
                              "the listing date: under the T+3 timetable allotment is about one working day earlier, so shares can be free "

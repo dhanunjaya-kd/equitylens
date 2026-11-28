@@ -99,6 +99,8 @@ export default function MoneyFlow() {
           <button className="btn small" onClick={copyTV} disabled={!shown.length}>{copied ? 'Copied ✓' : `📋 Copy TradingView list${open ? ` (${open})` : ''}`}</button>
         </div>
         <div style={{ marginTop: 10 }}>{mk === 'IN' ? <UniverseChips /> : <UsUniverseChips />}</div>
+        {d?.status?.running && <div className="small" style={{ marginTop: 8 }}>⏳ Loading daily prices for the stock list: {d.status.done}/{d.status.total || '…'} (the same prices as Market Movers and Scanners). Groups fill when this finishes; the page refreshes itself.</div>}
+        {d && !d.status?.running && !d.stocks.length && !d.unclassified && <div className="small" style={{ marginTop: 8 }}>No stocks with daily prices yet. Opening Market Movers or Scanners starts the price update.</div>}
         {d?.unclassified > 0 && <div className="small" style={{ marginTop: 8 }}>⏳ {d.unclassified} stocks don't have NSE's classification saved yet, so they're left out of the groups. They're being looked up from NSE in the background (about one a second){d.lookup?.running ? `: ${d.lookup.done}/${d.lookup.total}` : ''}; this page refreshes itself.</div>}
         {headline && (headline.into.length > 0 || headline.out.length > 0) && (
           <div className="mf-head">📌 Money is going into {headline.into.map((g) => <b key={g.name}>{g.name} </b>)}{headline.out.length > 0 && <>and leaving {headline.out.map((g) => <b key={g.name}>{g.name} </b>)}</>}· last 5 sessions</div>
